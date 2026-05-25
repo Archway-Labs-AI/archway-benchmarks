@@ -1,0 +1,93 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "archway-benchmarks"
+version = "0.1.0"
+description = "Static analysis benchmark suites for Archway's categorical IR"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+authors = [
+    {name = "Archway Benchmarks Contributors"}
+]
+keywords = [
+    "static-analysis",
+    "benchmarks",
+    "archway",
+    "categorical-ir",
+    "python",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Quality Assurance",
+    "Topic :: Software Development :: Testing",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0",
+]
+
+[project.scripts]
+archway-bench = "archway_benchmarks.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/archway_benchmarks"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-v"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "W",    # pycodestyle warnings
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "E712",   # comparison to True/False
+    "E741",   # ambiguous variable names (l, O, I)
+    "F401",   # unused imports (many are re-exports)
+    "F541",   # f-string without placeholders
+    "F811",   # redefinition of unused name
+    "F841",   # local variable assigned but never used
+    "N806",   # variable in function should be lowercase
+    "UP006",  # use builtin `list` instead of `typing.List` (Python 3.9+ support)
+    "UP007",  # use `X | Y` instead of `Union[X, Y]` (Python 3.10+)
+    "UP035",  # deprecated import from typing
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["archway_benchmarks"]
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true

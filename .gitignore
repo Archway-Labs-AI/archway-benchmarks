@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+.venv/
+dist/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+
+# Build artifacts
+*.egg-info/
+build/
+
+# OS
+.DS_Store
+
+# Python virtual environments
+venv/
+
+# Benchmark cached results (large JSON)
+suites/**/cached-results/*.json
+
+# Cloned target repos (large, generated)
+targets/
+
+# DreamTeam tracking
+.dreamteam/
