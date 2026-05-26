@@ -136,19 +136,19 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
     lines: list[str] = []
     lines.append(f"# TypeEvalPy baselines · current GT · {report['generated_at']}\n")
     lines.append(
-        "> **Why this exists** — the published Jan 2024 leaderboard was scored "
-        "against an older ground-truth snapshot **and** an older scorer. The "
-        "numbers below regenerate each baseline against the GT at the vendored "
-        "repo's current HEAD, with two scorers:\n"
-        ">\n"
-        "> - **lenient** — `vendor/TypeEvalPy/src/result_analyzer/large_scale_analysis.check_match`, "
-        "the paper-era predicate (col_offset/line check commented out, lines 46-51). "
-        "Use this column for **Δ vs published**.\n"
-        "> - **strict** — the current HEAD's `analysis_utils.is_same_element` "
-        "(commit `2f7c6056`, Oct 2025). Requires col_offset match. Existing tool "
-        "runners (Jedi, Scalpel, HeaderGen) do NOT emit col_offset and so score 0 "
-        "under strict. **This is a vendor scorer change, not a wiring bug.** Archway "
-        "emits col_offset and is held to this stricter bar.\n"
+        "Headline numbers are the **regenerated-lenient** column — each tool re-run "
+        "against the benchmark's current ground truth and scored with TypeEvalPy's "
+        "paper-era predicate. A small Δ vs Historical reflects ground-truth drift "
+        "since publication. The strict column is shown for transparency only.\n"
+    )
+    lines.append("## How to read each column\n")
+    lines.append(
+        "| Column | What it is | When to cite |\n"
+        "| --- | --- | --- |\n"
+        "| **Regenerated · lenient** (headline) | Each tool's `*_result.json` files against current GT, scored with `vendor/TypeEvalPy/src/result_analyzer/large_scale_analysis.check_match` (col_offset and line checks commented out, lines 46-51). This is the predicate that generated the published board. | Head-to-head comparisons. |\n"
+        "| **Historical** | Published `paper_table_*.csv` from the vendored repo. Generated 14 Jan 2024 (micro) / 30 Aug 2024 (autogen) against an older GT snapshot. | As a reference. **Do not cross-compare against the regenerated columns directly** — different answer keys. |\n"
+        "| **Δ vs Historical** | `lenient − historical`. | Headline finding. Sign + magnitude is GT drift only (and, for autogen, generation-composition drift). |\n"
+        "| **Regenerated · strict** | Same outputs scored with `analysis_utils.is_same_element` (added Oct 2025, commit `2f7c6056`), which requires `col_offset` to match. None of the shipped tool runners emit `col_offset` — so 0 here is a runner-format artifact, **not** an inference result. Archway emits `col_offset` and is the one tool that meets this bar today. | Only as a transparency note. **Never cite a 0 in this column as a competitive result.** |\n"
     )
 
     for benchmark, payload in report["snapshots"].items():
@@ -156,12 +156,12 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
         if payload["published_source"]:
             lines.append(f"_{payload['published_label']}_ · {payload['published_source']}\n")
 
-        # Comparison table — lenient leads (the comparable number); strict in parens.
+        # Comparison table — lenient leads; strict last + caveated when artifactual.
         lines.append(
-            "| Tool | FR | FP | LV | **Total lenient** | Δ vs published | Total strict | Sound (lenient) | Complete (lenient) | Runtime |"
+            "| Tool | FR (l) | FP (l) | LV (l) | **Total lenient** | Δ vs Historical | Historical | Strict | Sound (l) | Complete (l) | Runtime |"
         )
         lines.append(
-            "| --- | --: | --: | --: | --: | --: | --: | --: | --: | --: |"
+            "| --- | --: | --: | --: | --: | --: | --: | --: | --: | --: | --: |"
         )
         for t in payload["tools"]:
             total_snip = t.get("total_snippets") or "?"
@@ -180,6 +180,19 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
             total_l = t.get("exact_total_lenient")
             sound_l = t.get("files_sound_lenient")
             complete_l = t.get("files_complete_lenient")
+            strict_total = t["exact_total"]
+            pub_total = next(
+                (p["exact_total"] for p in payload["published"]
+                 if p["tool"].lower() == t["tool"].lower()),
+                None,
+            )
+            historical_str = str(pub_total) if pub_total is not None else "—"
+            # Mark strict as artifact when 0 and lenient is non-zero — that's
+            # the "runner emits no col_offset" case.
+            if strict_total == 0 and (total_l or 0) > 0:
+                strict_str = "0 _(format artifact: no col_offset)_"
+            else:
+                strict_str = str(strict_total)
             lines.append(
                 f"| **{t['tool']}** "
                 f"| {fr_l if fr_l is not None else '—'} "
@@ -187,7 +200,8 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
                 f"| {lv_l if lv_l is not None else '—'} "
                 f"| **{total_l if total_l is not None else '—'}** "
                 f"| {delta_str} "
-                f"| {t['exact_total']} (FR={t['function_returns']}, FP={t['function_parameters']}, LV={t['local_variables']}) "
+                f"| {historical_str} "
+                f"| {strict_str} "
                 f"| {sound_l if sound_l is not None else '—'}/{total_snip} "
                 f"| {complete_l if complete_l is not None else '—'}/{total_snip} "
                 f"| {rt} |"

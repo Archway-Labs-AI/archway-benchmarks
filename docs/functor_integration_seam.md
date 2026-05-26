@@ -1,5 +1,21 @@
 # Functor integration seam — what Ben will see on first plug-in
 
+> **Adapter contract — col_offset is 1-indexed.**
+> TypeEvalPy's GT files index `col_offset` starting at 1 (the first character of the
+> annotation's name). Python's `ast.parse` returns 0-indexed `col_offset`. When the
+> real engine produces annotations, the adapter is the place that translates engine
+> coordinates → harness `Location.col` and that must add 1 if the engine reports
+> ast-style columns. An off-by-one here produces silent `LOCATION_MISS` on every
+> annotation under the strict scorer.
+>
+> The convention is pinned by `tests/test_typeevalpy_col_convention.py` (empirically
+> verified against the vendor corpus). The stub already inherits GT's coordinates and
+> scores 850/850 under both strict and lenient — see `tests/test_stub_dual_scorer.py`.
+
+---
+
+
+
 > One paragraph + a screenshot description. If the test suite passes
 > (`pytest tests/test_functor_seam.py`), the picture below is what the
 > dashboard's inspector will show the first time the real analysis engine
