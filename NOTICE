@@ -1,0 +1,31 @@
+Archway Benchmarks
+Copyright 2026 Archway Labs
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+----------------------------------------------------------------------
+
+This product includes and/or links to software developed by third parties.
+The following components are vendored or invoked by this project and are
+distributed under their own licenses; their copyrights remain with their
+respective authors.
+
+TypeEvalPy
+  Source : https://github.com/secure-software-engineering/TypeEvalPy
+  License: Apache License, Version 2.0
+  Used as: vendored git submodule under vendor/TypeEvalPy. We invoke the
+           project's runner classes (`src/runner_class.py`) and reuse its
+           scoring primitives without modification —
+           `src/result_analyzer/analysis_utils.py` (strict scorer,
+           `is_same_element` + `check_match` + `format_type`) and
+           `src/result_analyzer/large_scale_analysis.py` (lenient scorer,
+           `check_match` with the column/line predicate commented out).
+           The harness's `archway_benchmarks.scoring` modules wrap these;
+           we do not re-implement the metrics.
+
+----------------------------------------------------------------------
+
+Additional benchmark suites integrated in the future will be credited
+here when added. Each benchmark's own scorer is invoked unmodified;
+benchmarks remain the property of their respective authors and are used
+under their own licenses.
