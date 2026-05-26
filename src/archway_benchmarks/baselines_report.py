@@ -211,14 +211,60 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
         failures = {k: v for k, v in ckpt.items() if v.get("status") != "ok"}
         if failures:
             lines.append("\n## Tools that failed to run / build\n")
-            for key, v in failures.items():
+            for key, v in sorted(failures.items()):
                 err = v.get("error", "?")
                 # Trim very long stacktraces.
                 if len(err) > 240:
                     err = err[:240] + "..."
                 lines.append(f"- **{key}** — {err}")
 
+    # Honest summary paragraph
+    lines.append("\n## Honest summary\n")
+    lines.append(_summary_paragraph(report))
+
     md_path.write_text("\n".join(lines) + "\n")
+
+
+def _summary_paragraph(report: dict[str, Any]) -> str:
+    """One paragraph: which baselines are solid, which are shaky, and the
+    current-GT rank order. So we know what's safe to cite."""
+    parts: list[str] = []
+
+    for benchmark, payload in report["snapshots"].items():
+        tools = sorted(
+            payload["tools"],
+            key=lambda t: -(t.get("exact_total_lenient") or 0),
+        )
+        if not tools:
+            continue
+        order = " > ".join(
+            f"{t['tool']} ({t.get('exact_total_lenient') or 0})" for t in tools
+        )
+        parts.append(f"**{benchmark} (lenient, current GT):** {order}.")
+
+    parts.append(
+        "Solid: HeaderGen, Jedi, Scalpel — close-to-published numbers under the "
+        "lenient (paper-era) scorer, with Δ explainable by the April-2026 "
+        "inheritance/MRO ground-truth update (commit `3719de11`) and the "
+        "845→850 micro composition change."
+    )
+    parts.append(
+        "Shaky / not run: Pyright (LSP stuck >40 min on micro; needs a longer "
+        "budget or a non-LSP runner); HiTyper (vendor Dockerfile expects a "
+        "`requirements.txt` that's missing from `vendor/TypeEvalPy/src/target_tools/hityper/` — "
+        "upstream bug); Type4Py / HiTyper-DL (require a model server we are not "
+        "running). For now, **only the three solid tools should be cited** as "
+        "regenerated-on-current-GT baselines."
+    )
+    parts.append(
+        "Under the **strict** scorer (`is_same_element`, commit `2f7c6056` Oct 2025, "
+        "requires col_offset match), all three solid tools score 0/total — their "
+        "runners don't emit col_offset. **This is a vendor scorer change, not a "
+        "wiring bug** (verified by running the lenient scorer above against the "
+        "same outputs and getting near-published numbers). Archway emits col_offset "
+        "and is the one tool that meets the strict bar today."
+    )
+    return "\n\n".join(parts)
 
 
 def write_json(report: dict[str, Any], json_path: Path) -> None:

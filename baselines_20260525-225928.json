@@ -1,0 +1,238 @@
+{
+  "generated_at": "2026-05-26T02:59:28+00:00",
+  "snapshots": {
+    "typeevalpy": {
+      "tools": [
+        {
+          "tool": "headergen",
+          "function_returns": 0,
+          "function_parameters": 0,
+          "local_variables": 0,
+          "exact_total": 0,
+          "files_sound": 0,
+          "files_complete": 4,
+          "function_returns_lenient": 196,
+          "function_parameters_lenient": 63,
+          "local_variables_lenient": 332,
+          "exact_total_lenient": 591,
+          "files_sound_lenient": 64,
+          "files_complete_lenient": 63,
+          "total_snippets": 153,
+          "total_annotations": 850,
+          "runtime_seconds": 30.54,
+          "image_digest": "sha256:5390fd71ee8cd11f8dbff6f0ddb5e306bfcf10a63107366c034e46afcb0cf080",
+          "regenerated_at": "2026-05-26T02:49:58+00:00",
+          "run_id": 6,
+          "delta_vs_published": 59,
+          "delta_basis": "lenient (paper-era scorer)"
+        },
+        {
+          "tool": "jedi",
+          "function_returns": 0,
+          "function_parameters": 0,
+          "local_variables": 0,
+          "exact_total": 0,
+          "files_sound": 0,
+          "files_complete": 0,
+          "function_returns_lenient": 117,
+          "function_parameters_lenient": 0,
+          "local_variables_lenient": 297,
+          "exact_total_lenient": 414,
+          "files_sound_lenient": 26,
+          "files_complete_lenient": 33,
+          "total_snippets": 153,
+          "total_annotations": 850,
+          "runtime_seconds": 33.15,
+          "image_digest": "sha256:c413ad3a6f6e7f68ad3d5f47a1854034dbe1c32dac70cc45d5810761664eee2f",
+          "regenerated_at": "2026-05-26T01:54:28+00:00",
+          "run_id": 4,
+          "delta_vs_published": -1,
+          "delta_basis": "lenient (paper-era scorer)"
+        },
+        {
+          "tool": "scalpel",
+          "function_returns": 0,
+          "function_parameters": 0,
+          "local_variables": 0,
+          "exact_total": 0,
+          "files_sound": 0,
+          "files_complete": 44,
+          "function_returns_lenient": 140,
+          "function_parameters_lenient": 33,
+          "local_variables_lenient": 10,
+          "exact_total_lenient": 183,
+          "files_sound_lenient": 0,
+          "files_complete_lenient": 83,
+          "total_snippets": 153,
+          "total_annotations": 850,
+          "runtime_seconds": 24.41,
+          "image_digest": "sha256:5ee6dff1483989991b33c44f018a088df839a738aee3885fc911e4200ab72ae8",
+          "regenerated_at": "2026-05-26T01:53:55+00:00",
+          "run_id": 3,
+          "delta_vs_published": -14,
+          "delta_basis": "lenient (paper-era scorer)"
+        }
+      ],
+      "snapshot": null,
+      "published": [
+        {
+          "tool": "HeaderGen",
+          "function_returns": 185,
+          "function_parameters": 56,
+          "local_variables": 291,
+          "exact_total": 532
+        },
+        {
+          "tool": "Jedi",
+          "function_returns": 122,
+          "function_parameters": 0,
+          "local_variables": 293,
+          "exact_total": 415
+        },
+        {
+          "tool": "Pyright",
+          "function_returns": 100,
+          "function_parameters": 8,
+          "local_variables": 297,
+          "exact_total": 405
+        },
+        {
+          "tool": "HiTyper-DL",
+          "function_returns": 163,
+          "function_parameters": 27,
+          "local_variables": 179,
+          "exact_total": 369
+        },
+        {
+          "tool": "HiTyper",
+          "function_returns": 141,
+          "function_parameters": 7,
+          "local_variables": 102,
+          "exact_total": 250
+        },
+        {
+          "tool": "Scalpel",
+          "function_returns": 155,
+          "function_parameters": 36,
+          "local_variables": 6,
+          "exact_total": 197
+        },
+        {
+          "tool": "Type4Py",
+          "function_returns": 39,
+          "function_parameters": 19,
+          "local_variables": 99,
+          "exact_total": 157
+        }
+      ],
+      "published_label": "Paper \u00b7 14 Jan 2024 \u00b7 stale GT",
+      "published_source": "vendor/TypeEvalPy/docs/webview/paper_tables/paper_table_1.csv (exact match) + paper_table_3.csv (sound/complete). EXPERIMENT_RUN_ON in analysis_leaderboard.py is hardcoded to 14 Jan 2024 \u2014 these numbers were scored against the GT snapshot that existed then. GT has been updated since (April 2026 fix in commit 3719de11); use the Regenerated column for like-for-like comparison."
+    },
+    "typeevalpy_autogen": {
+      "tools": [
+        {
+          "tool": "headergen",
+          "function_returns": 0,
+          "function_parameters": 0,
+          "local_variables": 0,
+          "exact_total": 0,
+          "files_sound": 0,
+          "files_complete": 44,
+          "function_returns_lenient": 14317,
+          "function_parameters_lenient": 508,
+          "local_variables_lenient": 39634,
+          "exact_total_lenient": 54459,
+          "files_sound_lenient": 991,
+          "files_complete_lenient": 1440,
+          "total_snippets": 5454,
+          "total_annotations": 76844,
+          "runtime_seconds": 128.21,
+          "image_digest": "sha256:5390fd71ee8cd11f8dbff6f0ddb5e306bfcf10a63107366c034e46afcb0cf080",
+          "regenerated_at": "2026-05-26T02:56:13+00:00",
+          "run_id": 7,
+          "delta_vs_published": 3657,
+          "delta_basis": "lenient (paper-era scorer)"
+        },
+        {
+          "tool": "jedi",
+          "function_returns": 0,
+          "function_parameters": 0,
+          "local_variables": 0,
+          "exact_total": 0,
+          "files_sound": 0,
+          "files_complete": 254,
+          "function_returns_lenient": 12001,
+          "function_parameters_lenient": 0,
+          "local_variables_lenient": 15002,
+          "exact_total_lenient": 27003,
+          "files_sound_lenient": 164,
+          "files_complete_lenient": 1568,
+          "total_snippets": 5454,
+          "total_annotations": 76844,
+          "runtime_seconds": 120.94,
+          "image_digest": "sha256:c413ad3a6f6e7f68ad3d5f47a1854034dbe1c32dac70cc45d5810761664eee2f",
+          "regenerated_at": "2026-05-26T02:58:18+00:00",
+          "run_id": 8,
+          "delta_vs_published": -1560,
+          "delta_basis": "lenient (paper-era scorer)"
+        },
+        {
+          "tool": "scalpel",
+          "function_returns": 0,
+          "function_parameters": 0,
+          "local_variables": 0,
+          "exact_total": 0,
+          "files_sound": 0,
+          "files_complete": 648,
+          "function_returns_lenient": 15114,
+          "function_parameters_lenient": 254,
+          "local_variables_lenient": 25,
+          "exact_total_lenient": 15393,
+          "files_sound_lenient": 0,
+          "files_complete_lenient": 4138,
+          "total_snippets": 5454,
+          "total_annotations": 76844,
+          "runtime_seconds": 349.1,
+          "image_digest": "sha256:5ee6dff1483989991b33c44f018a088df839a738aee3885fc911e4200ab72ae8",
+          "regenerated_at": "2026-05-26T02:47:04+00:00",
+          "run_id": 5,
+          "delta_vs_published": -179,
+          "delta_basis": "lenient (paper-era scorer)"
+        }
+      ],
+      "snapshot": null,
+      "published": [
+        {
+          "tool": "HeaderGen",
+          "function_returns": 14086,
+          "function_parameters": 346,
+          "local_variables": 36370,
+          "exact_total": 50802
+        },
+        {
+          "tool": "Jedi",
+          "function_returns": 13160,
+          "function_parameters": 0,
+          "local_variables": 15403,
+          "exact_total": 28563
+        },
+        {
+          "tool": "Scalpel",
+          "function_returns": 15383,
+          "function_parameters": 171,
+          "local_variables": 18,
+          "exact_total": 15572
+        },
+        {
+          "tool": "Type4Py",
+          "function_returns": 3143,
+          "function_parameters": 38,
+          "local_variables": 2243,
+          "exact_total": 5424
+        }
+      ],
+      "published_label": "Published 30 Aug 2024 (stale GT + different generation)",
+      "published_source": "vendor/TypeEvalPy/README.md (table generated 30 Aug 2024 against a 78,373-annotation Autogen run; our regenerated Autogen has 76,844 annotations \u2014 denominators don't even match)"
+    }
+  }
+}
