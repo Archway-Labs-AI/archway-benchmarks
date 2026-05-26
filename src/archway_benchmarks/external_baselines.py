@@ -141,6 +141,20 @@ def run_vendor_tool(
             nocache=nocache,
             custom_benchmark_dir=str(benchmark_corpus_dir),
         )
+        # If an image with this tool's tag already exists and the caller
+        # didn't ask for nocache, skip the runner's rebuild. This lets us
+        # pre-build with platform overrides (e.g. linux/amd64 on ARM Macs)
+        # and have the run reuse that image instead of clobbering the tag
+        # with a freshly-built broken one.
+        if not nocache:
+            try:
+                import docker as _docker
+                client = _docker.from_env()
+                existing = client.images.get(tool)
+                runner_instance._build_docker_image = lambda: None  # noqa: SLF001
+                logger.info("reusing pre-built image for %s: %s", tool, existing.id)
+            except Exception as e:  # noqa: BLE001
+                logger.debug("no pre-built image for %s; will build (%s)", tool, e)
         runner_instance.run_tool_test()
         # Pull the image digest after run so docker can resolve the build.
         try:

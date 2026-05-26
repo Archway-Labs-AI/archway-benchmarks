@@ -151,14 +151,24 @@ def main() -> int:
         for tool in args.tools:
             done += 1
             key = f"{tool}::{benchmark_name}"
-            if args.resume and key in checkpoint and checkpoint[key].status == "ok":
-                log.info(
-                    "[%d/%d] %s SKIP (already done as run #%d)",
-                    done,
-                    total,
-                    key,
-                    checkpoint[key].run_id,
-                )
+            if args.resume and key in checkpoint and checkpoint[key].status in ("ok", "failed"):
+                state = checkpoint[key]
+                if state.status == "ok":
+                    log.info(
+                        "[%d/%d] %s SKIP (already done as run #%d)",
+                        done,
+                        total,
+                        key,
+                        state.run_id,
+                    )
+                else:
+                    log.info(
+                        "[%d/%d] %s SKIP (previously failed: %s)",
+                        done,
+                        total,
+                        key,
+                        (state.error or "?")[:120],
+                    )
                 continue
 
             log.info("[%d/%d] %s START", done, total, key)

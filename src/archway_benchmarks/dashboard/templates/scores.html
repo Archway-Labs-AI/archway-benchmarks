@@ -94,27 +94,39 @@
 </section>
 
 <section class="mb-10">
-  <h2 class="text-xl font-medium mb-2">Tools on current GT (head-to-head)</h2>
+  <h2 class="text-xl font-medium mb-2">Archway vs baselines on current GT</h2>
   <p class="text-sm text-navy/60 mb-4 max-w-3xl">
-    The published Aug-2024 numbers were scored against a different ground-truth snapshot. The
-    <span class="text-cyan font-medium">Regenerated</span> column re-runs each tool against the
-    benchmark's <em>current</em> GT, so comparison with our row is honest. <strong>Don't compare
-    Published and Regenerated cells across columns</strong> — different answer keys.
+    <strong class="text-navy">Archway's row is scored against the same ground truth as the
+    <span class="text-cyan">Regenerated</span> baselines</strong> — read those two columns
+    head-to-head. The <span class="text-navy/60">Historical</span> column shows each tool's
+    published number for reference; it was scored against a <em>different, older</em> GT
+    snapshot ({{ leaderboard.label }}) and the Δ vs Historical column quantifies the drift
+    introduced by GT updates. <strong>Never compare Archway against the Historical column</strong>
+    — different answer keys.
   </p>
   {% if regenerated and regen_by_tool %}
   <table class="w-full text-sm">
     <thead class="border-b border-gray-200">
       <tr class="text-left font-mono text-xs uppercase tracking-[0.15em] text-navy/50">
         <th class="py-3 pr-4">Tool</th>
-        <th class="py-3 pr-4">Published<br><span class="normal-case text-[10px] text-navy/40">Aug 2024 · stale GT</span></th>
-        <th class="py-3 pr-4 text-cyan">Regenerated<br><span class="normal-case text-[10px] text-navy/40">current GT</span></th>
-        <th class="py-3 pr-4">Δ</th>
+        <th class="py-3 pr-4">Historical<br><span class="normal-case text-[10px] text-navy/40">{{ leaderboard.label }}</span></th>
+        <th class="py-3 pr-4 text-cyan">Regenerated<br><span class="normal-case text-[10px] text-navy/40">current GT · this dashboard's scorer</span></th>
+        <th class="py-3 pr-4">Δ vs<br>Historical</th>
         <th class="py-3 pr-4">Sound</th>
         <th class="py-3 pr-4">Complete</th>
         <th class="py-3 pr-4">Runtime</th>
       </tr>
     </thead>
     <tbody>
+      <tr class="border-b border-gray-300 bg-paper/60">
+        <td class="py-3 pr-4 font-bold text-navy">Archway <span class="text-[10px] uppercase tracking-wider text-navy/40">(this run)</span></td>
+        <td class="py-3 pr-4 font-mono text-navy/30">—</td>
+        <td class="py-3 pr-4 font-mono font-bold text-cyan text-base">{{ scores.all.exact_total }}</td>
+        <td class="py-3 pr-4 font-mono text-navy/30">—</td>
+        <td class="py-3 pr-4 font-mono text-navy/70">{{ scores.all.files_sound }}/{{ scores.all.total_snippets }}</td>
+        <td class="py-3 pr-4 font-mono text-navy/70">{{ scores.all.files_complete }}/{{ scores.all.total_snippets }}</td>
+        <td class="py-3 pr-4 font-mono text-xs text-navy/60">—</td>
+      </tr>
       {% for tool in leaderboard.tools %}
         {% set re = regen_by_tool.get(tool.tool|lower) %}
         <tr class="border-b border-gray-100">
