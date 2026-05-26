@@ -96,13 +96,14 @@
 <section class="mb-10">
   <h2 class="text-xl font-medium mb-2">Archway vs baselines on current GT</h2>
   <p class="text-sm text-navy/60 mb-4 max-w-3xl">
-    <strong class="text-navy">Archway's row is scored against the same ground truth as the
-    <span class="text-cyan">Regenerated</span> baselines</strong> — read those two columns
-    head-to-head. The <span class="text-navy/60">Historical</span> column shows each tool's
-    published number for reference; it was scored against a <em>different, older</em> GT
-    snapshot ({{ leaderboard.label }}) and the Δ vs Historical column quantifies the drift
-    introduced by GT updates. <strong>Never compare Archway against the Historical column</strong>
-    — different answer keys.
+    <strong class="text-navy">Read the <span class="text-cyan">Regenerated · lenient</span>
+    column for head-to-head with the historical board</strong> (gap is GT drift only). The
+    <span class="text-navy/60">Regenerated · strict</span> column uses the harness's strict
+    scorer (col_offset required); most existing tool runners don't emit col_offset, so they
+    score 0 under that scorer — that's the vendor's post-Oct-2025 scorer change, not a
+    wiring bug. Archway emits col_offset and is held to the strict standard. The
+    <span class="text-navy/60">Historical</span> column shows each tool's published number,
+    scored against an older GT with the older lenient predicate.
   </p>
   {% if regenerated and regen_by_tool %}
   <table class="w-full text-sm">
@@ -110,8 +111,9 @@
       <tr class="text-left font-mono text-xs uppercase tracking-[0.15em] text-navy/50">
         <th class="py-3 pr-4">Tool</th>
         <th class="py-3 pr-4">Historical<br><span class="normal-case text-[10px] text-navy/40">{{ leaderboard.label }}</span></th>
-        <th class="py-3 pr-4 text-cyan">Regenerated<br><span class="normal-case text-[10px] text-navy/40">current GT · this dashboard's scorer</span></th>
-        <th class="py-3 pr-4">Δ vs<br>Historical</th>
+        <th class="py-3 pr-4 text-cyan">Regenerated · lenient<br><span class="normal-case text-[10px] text-navy/40">current GT · paper-era scorer</span></th>
+        <th class="py-3 pr-4">Δ lenient<br>vs Historical</th>
+        <th class="py-3 pr-4">Regenerated · strict<br><span class="normal-case text-[10px] text-navy/40">current GT · post-Oct-2025 scorer</span></th>
         <th class="py-3 pr-4">Sound</th>
         <th class="py-3 pr-4">Complete</th>
         <th class="py-3 pr-4">Runtime</th>
@@ -123,6 +125,7 @@
         <td class="py-3 pr-4 font-mono text-navy/30">—</td>
         <td class="py-3 pr-4 font-mono font-bold text-cyan text-base">{{ scores.all.exact_total }}</td>
         <td class="py-3 pr-4 font-mono text-navy/30">—</td>
+        <td class="py-3 pr-4 font-mono font-bold text-navy text-base">{{ scores.all.exact_total }}</td>
         <td class="py-3 pr-4 font-mono text-navy/70">{{ scores.all.files_sound }}/{{ scores.all.total_snippets }}</td>
         <td class="py-3 pr-4 font-mono text-navy/70">{{ scores.all.files_complete }}/{{ scores.all.total_snippets }}</td>
         <td class="py-3 pr-4 font-mono text-xs text-navy/60">—</td>
@@ -132,11 +135,14 @@
         <tr class="border-b border-gray-100">
           <td class="py-3 pr-4">{{ tool.tool }}</td>
           <td class="py-3 pr-4 font-mono">{{ tool.exact_total }}</td>
-          <td class="py-3 pr-4 font-mono {% if re %}text-cyan font-medium{% else %}text-navy/30{% endif %}">
-            {% if re %}{{ re.exact_total }}{% else %}—{% endif %}
+          <td class="py-3 pr-4 font-mono {% if re and re.exact_total_lenient is not none %}text-cyan font-medium{% else %}text-navy/30{% endif %}">
+            {% if re and re.exact_total_lenient is not none %}{{ re.exact_total_lenient }}{% else %}—{% endif %}
           </td>
-          <td class="py-3 pr-4 font-mono {% if re %}{% set d = re.exact_total - tool.exact_total %}{% if d > 0 %}text-cyan{% elif d < 0 %}text-orange{% endif %}{% endif %}">
-            {% if re %}{% set d = re.exact_total - tool.exact_total %}{{ '+' if d > 0 else '' }}{{ d }}{% else %}—{% endif %}
+          <td class="py-3 pr-4 font-mono {% if re and re.exact_total_lenient is not none %}{% set d = re.exact_total_lenient - tool.exact_total %}{% if d > 0 %}text-cyan{% elif d < 0 %}text-orange{% endif %}{% endif %}">
+            {% if re and re.exact_total_lenient is not none %}{% set d = re.exact_total_lenient - tool.exact_total %}{{ '+' if d > 0 else '' }}{{ d }}{% else %}—{% endif %}
+          </td>
+          <td class="py-3 pr-4 font-mono {% if re %}text-navy/70{% else %}text-navy/30{% endif %}">
+            {% if re %}{{ re.exact_total }}{% else %}—{% endif %}
           </td>
           <td class="py-3 pr-4 font-mono text-navy/70">
             {% if re %}{{ re.files_sound }}/{{ scores.all.total_snippets }}{% else %}—{% endif %}

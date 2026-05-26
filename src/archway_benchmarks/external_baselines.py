@@ -37,6 +37,7 @@ from archway_benchmarks.benchmarks.typeevalpy import (
 )
 from archway_benchmarks.coverage import CoverageStatus
 from archway_benchmarks.scoring.typeevalpy import _aggregate, score_snippet
+from archway_benchmarks.scoring.typeevalpy_lenient import score_predictions_lenient
 from archway_benchmarks.store import (
     connect,
     create_run,
@@ -318,6 +319,13 @@ def ingest_baseline(
         record_snippet_scores(conn, run_id, per_snippet)
         record_scores(conn, run_id, scope="all", scores=scores)
         record_scores(conn, run_id, scope="covered", scores=scores)
+        # Lenient scoring (publication-era predicate) for comparison against
+        # the historical board, which was scored before TypeEvalPy added
+        # the strict `is_same_element` in Oct 2025 (commit 2f7c6056).
+        # The two scores cells together let the dashboard distinguish
+        # scorer-drift from GT-drift.
+        lenient_scores = score_predictions_lenient(benchmark, predictions)
+        record_scores(conn, run_id, scope="all_lenient", scores=lenient_scores)
 
     logger.info(
         "ingested %s on %s as run #%d (exact %d/%d, runtime %.1fs)",

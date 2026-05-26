@@ -20,7 +20,14 @@ from archway_benchmarks.leaderboard import StaticLeaderboard
 
 def collect(db_path: Path) -> dict[str, Any]:
     """Pull every external-baseline run from the store and shape it for a
-    report. Returns a JSON-serialisable dict."""
+    report. Returns a JSON-serialisable dict.
+
+    Each tool row carries both strict and lenient totals. The strict number
+    uses the current HEAD scorer (post-Oct-2025 `is_same_element`, requires
+    col_offset). The lenient number uses `large_scale_analysis.check_match`,
+    which the published Jan 2024 board was generated against. **Use the
+    lenient column for "Δ vs published".**
+    """
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
@@ -28,16 +35,21 @@ def collect(db_path: Path) -> dict[str, Any]:
             """
             SELECT r.id AS run_id, r.engine, r.benchmark, r.metadata, r.created_at,
                    s.total_snippets, s.total_annotations, s.exact_total,
-                   s.files_sound, s.files_complete, s.exact_by_kind_json
+                   s.files_sound, s.files_complete, s.exact_by_kind_json,
+                   sl.exact_total AS exact_total_lenient,
+                   sl.exact_by_kind_json AS exact_by_kind_lenient_json,
+                   sl.files_sound AS files_sound_lenient,
+                   sl.files_complete AS files_complete_lenient
             FROM runs r
             JOIN scores s ON s.run_id = r.id AND s.scope = 'all'
+            LEFT JOIN scores sl ON sl.run_id = r.id AND sl.scope = 'all_lenient'
             WHERE r.engine LIKE 'external:%'
               AND r.id IN (
                 SELECT MAX(id) FROM runs
                 WHERE engine LIKE 'external:%'
                 GROUP BY engine, benchmark
               )
-            ORDER BY r.benchmark, s.exact_total DESC
+            ORDER BY r.benchmark, COALESCE(sl.exact_total, s.exact_total) DESC
             """
         ).fetchall()
     finally:
@@ -48,6 +60,11 @@ def collect(db_path: Path) -> dict[str, Any]:
     for r in rows:
         metadata = json.loads(r["metadata"]) if r["metadata"] else {}
         exact_by_kind = json.loads(r["exact_by_kind_json"])
+        lenient_by_kind = (
+            json.loads(r["exact_by_kind_lenient_json"])
+            if r["exact_by_kind_lenient_json"]
+            else {}
+        )
         tool = (metadata.get("tool") or r["engine"].split(":", 1)[1]).strip()
         benchmark = r["benchmark"]
         snapshots.setdefault(benchmark, {"tools": [], "snapshot": None})
@@ -60,6 +77,12 @@ def collect(db_path: Path) -> dict[str, Any]:
                 "exact_total": r["exact_total"],
                 "files_sound": r["files_sound"],
                 "files_complete": r["files_complete"],
+                "function_returns_lenient": lenient_by_kind.get("return"),
+                "function_parameters_lenient": lenient_by_kind.get("parameter"),
+                "local_variables_lenient": lenient_by_kind.get("variable"),
+                "exact_total_lenient": r["exact_total_lenient"],
+                "files_sound_lenient": r["files_sound_lenient"],
+                "files_complete_lenient": r["files_complete_lenient"],
                 "total_snippets": r["total_snippets"],
                 "total_annotations": r["total_annotations"],
                 "runtime_seconds": metadata.get("runtime_seconds"),
@@ -88,9 +111,14 @@ def collect(db_path: Path) -> dict[str, Any]:
             pub_by_tool = {t.tool.lower(): t.exact_total for t in published.tools}
             for entry in payload["tools"]:
                 pub = pub_by_tool.get(entry["tool"].lower())
-                entry["delta_vs_published"] = (
-                    entry["exact_total"] - pub if pub is not None else None
-                )
+                # Δ uses the lenient regenerated number — that's the
+                # comparison the published board can support.
+                lenient = entry.get("exact_total_lenient")
+                if pub is not None and lenient is not None:
+                    entry["delta_vs_published"] = lenient - pub
+                else:
+                    entry["delta_vs_published"] = None
+                entry["delta_basis"] = "lenient (paper-era scorer)"
         else:
             payload["published"] = []
             payload["published_label"] = None
@@ -108,10 +136,19 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
     lines: list[str] = []
     lines.append(f"# TypeEvalPy baselines · current GT · {report['generated_at']}\n")
     lines.append(
-        "> **Why this exists** — the published Aug-2024 leaderboard was scored "
-        "against an older ground-truth snapshot. The numbers below regenerate "
-        "each baseline against the GT at the vendored repo's current HEAD, so "
-        "head-to-head with our analysis is honest.\n"
+        "> **Why this exists** — the published Jan 2024 leaderboard was scored "
+        "against an older ground-truth snapshot **and** an older scorer. The "
+        "numbers below regenerate each baseline against the GT at the vendored "
+        "repo's current HEAD, with two scorers:\n"
+        ">\n"
+        "> - **lenient** — `vendor/TypeEvalPy/src/result_analyzer/large_scale_analysis.check_match`, "
+        "the paper-era predicate (col_offset/line check commented out, lines 46-51). "
+        "Use this column for **Δ vs published**.\n"
+        "> - **strict** — the current HEAD's `analysis_utils.is_same_element` "
+        "(commit `2f7c6056`, Oct 2025). Requires col_offset match. Existing tool "
+        "runners (Jedi, Scalpel, HeaderGen) do NOT emit col_offset and so score 0 "
+        "under strict. **This is a vendor scorer change, not a wiring bug.** Archway "
+        "emits col_offset and is held to this stricter bar.\n"
     )
 
     for benchmark, payload in report["snapshots"].items():
@@ -119,12 +156,12 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
         if payload["published_source"]:
             lines.append(f"_{payload['published_label']}_ · {payload['published_source']}\n")
 
-        # Comparison table
+        # Comparison table — lenient leads (the comparable number); strict in parens.
         lines.append(
-            "| Tool | FR | FP | LV | **Total (current GT)** | Δ vs published | Sound | Complete | Runtime |"
+            "| Tool | FR | FP | LV | **Total lenient** | Δ vs published | Total strict | Sound (lenient) | Complete (lenient) | Runtime |"
         )
         lines.append(
-            "| --- | --: | --: | --: | --: | --: | --: | --: | --: |"
+            "| --- | --: | --: | --: | --: | --: | --: | --: | --: | --: |"
         )
         for t in payload["tools"]:
             total_snip = t.get("total_snippets") or "?"
@@ -137,10 +174,23 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
                 if t.get("runtime_seconds")
                 else "—"
             )
+            fr_l = t.get("function_returns_lenient")
+            fp_l = t.get("function_parameters_lenient")
+            lv_l = t.get("local_variables_lenient")
+            total_l = t.get("exact_total_lenient")
+            sound_l = t.get("files_sound_lenient")
+            complete_l = t.get("files_complete_lenient")
             lines.append(
-                f"| **{t['tool']}** | {t['function_returns']} | {t['function_parameters']} | "
-                f"{t['local_variables']} | **{t['exact_total']}** | {delta_str} | "
-                f"{t['files_sound']}/{total_snip} | {t['files_complete']}/{total_snip} | {rt} |"
+                f"| **{t['tool']}** "
+                f"| {fr_l if fr_l is not None else '—'} "
+                f"| {fp_l if fp_l is not None else '—'} "
+                f"| {lv_l if lv_l is not None else '—'} "
+                f"| **{total_l if total_l is not None else '—'}** "
+                f"| {delta_str} "
+                f"| {t['exact_total']} (FR={t['function_returns']}, FP={t['function_parameters']}, LV={t['local_variables']}) "
+                f"| {sound_l if sound_l is not None else '—'}/{total_snip} "
+                f"| {complete_l if complete_l is not None else '—'}/{total_snip} "
+                f"| {rt} |"
             )
 
         # Published reference (for verification only — never cite cross-column)

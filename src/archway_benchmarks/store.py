@@ -250,7 +250,7 @@ def record_scores(
     scope: str,
     scores: Scores,
 ) -> None:
-    if scope not in {"all", "covered"}:
+    if scope not in {"all", "covered", "all_lenient", "covered_lenient"}:
         raise ValueError(f"unknown scope: {scope}")
     conn.execute(
         "INSERT OR REPLACE INTO scores "
