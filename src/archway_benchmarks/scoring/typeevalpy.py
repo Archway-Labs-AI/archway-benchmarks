@@ -23,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from archway_benchmarks.outcome import Outcome
+from archway_benchmarks.rule_buckets import classify, empty_bucket_kind_table
 from archway_benchmarks.types import Location, Scores
 
 if TYPE_CHECKING:
@@ -227,6 +228,7 @@ def _aggregate(per_snippet: list[SnippetScores]) -> Scores:
     spurious_total = 0
     exact_by_kind: dict[str, int] = {"return": 0, "parameter": 0, "variable": 0}
     exact_by_category: dict[str, int] = defaultdict(int)
+    exact_by_bucket_kind = empty_bucket_kind_table()
     total_annotations = 0
 
     for snip in per_snippet:
@@ -237,6 +239,8 @@ def _aggregate(per_snippet: list[SnippetScores]) -> Scores:
                 exact_total += 1
                 exact_by_kind[o.location.kind] += 1
                 exact_by_category[o.category] += 1
+                bucket = classify(o.expected_types)
+                exact_by_bucket_kind[bucket][o.location.kind] += 1
             elif o.outcome == Outcome.TYPE_MISS:
                 type_miss_total += 1
             elif o.outcome == Outcome.LOCATION_MISS:
@@ -254,6 +258,7 @@ def _aggregate(per_snippet: list[SnippetScores]) -> Scores:
         exact_total=exact_total,
         exact_by_kind=dict(exact_by_kind),
         exact_by_category=dict(exact_by_category),
+        exact_by_bucket_kind=exact_by_bucket_kind,
         annotation_precision=precision,
         annotation_recall=recall,
     )

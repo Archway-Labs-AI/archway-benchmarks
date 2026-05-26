@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-26T03:28:10+00:00",
+  "generated_at": "2026-05-26T03:57:12+00:00",
   "snapshots": {
     "typeevalpy": {
       "tools": [
@@ -23,6 +23,33 @@
           "image_digest": "sha256:5390fd71ee8cd11f8dbff6f0ddb5e306bfcf10a63107366c034e46afcb0cf080",
           "regenerated_at": "2026-05-26T02:49:58+00:00",
           "run_id": 6,
+          "bucket_kind": {
+            "A1": {
+              "return": 144,
+              "parameter": 30,
+              "variable": 140
+            },
+            "A2": {
+              "return": 25,
+              "parameter": 29,
+              "variable": 70
+            },
+            "A3": {
+              "return": 8,
+              "parameter": 1,
+              "variable": 55
+            },
+            "A4": {
+              "return": 13,
+              "parameter": 0,
+              "variable": 10
+            },
+            "A5": {
+              "return": 6,
+              "parameter": 3,
+              "variable": 57
+            }
+          },
           "delta_vs_published": 59,
           "delta_basis": "lenient (paper-era scorer)"
         },
@@ -46,6 +73,33 @@
           "image_digest": "sha256:c413ad3a6f6e7f68ad3d5f47a1854034dbe1c32dac70cc45d5810761664eee2f",
           "regenerated_at": "2026-05-26T01:54:28+00:00",
           "run_id": 4,
+          "bucket_kind": {
+            "A1": {
+              "return": 89,
+              "parameter": 0,
+              "variable": 176
+            },
+            "A2": {
+              "return": 5,
+              "parameter": 0,
+              "variable": 4
+            },
+            "A3": {
+              "return": 9,
+              "parameter": 0,
+              "variable": 56
+            },
+            "A4": {
+              "return": 8,
+              "parameter": 0,
+              "variable": 15
+            },
+            "A5": {
+              "return": 6,
+              "parameter": 0,
+              "variable": 46
+            }
+          },
           "delta_vs_published": -1,
           "delta_basis": "lenient (paper-era scorer)"
         },
@@ -69,6 +123,33 @@
           "image_digest": "sha256:5ee6dff1483989991b33c44f018a088df839a738aee3885fc911e4200ab72ae8",
           "regenerated_at": "2026-05-26T01:53:55+00:00",
           "run_id": 3,
+          "bucket_kind": {
+            "A1": {
+              "return": 109,
+              "parameter": 13,
+              "variable": 8
+            },
+            "A2": {
+              "return": 8,
+              "parameter": 20,
+              "variable": 0
+            },
+            "A3": {
+              "return": 9,
+              "parameter": 0,
+              "variable": 2
+            },
+            "A4": {
+              "return": 9,
+              "parameter": 0,
+              "variable": 0
+            },
+            "A5": {
+              "return": 5,
+              "parameter": 0,
+              "variable": 0
+            }
+          },
           "delta_vs_published": -14,
           "delta_basis": "lenient (paper-era scorer)"
         }
@@ -150,6 +231,33 @@
           "image_digest": "sha256:5390fd71ee8cd11f8dbff6f0ddb5e306bfcf10a63107366c034e46afcb0cf080",
           "regenerated_at": "2026-05-26T02:56:13+00:00",
           "run_id": 7,
+          "bucket_kind": {
+            "A1": {
+              "return": 4854,
+              "parameter": 157,
+              "variable": 13958
+            },
+            "A2": {
+              "return": 325,
+              "parameter": 278,
+              "variable": 14478
+            },
+            "A3": {
+              "return": 4824,
+              "parameter": 28,
+              "variable": 6257
+            },
+            "A4": {
+              "return": 4295,
+              "parameter": 27,
+              "variable": 3471
+            },
+            "A5": {
+              "return": 19,
+              "parameter": 18,
+              "variable": 1470
+            }
+          },
           "delta_vs_published": 3657,
           "delta_basis": "lenient (paper-era scorer)"
         },
@@ -173,6 +281,33 @@
           "image_digest": "sha256:c413ad3a6f6e7f68ad3d5f47a1854034dbe1c32dac70cc45d5810761664eee2f",
           "regenerated_at": "2026-05-26T02:58:18+00:00",
           "run_id": 8,
+          "bucket_kind": {
+            "A1": {
+              "return": 3762,
+              "parameter": 0,
+              "variable": 3470
+            },
+            "A2": {
+              "return": 84,
+              "parameter": 0,
+              "variable": 51
+            },
+            "A3": {
+              "return": 5533,
+              "parameter": 0,
+              "variable": 7660
+            },
+            "A4": {
+              "return": 2575,
+              "parameter": 0,
+              "variable": 2651
+            },
+            "A5": {
+              "return": 47,
+              "parameter": 0,
+              "variable": 1170
+            }
+          },
           "delta_vs_published": -1560,
           "delta_basis": "lenient (paper-era scorer)"
         },
@@ -196,6 +331,33 @@
           "image_digest": "sha256:5ee6dff1483989991b33c44f018a088df839a738aee3885fc911e4200ab72ae8",
           "regenerated_at": "2026-05-26T02:47:04+00:00",
           "run_id": 5,
+          "bucket_kind": {
+            "A1": {
+              "return": 4510,
+              "parameter": 67,
+              "variable": 12
+            },
+            "A2": {
+              "return": 155,
+              "parameter": 183,
+              "variable": 0
+            },
+            "A3": {
+              "return": 6887,
+              "parameter": 0,
+              "variable": 11
+            },
+            "A4": {
+              "return": 3347,
+              "parameter": 4,
+              "variable": 2
+            },
+            "A5": {
+              "return": 215,
+              "parameter": 0,
+              "variable": 0
+            }
+          },
           "delta_vs_published": -179,
           "delta_basis": "lenient (paper-era scorer)"
         }

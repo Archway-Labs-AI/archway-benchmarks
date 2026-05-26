@@ -69,11 +69,32 @@ def build_app(db_path: Path) -> FastAPI:
         for _scope, row in scores.items():
             row["exact_by_kind"] = json.loads(row["exact_by_kind_json"])
             row["exact_by_category"] = json.loads(row["exact_by_category_json"])
+            row["exact_by_bucket_kind"] = (
+                json.loads(row["exact_by_bucket_kind_json"])
+                if row.get("exact_by_bucket_kind_json")
+                else None
+            )
         snap_static = leaderboard.get(run.benchmark)
         snap_regen = regenerated.get(run.benchmark)
         regen_by_tool = {
             e.tool.lower(): e for e in (snap_regen.tools if snap_regen else ())
         }
+        # GT bucket × kind totals (denominators for the scoreboard).
+        bench_totals: dict[str, dict[str, int]] | None = None
+        try:
+            from archway_benchmarks.benchmarks import (
+                TypeEvalPyAutogenBenchmark,
+                TypeEvalPyBenchmark,
+            )
+            bench = (
+                TypeEvalPyAutogenBenchmark()
+                if run.benchmark == "typeevalpy_autogen"
+                else TypeEvalPyBenchmark()
+            )
+            bench_totals = bench.gt_bucket_kind_totals()
+        except Exception:  # noqa: BLE001
+            bench_totals = None
+        from archway_benchmarks.rule_buckets import BUCKETS, BUCKET_LABELS
         return _render(
             request,
             "scores.html",
@@ -82,6 +103,9 @@ def build_app(db_path: Path) -> FastAPI:
             leaderboard=snap_static,
             regenerated=snap_regen,
             regen_by_tool=regen_by_tool,
+            gt_bucket_totals=bench_totals,
+            bucket_order=BUCKETS,
+            bucket_labels=BUCKET_LABELS,
         )
 
     @app.get("/runs/{run_id}/inspect", response_class=HTMLResponse)

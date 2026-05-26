@@ -202,6 +202,62 @@
   {% endif %}
 </section>
 
+{# --- Rule-bucket scoreboard (A1–A5 × LV/FR/FP) --- #}
+{# Prefer lenient (headline) bucket data; fall back to strict for harness-internal runs
+   where lenient may not exist. #}
+{% set bucket_scope = scores.all_lenient if (scores.all_lenient and scores.all_lenient.exact_by_bucket_kind) else scores.all %}
+{% if bucket_scope and bucket_scope.exact_by_bucket_kind and gt_bucket_totals %}
+<section class="mb-10">
+  <h2 class="text-xl font-medium mb-2">Rule buckets · A1–A5 × kind</h2>
+  <p class="text-sm text-navy/60 mb-4 max-w-3xl">
+    Annotations bucketed by their <em>ground-truth</em> type, in the order Ben's expression-typer
+    lands rules: <strong>A1</strong> scalars (int/str), <strong>A2</strong> callable,
+    <strong>A3</strong> containers, <strong>A4</strong> float/bool/None, <strong>A5</strong>
+    constructor→class. Each cell is <em>caught / GT total</em>.
+    {% if scores.all_lenient and scores.all_lenient.exact_by_bucket_kind %}
+      <strong class="text-cyan">Lenient scorer</strong>, this run's outputs.
+    {% else %}
+      Strict scorer (harness-internal run); for external baselines this section requires the lenient pass.
+    {% endif %}
+  </p>
+  <table class="w-full text-sm">
+    <thead class="border-b border-gray-200">
+      <tr class="text-left font-mono text-xs uppercase tracking-[0.15em] text-navy/50">
+        <th class="py-3 pr-4">Bucket</th>
+        <th class="py-3 pr-4">Return (FR)</th>
+        <th class="py-3 pr-4">Parameter (FP)</th>
+        <th class="py-3 pr-4">Variable (LV)</th>
+        <th class="py-3 pr-4 text-cyan">Total</th>
+        <th class="py-3 pr-4">% of bucket caught</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for bucket in bucket_order %}
+        {% set caught = bucket_scope.exact_by_bucket_kind[bucket] %}
+        {% set gt = gt_bucket_totals[bucket] %}
+        {% set caught_total = caught.return + caught.parameter + caught.variable %}
+        {% set gt_total = gt.return + gt.parameter + gt.variable %}
+        {% set pct = (caught_total / gt_total * 100) if gt_total else 0 %}
+        <tr class="border-b border-gray-100">
+          <td class="py-3 pr-4 font-mono text-xs">{{ bucket_labels[bucket] }}</td>
+          <td class="py-3 pr-4 font-mono">{{ caught.return }}/{{ gt.return }}</td>
+          <td class="py-3 pr-4 font-mono">{{ caught.parameter }}/{{ gt.parameter }}</td>
+          <td class="py-3 pr-4 font-mono">{{ caught.variable }}/{{ gt.variable }}</td>
+          <td class="py-3 pr-4 font-mono text-cyan font-medium">{{ caught_total }}/{{ gt_total }}</td>
+          <td class="py-3 pr-4 font-mono text-xs {% if pct >= 70 %}text-cyan{% elif pct >= 30 %}text-navy/70{% else %}text-orange{% endif %}">
+            {{ "%.0f"|format(pct) }}%
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="text-xs font-mono text-navy/40 mt-3">
+    A1+A2 together (Ben's first pass target): scalars + callable.
+    A3+A4+A5 covered by later rules.
+  </p>
+</section>
+{% endif %}
+
 <section>
   <h2 class="text-xl font-medium mb-4">Per category (top exact counts)</h2>
   <div class="grid grid-cols-2 md:grid-cols-3 gap-3 font-mono text-sm">

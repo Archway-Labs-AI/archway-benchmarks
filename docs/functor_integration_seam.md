@@ -66,6 +66,33 @@ in-memory shortcut. If anything regresses about the adapter's coordinate
 discipline or the scorer's `is_same_element` predicate, the seam test
 fails before the real engine ever gets plugged in.
 
+## Clean A1+A2 reference fixture — your first-pass target
+
+`tests/test_a1_a2_reference.py` runs a clean reference that correctly
+predicts every A1 (int/str) and A2 (callable) GT annotation in the corpus
+and leaves A3–A5 unpredicted. Numbers are **pinned**:
+
+| Benchmark | EXACT (strict & lenient) | Per-kind |
+|---|---:|---|
+| **micro** | **660 / 850** (77.6%) | FR=197, FP=88, LV=375 |
+| **autogen** | **48,880 / 76,844** (63.6%) | FR=5,326, FP=666, LV=42,888 |
+
+The strict and lenient scorers agree exactly because the reference
+inherits GT's 1-indexed col_offset — confirming the convention end-to-end.
+
+### How to use it
+
+When your real expression-typer's first pass lands:
+
+- **Below the fixture's EXACT count** → the gap is in your *rule logic*
+  (your A1/A2 inference is missing real cases).
+- **At or above the fixture** → the rule logic is sound; if any gap to
+  HeaderGen remains, look at A3–A5 next.
+
+The dashboard's rule-bucket scoreboard (`/runs/<id>`) cross-tabs your
+caught annotations by A1–A5 × kind. Watch A1 and A2 to confirm the first
+pass; A3–A5 columns are zero until you wire the later passes.
+
 ## Inspector URL on a real run
 
 After the first real run lands as `#<id>`, open:

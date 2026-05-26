@@ -76,6 +76,19 @@ class TypeEvalPyBenchmark(Benchmark):
                 out[ann.location] = ann.types
         return out
 
+    def gt_bucket_kind_totals(self) -> dict[str, dict[str, int]]:
+        """Bucket × kind GT counts — the denominators for the scoreboard.
+
+        Computed once per benchmark from `ground_truth`; tools don't affect
+        this value. See `archway_benchmarks.rule_buckets` for the taxonomy.
+        """
+        from archway_benchmarks.rule_buckets import classify, empty_bucket_kind_table
+
+        totals = empty_bucket_kind_table()
+        for loc, types in self.ground_truth().items():
+            totals[classify(types)][loc.kind] += 1
+        return totals
+
     def to_tool_format(
         self, predictions: dict[Location, frozenset[str]]
     ) -> dict[str, list[dict[str, Any]]]:

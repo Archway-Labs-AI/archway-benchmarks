@@ -55,6 +55,19 @@ def collect(db_path: Path) -> dict[str, Any]:
     finally:
         conn.close()
 
+    # Pull lenient bucket×kind cross-tab per run for the scoreboard section.
+    bucket_by_run: dict[int, dict] = {}
+    bconn = sqlite3.connect(db_path)
+    bconn.row_factory = sqlite3.Row
+    try:
+        for br in bconn.execute(
+            "SELECT run_id, exact_by_bucket_kind_json FROM scores "
+            "WHERE scope = 'all_lenient' AND exact_by_bucket_kind_json IS NOT NULL"
+        ):
+            bucket_by_run[br["run_id"]] = json.loads(br["exact_by_bucket_kind_json"])
+    finally:
+        bconn.close()
+
     static = StaticLeaderboard()
     snapshots: dict[str, dict[str, Any]] = {}
     for r in rows:
@@ -89,6 +102,7 @@ def collect(db_path: Path) -> dict[str, Any]:
                 "image_digest": metadata.get("image_digest"),
                 "regenerated_at": metadata.get("regenerated_at"),
                 "run_id": r["run_id"],
+                "bucket_kind": bucket_by_run.get(r["run_id"]),
             }
         )
 
@@ -207,6 +221,53 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
                 f"| {rt} |"
             )
 
+        # Rule-bucket × kind cross-tab (lenient scorer) per tool. Denominators
+        # come from the benchmark's GT classification (A1–A5 × {FR,FP,LV}).
+        try:
+            from archway_benchmarks.benchmarks import (
+                TypeEvalPyAutogenBenchmark,
+                TypeEvalPyBenchmark,
+            )
+            from archway_benchmarks.rule_buckets import BUCKETS, BUCKET_LABELS
+
+            bench_obj = (
+                TypeEvalPyAutogenBenchmark()
+                if benchmark == "typeevalpy_autogen"
+                else TypeEvalPyBenchmark()
+            )
+            gt_totals = bench_obj.gt_bucket_kind_totals()
+            tools_with_buckets = [t for t in payload["tools"] if t.get("bucket_kind")]
+            if tools_with_buckets:
+                lines.append(
+                    "\n### Rule buckets · A1–A5 × kind (lenient) — Ben's build-time triage view\n"
+                )
+                lines.append(
+                    "Cell: caught / GT-total. Buckets follow the expression-typer build order. "
+                    "**A1+A2** is the first-pass target.\n"
+                )
+                for t in tools_with_buckets:
+                    lines.append(f"\n**{t['tool']}** ({benchmark})\n")
+                    lines.append("| Bucket | FR | FP | LV | Total | % |")
+                    lines.append("| --- | ---: | ---: | ---: | ---: | ---: |")
+                    for bucket in BUCKETS:
+                        caught = t["bucket_kind"].get(bucket, {})
+                        gt = gt_totals[bucket]
+                        caught_total = sum(
+                            caught.get(k, 0) for k in ("return", "parameter", "variable")
+                        )
+                        gt_total = sum(gt.values())
+                        pct = (100 * caught_total / gt_total) if gt_total else 0
+                        lines.append(
+                            f"| {BUCKET_LABELS[bucket]} "
+                            f"| {caught.get('return', 0)}/{gt['return']} "
+                            f"| {caught.get('parameter', 0)}/{gt['parameter']} "
+                            f"| {caught.get('variable', 0)}/{gt['variable']} "
+                            f"| {caught_total}/{gt_total} "
+                            f"| {pct:.0f}% |"
+                        )
+        except Exception as exc:  # noqa: BLE001
+            lines.append(f"\n_(rule-bucket scoreboard unavailable: {exc})_\n")
+
         # Published reference (for verification only — never cite cross-column)
         if payload["published"]:
             lines.append("\n### Published Aug-2024 reference (stale GT — do not cross-compare)\n")
@@ -235,6 +296,21 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
     # Honest summary paragraph
     lines.append("\n## Honest summary\n")
     lines.append(_summary_paragraph(report))
+
+    # Pointer block for Ben — what to read first, what to beat.
+    lines.append("\n## For Ben — starting points\n")
+    lines.append(
+        "- **Live rule-bucket scoreboard** is on every run's dashboard page "
+        "(`/runs/<id>`), section *Rule buckets · A1–A5 × kind* — read this "
+        "while you iterate the expression-typer to see which rule is landing.\n"
+        "- **Clean A1+A2 reference fixture** (`tests/test_a1_a2_reference.py`): "
+        "pinned at **660 / 850 micro** (77.6%) and **48,880 / 76,844 autogen** (63.6%). "
+        "Diff your first pass against this: below = rule logic; at/above = "
+        "harness is sound, push on A3–A5.\n"
+        "- **Bar to beat** (lenient, current GT): **HeaderGen 591/850 micro · "
+        "54,459/76,844 autogen.** Jedi 414 micro · 27,003 autogen. Scalpel "
+        "183 micro · 15,393 autogen.\n"
+    )
 
     md_path.write_text("\n".join(lines) + "\n")
 

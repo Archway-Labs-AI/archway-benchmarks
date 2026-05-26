@@ -6,7 +6,7 @@ those keys. Keep this module dependency-free.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
 Kind = Literal["return", "parameter", "variable"]
@@ -59,6 +59,12 @@ class Scores:
     exact_by_kind: dict[str, int]  # {"return": N, "parameter": N, "variable": N}
     exact_by_category: dict[str, int]  # one entry per TypeEvalPy feature category
 
+    # Rule-bucket × kind cross-tab — {bucket: {kind: caught}}. See
+    # `archway_benchmarks.rule_buckets` for the bucket taxonomy (A1–A5).
+    # Buckets are classified by the GT type set, not the prediction; the
+    # caught count here is bucket-correct **and** scorer-EXACT.
+    exact_by_bucket_kind: dict[str, dict[str, int]] = field(default_factory=dict)
+
     # derived per-annotation rates (Layer-B; for error analysis)
-    annotation_precision: float
-    annotation_recall: float
+    annotation_precision: float = 0.0
+    annotation_recall: float = 0.0

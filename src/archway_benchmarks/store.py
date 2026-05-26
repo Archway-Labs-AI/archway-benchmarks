@@ -104,6 +104,9 @@ CREATE TABLE IF NOT EXISTS scores (
     annotation_recall REAL NOT NULL,
     exact_by_kind_json TEXT NOT NULL,
     exact_by_category_json TEXT NOT NULL,
+    -- Rule-bucket × kind cross-tab. JSON: {bucket: {kind: caught}}.
+    -- Nullable so legacy rows can be migrated/backfilled.
+    exact_by_bucket_kind_json TEXT,
     PRIMARY KEY (run_id, scope)
 );
 """
@@ -146,6 +149,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(runs)").fetchall()}
     if "metadata" not in cols:
         conn.execute("ALTER TABLE runs ADD COLUMN metadata TEXT")
+    score_cols = {r["name"] for r in conn.execute("PRAGMA table_info(scores)").fetchall()}
+    if "exact_by_bucket_kind_json" not in score_cols:
+        conn.execute("ALTER TABLE scores ADD COLUMN exact_by_bucket_kind_json TEXT")
 
 
 # ----- writers -----
@@ -256,8 +262,8 @@ def record_scores(
         "INSERT OR REPLACE INTO scores "
         "(run_id, scope, total_snippets, total_annotations, files_sound, files_complete, "
         " exact_total, annotation_precision, annotation_recall, "
-        " exact_by_kind_json, exact_by_category_json) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " exact_by_kind_json, exact_by_category_json, exact_by_bucket_kind_json) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             run_id,
             scope,
@@ -270,6 +276,7 @@ def record_scores(
             scores.annotation_recall,
             json.dumps(scores.exact_by_kind),
             json.dumps(scores.exact_by_category),
+            json.dumps(scores.exact_by_bucket_kind) if scores.exact_by_bucket_kind else None,
         ),
     )
 

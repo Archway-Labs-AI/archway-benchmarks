@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from archway_benchmarks.rule_buckets import classify, empty_bucket_kind_table
 from archway_benchmarks.types import Location, Scores
 
 if TYPE_CHECKING:
@@ -147,14 +148,24 @@ def score_predictions_lenient(
     exact_total = sum(s.exact_count for s in per_snippet)
     total_annotations = sum(s.total_gt for s in per_snippet)
 
-    # exact_by_kind: walk the matches.
+    # exact_by_kind: walk the matches. exact_by_bucket_kind too, using the
+    # GT type set for the bucket assignment.
     exact_by_kind: dict[str, int] = {"return": 0, "parameter": 0, "variable": 0}
     exact_by_category: dict[str, int] = defaultdict(int)
+    exact_by_bucket_kind = empty_bucket_kind_table()
+    gt_by_suite: dict[str, dict[Location, frozenset[str]]] = {
+        snip.suite_path: {ann.location: ann.types for ann in snip.annotations}
+        for snip in snippets
+    }
     for s in per_snippet:
+        snippet_gt = gt_by_suite.get(s.suite_path, {})
         for loc in s.matched_locations:
             exact_by_kind[loc.kind] += 1
             cat = s.suite_path.split("/", 1)[0]
             exact_by_category[cat] += 1
+            gt_types = snippet_gt.get(loc, frozenset())
+            bucket = classify(gt_types)
+            exact_by_bucket_kind[bucket][loc.kind] += 1
 
     pred_total = sum(
         len(pred_by_snippet.get(s.suite_path, {})) for s in per_snippet
@@ -172,6 +183,7 @@ def score_predictions_lenient(
         exact_total=exact_total,
         exact_by_kind=dict(exact_by_kind),
         exact_by_category=dict(exact_by_category),
+        exact_by_bucket_kind=exact_by_bucket_kind,
         annotation_precision=annotation_precision,
         annotation_recall=annotation_recall,
     )
