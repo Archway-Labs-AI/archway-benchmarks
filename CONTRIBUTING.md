@@ -22,7 +22,7 @@ Thank you for your interest in contributing! This document covers development se
 ### Fork and Clone
 
 ```bash
-git clone git@github.com:gocon-loca/archway-benchmarks.git
+git clone git@github.com:Archway-Labs-AI/archway-benchmarks.git
 cd archway-benchmarks
 ```
 
@@ -42,7 +42,7 @@ pytest tests/ -v --tb=short
 
 ## Code Style
 
-This repo uses the same conventions as [Archway](https://github.com/gocon-loca/archway):
+This repo uses standard Python conventions consistent with the rest of Archway:
 
 - **Line length:** 100
 - **Linter:** ruff (`ruff check src/`)

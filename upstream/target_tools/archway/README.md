@@ -30,7 +30,7 @@ docker build -t archway .
 ARCHWAY_STUB_ACCURACY=0.67 python src/main_runner.py --runners archway
 
 # API mode
-ARCHWAY_API_ENDPOINT=https://api.archway.dev \
+ARCHWAY_API_ENDPOINT=https://api.example.com \
 ARCHWAY_API_KEY=$KEY \
 python src/main_runner.py --runners archway
 ```

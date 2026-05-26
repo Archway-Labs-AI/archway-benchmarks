@@ -62,7 +62,7 @@ point.
 
 ```bash
 # Clone and pull the benchmark sources
-git clone git@github.com:gocon-loca/archway-benchmarks.git
+git clone git@github.com:Archway-Labs-AI/archway-benchmarks.git
 cd archway-benchmarks
 git submodule update --init --recursive
 
