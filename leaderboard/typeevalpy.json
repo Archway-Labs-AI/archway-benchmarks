@@ -1,6 +1,7 @@
 {
   "benchmark": "typeevalpy",
-  "source": "vendor/TypeEvalPy/docs/webview/paper_tables/paper_table_1.csv (exact-match counts) and paper_table_3.csv (sound/complete)",
+  "label": "Published Aug 2024 · stale GT",
+  "source": "vendor/TypeEvalPy/docs/webview/paper_tables/paper_table_1.csv (exact-match counts) and paper_table_3.csv (sound/complete) — these numbers were scored against the GT snapshot that existed Aug 2024. GT has been updated since (April 2026 fix in commit 3719de11); use the Regenerated column for like-for-like comparison.",
   "total_annotations": 850,
   "total_snippets": 153,
   "kinds": ["function_returns", "function_parameters", "local_variables"],

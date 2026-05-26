@@ -29,5 +29,14 @@ suites/**/cached-results/*.json
 # Cloned target repos (large, generated)
 targets/
 
+# Background baseline run artifacts (regenerated; large)
+external_results/
+baselines.log
+baselines_*.log
+.baselines_checkpoint.json
+
+# Run store (rebuildable; per-user)
+runs.db
+
 # DreamTeam tracking
 .dreamteam/

@@ -20,7 +20,10 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from archway_benchmarks.leaderboard import StaticLeaderboard
+from archway_benchmarks.leaderboard import (
+    RegeneratedLeaderboard,
+    StaticLeaderboard,
+)
 from archway_benchmarks.outcome import Outcome
 from archway_benchmarks.store import (
     connect,
@@ -45,6 +48,7 @@ def build_app(db_path: Path) -> FastAPI:
     )
 
     leaderboard = StaticLeaderboard()
+    regenerated = RegeneratedLeaderboard(db_path)
 
     def _render(request: Request, name: str, **ctx: Any) -> Any:
         return _TEMPLATES.TemplateResponse(request=request, name=name, context=ctx)
@@ -65,8 +69,20 @@ def build_app(db_path: Path) -> FastAPI:
         for _scope, row in scores.items():
             row["exact_by_kind"] = json.loads(row["exact_by_kind_json"])
             row["exact_by_category"] = json.loads(row["exact_by_category_json"])
-        snap = leaderboard.get(run.benchmark)
-        return _render(request, "scores.html", run=run, scores=scores, leaderboard=snap)
+        snap_static = leaderboard.get(run.benchmark)
+        snap_regen = regenerated.get(run.benchmark)
+        regen_by_tool = {
+            e.tool.lower(): e for e in (snap_regen.tools if snap_regen else ())
+        }
+        return _render(
+            request,
+            "scores.html",
+            run=run,
+            scores=scores,
+            leaderboard=snap_static,
+            regenerated=snap_regen,
+            regen_by_tool=regen_by_tool,
+        )
 
     @app.get("/runs/{run_id}/inspect", response_class=HTMLResponse)
     def inspect(

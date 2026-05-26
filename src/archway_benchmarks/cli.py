@@ -79,6 +79,35 @@ def main(argv: list[str] | None = None) -> int:
     p_manifest = sub.add_parser("manifest", help="Regenerate the corpus manifest")
     p_manifest.add_argument("--output", "-o", default="corpus_manifest.json")
 
+    p_regen = sub.add_parser(
+        "regenerate-baselines",
+        help="Re-run published baselines against the current GT (Phase 1 work).",
+        description=(
+            "Builds each tool's Docker image (via vendor/TypeEvalPy/src/runner_class),"
+            " runs it on the named benchmark(s), scores with result_analyzer, and"
+            " persists each result as an external-baseline run in the store."
+        ),
+    )
+    p_regen.add_argument("--tools", nargs="+", default=None)
+    p_regen.add_argument(
+        "--benchmarks", nargs="+", default=None, choices=["micro", "autogen"]
+    )
+    p_regen.add_argument("--db", default="runs.db")
+    p_regen.add_argument("--results-root", default="external_results")
+    p_regen.add_argument("--checkpoint", default=".baselines_checkpoint.json")
+    p_regen.add_argument("--log", default=None)
+    p_regen.add_argument("--resume", action="store_true")
+    p_regen.add_argument("--nocache", action="store_true")
+    p_regen.add_argument("--no-autogen", action="store_true")
+
+    p_report = sub.add_parser(
+        "baselines-report",
+        help="Write baselines_<date>.md and .json summarising the regenerated runs.",
+    )
+    p_report.add_argument("--db", default="runs.db")
+    p_report.add_argument("--out-md", default=None)
+    p_report.add_argument("--out-json", default=None)
+
     args = parser.parse_args(argv)
 
     if args.cmd is None:
@@ -96,6 +125,10 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_serve(args)
     if args.cmd == "manifest":
         return _cmd_manifest(args)
+    if args.cmd == "regenerate-baselines":
+        return _cmd_regenerate(args)
+    if args.cmd == "baselines-report":
+        return _cmd_report(args)
     parser.print_help()
     return 1
 
@@ -234,6 +267,39 @@ def _cmd_manifest(args) -> int:
     from archway_benchmarks.manifest import _cli
 
     return _cli(["--output", args.output])
+
+
+def _cmd_regenerate(args) -> int:
+    cmd_argv: list[str] = []
+    if args.tools:
+        cmd_argv += ["--tools", *args.tools]
+    if args.benchmarks:
+        cmd_argv += ["--benchmarks", *args.benchmarks]
+    cmd_argv += ["--db", args.db, "--results-root", args.results_root, "--checkpoint", args.checkpoint]
+    if args.log:
+        cmd_argv += ["--log", args.log]
+    if args.resume:
+        cmd_argv.append("--resume")
+    if args.nocache:
+        cmd_argv.append("--nocache")
+    if args.no_autogen:
+        cmd_argv.append("--no-autogen")
+    # Shell out so we get the same flag-parsing as direct script invocation.
+    import subprocess
+
+    script = Path(__file__).resolve().parents[2] / "scripts" / "regenerate_baselines.py"
+    return subprocess.call([sys.executable, str(script), *cmd_argv])
+
+
+def _cmd_report(args) -> int:
+    from archway_benchmarks.baselines_report import _cli
+
+    cmd: list[str] = ["--db", args.db]
+    if args.out_md:
+        cmd += ["--out-md", args.out_md]
+    if args.out_json:
+        cmd += ["--out-json", args.out_json]
+    return _cli(cmd)
 
 
 if __name__ == "__main__":

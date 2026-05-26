@@ -1,0 +1,52 @@
+# Append-only patch for TypeEvalPy's `src/runner_class.py`.
+# Add the class below and import it from `src/main_runner.py`'s
+# `available_runners` dict (see `upstream/main_runner_patch.py.add`).
+
+class ArchwayRunner(TypeEvalPyRunner):
+    """Runs the Archway tool. Engine internals stay server-side; this
+    container is a thin client that POSTs each snippet to the hosted API
+    and translates the response into TypeEvalPy schema records.
+
+    Backend selection is via env vars on the container — never hard-coded:
+      ARCHWAY_API_ENDPOINT, ARCHWAY_API_KEY  (production)
+      ARCHWAY_STUB_ACCURACY, ARCHWAY_STUB_SEED  (pipeline validation only)
+
+    See `target_tools/archway/README.md`.
+    """
+
+    def __init__(
+        self,
+        host_results_path,
+        debug=False,
+        nocache=False,
+        custom_benchmark_dir=None,
+    ):
+        super().__init__(
+            "archway",
+            "./target_tools/archway",
+            host_results_path,
+            nocache=nocache,
+            custom_benchmark_dir=custom_benchmark_dir,
+        )
+
+    def spawn_docker_instance(self):
+        """Override to pass the Archway env vars through to the container.
+        The base class hard-codes its `containers.run(...)` call so we
+        re-implement that path with an extra `environment=` kwarg."""
+        import os
+        env_keys = (
+            "ARCHWAY_API_ENDPOINT",
+            "ARCHWAY_API_KEY",
+            "ARCHWAY_API_TIMEOUT",
+            "ARCHWAY_STUB_ACCURACY",
+            "ARCHWAY_STUB_SEED",
+        )
+        environment = {k: os.environ[k] for k in env_keys if k in os.environ}
+        return self.docker_client.containers.run(
+            self.tool_name,
+            detach=True,
+            stdin_open=True,
+            tty=True,
+            volumes=self.volumes,
+            environment=environment,
+        )

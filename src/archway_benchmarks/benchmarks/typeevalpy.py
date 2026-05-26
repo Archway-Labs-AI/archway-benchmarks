@@ -6,6 +6,10 @@ parses ground-truth JSON into harness-native `Annotation`s, and exposes a
 scorer (Layer A).
 
 Scoring is wired in `archway_benchmarks.scoring.typeevalpy` (Phase 3).
+
+Record <-> Location mapping is delegated to
+`archway_benchmarks.typeevalpy_mapping`, which is also the source of truth
+for the upstream `target_tools/archway/` translator (byte-identical copy).
 """
 from __future__ import annotations
 
@@ -14,12 +18,26 @@ from pathlib import Path
 from typing import Any
 
 from archway_benchmarks.benchmarks.base import Benchmark
+from archway_benchmarks.typeevalpy_mapping import (
+    MappedLocation,
+    from_record,
+    to_record,
+)
 from archway_benchmarks.types import Annotation, Location, Scores, Snippet
 
 # Resolved at import time so the package can be installed editable from
 # anywhere; we walk up from this module to the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_CORPUS = _REPO_ROOT / "vendor" / "TypeEvalPy" / "micro-benchmark" / "python_features"
+_DEFAULT_AUTOGEN_CORPUS = (
+    _REPO_ROOT
+    / "vendor"
+    / "TypeEvalPy"
+    / "autogen"
+    / "data"
+    / "autogen_typeevalpy_benchmark"
+    / "python_features"
+)
 
 
 class TypeEvalPyBenchmark(Benchmark):
@@ -102,70 +120,39 @@ class TypeEvalPyBenchmark(Benchmark):
         )
 
 
-# ----- record <-> Annotation conversion -----
+class TypeEvalPyAutogenBenchmark(TypeEvalPyBenchmark):
+    """TypeEvalPy autogen dataset (~5.5k snippets, ~77k annotations).
+
+    Generated from `vendor/TypeEvalPy/autogen/generate_typeevalpy_dataset.py`;
+    we point at the stable symlink at
+    `autogen/data/autogen_typeevalpy_benchmark/python_features/`.
+    """
+
+    name = "typeevalpy_autogen"
+
+    def __init__(self, corpus_root: Path | None = None) -> None:
+        super().__init__(corpus_root=corpus_root or _DEFAULT_AUTOGEN_CORPUS)
+
+
+# ----- record <-> Annotation conversion (delegates to typeevalpy_mapping) -----
 
 def _record_to_annotation(rec: dict[str, Any], file_id: str) -> Annotation:
-    """Project a TypeEvalPy schema record onto our Location/Annotation.
-
-    Kind discrimination follows the scorer's `categorize_facts`
-    (`vendor/TypeEvalPy/src/result_analyzer/analysis_utils.py:80-104`):
-      - has `function`, no `parameter`/`variable`  -> return
-      - has `function` + `parameter`               -> parameter
-      - has `variable` (with/without `function`)   -> variable
-    """
-    line = int(rec["line_number"])
-    col = int(rec["col_offset"])
-    types = frozenset(rec.get("type", []))
-
-    if "parameter" in rec and "function" in rec:
-        loc = Location(
-            file=file_id,
-            line=line,
-            col=col,
-            kind="parameter",
-            name=rec["parameter"],
-            function=rec["function"],
-        )
-    elif "variable" in rec:
-        loc = Location(
-            file=file_id,
-            line=line,
-            col=col,
-            kind="variable",
-            name=rec["variable"],
-            function=rec.get("function"),
-        )
-    elif "function" in rec:
-        loc = Location(
-            file=file_id,
-            line=line,
-            col=col,
-            kind="return",
-            name=rec["function"],
-            function=None,
-        )
-    else:
-        raise ValueError(f"Unrecognized TypeEvalPy record shape: {rec!r}")
-
-    return Annotation(location=loc, types=types)
+    """Project a TypeEvalPy schema record onto our `Annotation`. Delegates the
+    schema knowledge to `typeevalpy_mapping.from_record`."""
+    mapped, types = from_record(rec, file_id)
+    return Annotation(location=_lift_mapped(mapped), types=types)
 
 
 def _location_to_record(loc: Location, types: frozenset[str]) -> dict[str, Any]:
-    """Inverse of `_record_to_annotation`. The emitted `file` is the basename
-    (`main.py`), matching what TypeEvalPy expects per snippet directory."""
-    rec: dict[str, Any] = {
-        "file": loc.file.rsplit("/", 1)[-1],
-        "line_number": loc.line,
-        "col_offset": loc.col if loc.col is not None else 0,
-        "type": sorted(types),
-    }
-    if loc.kind == "return":
-        rec["function"] = loc.name
-    elif loc.kind == "parameter":
-        rec["function"] = loc.function
-        rec["parameter"] = loc.name
-    elif loc.kind == "variable":
-        if loc.function is not None:
-            rec["function"] = loc.function
-        rec["variable"] = loc.name
-    return rec
+    """Inverse of `_record_to_annotation`. Delegates to `typeevalpy_mapping.to_record`."""
+    return to_record(_drop_mapped(loc), types)
+
+
+def _lift_mapped(m: MappedLocation) -> Location:
+    return Location(file=m.file, line=m.line, col=m.col, kind=m.kind, name=m.name, function=m.function)
+
+
+def _drop_mapped(loc: Location) -> MappedLocation:
+    return MappedLocation(
+        file=loc.file, line=loc.line, col=loc.col, kind=loc.kind, name=loc.name, function=loc.function
+    )

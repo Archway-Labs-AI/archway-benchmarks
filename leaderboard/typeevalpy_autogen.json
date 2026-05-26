@@ -1,0 +1,19 @@
+{
+  "benchmark": "typeevalpy_autogen",
+  "label": "Published 30 Aug 2024 (stale GT + different generation)",
+  "source": "vendor/TypeEvalPy/README.md (table generated 30 Aug 2024 against a 78,373-annotation Autogen run; our regenerated Autogen has 76,844 annotations — denominators don't even match)",
+  "total_annotations": 78373,
+  "total_snippets": 7121,
+  "kinds": ["function_returns", "function_parameters", "local_variables"],
+  "kind_totals": {
+    "function_returns": 17056,
+    "function_parameters": 1142,
+    "local_variables": 60175
+  },
+  "tools": [
+    {"tool": "HeaderGen", "function_returns": 14086, "function_parameters": 346, "local_variables": 36370, "exact_total": 50802},
+    {"tool": "Jedi",      "function_returns": 13160, "function_parameters":   0, "local_variables": 15403, "exact_total": 28563},
+    {"tool": "Scalpel",   "function_returns": 15383, "function_parameters": 171, "local_variables":    18, "exact_total": 15572},
+    {"tool": "Type4Py",   "function_returns":  3143, "function_parameters":  38, "local_variables":  2243, "exact_total":  5424}
+  ]
+}

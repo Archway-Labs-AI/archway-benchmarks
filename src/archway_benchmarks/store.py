@@ -42,8 +42,13 @@ CREATE TABLE IF NOT EXISTS runs (
     engine TEXT NOT NULL,
     stub_accuracy REAL,
     seed INTEGER,
-    notes TEXT
+    notes TEXT,
+    -- Free-form JSON for external-baseline metadata: tool, image_digest,
+    -- benchmark_commit, runtime_seconds, sample_size, top_n, source, etc.
+    metadata TEXT
 );
+-- Idempotent additive migration for existing DBs.
+-- (SQLite ignores duplicate ADD COLUMN via this no-op pattern.)
 
 CREATE TABLE IF NOT EXISTS snippets (
     run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
@@ -113,6 +118,7 @@ class RunHeader:
     stub_accuracy: float | None
     seed: int | None
     notes: str | None
+    metadata: str | None = None
 
 
 # ----- connection management -----
@@ -125,6 +131,7 @@ def connect(path: Path = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
     conn.execute("PRAGMA foreign_keys = ON")
     try:
         conn.executescript(_SCHEMA)
+        _migrate(conn)
         yield conn
         conn.commit()
     except Exception:
@@ -132,6 +139,13 @@ def connect(path: Path = DEFAULT_DB_PATH) -> Iterator[sqlite3.Connection]:
         raise
     finally:
         conn.close()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Apply additive migrations; safe to call repeatedly."""
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(runs)").fetchall()}
+    if "metadata" not in cols:
+        conn.execute("ALTER TABLE runs ADD COLUMN metadata TEXT")
 
 
 # ----- writers -----
@@ -144,10 +158,11 @@ def create_run(
     stub_accuracy: float | None,
     seed: int | None,
     notes: str | None = None,
+    metadata: dict | None = None,
 ) -> int:
     cur = conn.execute(
-        "INSERT INTO runs (created_at, benchmark, engine, stub_accuracy, seed, notes) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO runs (created_at, benchmark, engine, stub_accuracy, seed, notes, metadata) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
         (
             datetime.now(timezone.utc).isoformat(timespec="seconds"),
             benchmark,
@@ -155,6 +170,7 @@ def create_run(
             stub_accuracy,
             seed,
             notes,
+            json.dumps(metadata) if metadata is not None else None,
         ),
     )
     return int(cur.lastrowid)

@@ -1,0 +1,16 @@
+# Patch for TypeEvalPy's `src/main_runner.py`. Two edits:
+#
+# 1. Add `ArchwayRunner` to the `from runner_class import (...)` block.
+# 2. Add this entry to the `available_runners` dict inside `main()`:
+
+# "archway": (
+#     ArchwayRunner,
+#     {
+#         "debug": args.debug,
+#         "nocache": args.nocache,
+#         "custom_benchmark_dir": args.custom_benchmark_dir,
+#     },
+# ),
+
+# Optionally add "archway" to the `--runners` argparse default list if you
+# want the tool on the default leaderboard board.

@@ -93,6 +93,78 @@
   <p class="font-mono text-xs text-navy/40 mt-3">{{ leaderboard.source }}</p>
 </section>
 
+<section class="mb-10">
+  <h2 class="text-xl font-medium mb-2">Tools on current GT (head-to-head)</h2>
+  <p class="text-sm text-navy/60 mb-4 max-w-3xl">
+    The published Aug-2024 numbers were scored against a different ground-truth snapshot. The
+    <span class="text-cyan font-medium">Regenerated</span> column re-runs each tool against the
+    benchmark's <em>current</em> GT, so comparison with our row is honest. <strong>Don't compare
+    Published and Regenerated cells across columns</strong> — different answer keys.
+  </p>
+  {% if regenerated and regen_by_tool %}
+  <table class="w-full text-sm">
+    <thead class="border-b border-gray-200">
+      <tr class="text-left font-mono text-xs uppercase tracking-[0.15em] text-navy/50">
+        <th class="py-3 pr-4">Tool</th>
+        <th class="py-3 pr-4">Published<br><span class="normal-case text-[10px] text-navy/40">Aug 2024 · stale GT</span></th>
+        <th class="py-3 pr-4 text-cyan">Regenerated<br><span class="normal-case text-[10px] text-navy/40">current GT</span></th>
+        <th class="py-3 pr-4">Δ</th>
+        <th class="py-3 pr-4">Sound</th>
+        <th class="py-3 pr-4">Complete</th>
+        <th class="py-3 pr-4">Runtime</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tool in leaderboard.tools %}
+        {% set re = regen_by_tool.get(tool.tool|lower) %}
+        <tr class="border-b border-gray-100">
+          <td class="py-3 pr-4">{{ tool.tool }}</td>
+          <td class="py-3 pr-4 font-mono">{{ tool.exact_total }}</td>
+          <td class="py-3 pr-4 font-mono {% if re %}text-cyan font-medium{% else %}text-navy/30{% endif %}">
+            {% if re %}{{ re.exact_total }}{% else %}—{% endif %}
+          </td>
+          <td class="py-3 pr-4 font-mono {% if re %}{% set d = re.exact_total - tool.exact_total %}{% if d > 0 %}text-cyan{% elif d < 0 %}text-orange{% endif %}{% endif %}">
+            {% if re %}{% set d = re.exact_total - tool.exact_total %}{{ '+' if d > 0 else '' }}{{ d }}{% else %}—{% endif %}
+          </td>
+          <td class="py-3 pr-4 font-mono text-navy/70">
+            {% if re %}{{ re.files_sound }}/{{ scores.all.total_snippets }}{% else %}—{% endif %}
+          </td>
+          <td class="py-3 pr-4 font-mono text-navy/70">
+            {% if re %}{{ re.files_complete }}/{{ scores.all.total_snippets }}{% else %}—{% endif %}
+          </td>
+          <td class="py-3 pr-4 font-mono text-xs text-navy/60">
+            {% if re and re.runtime_seconds %}{{ "%.0fs"|format(re.runtime_seconds) }}{% else %}—{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      {# Rows for tools regenerated but not in published board #}
+      {% for re in regenerated.tools %}
+        {% set published_names = leaderboard.tools | map(attribute='tool') | map('lower') | list %}
+        {% if re.tool|lower not in published_names %}
+        <tr class="border-b border-gray-100 italic">
+          <td class="py-3 pr-4 text-navy/60">{{ re.tool }} <span class="text-[10px] uppercase tracking-wider text-navy/40">(not on published board)</span></td>
+          <td class="py-3 pr-4 font-mono text-navy/30">—</td>
+          <td class="py-3 pr-4 font-mono text-cyan font-medium">{{ re.exact_total }}</td>
+          <td class="py-3 pr-4 font-mono text-navy/30">—</td>
+          <td class="py-3 pr-4 font-mono text-navy/70">{{ re.files_sound }}/{{ scores.all.total_snippets }}</td>
+          <td class="py-3 pr-4 font-mono text-navy/70">{{ re.files_complete }}/{{ scores.all.total_snippets }}</td>
+          <td class="py-3 pr-4 font-mono text-xs text-navy/60">{% if re.runtime_seconds %}{{ "%.0fs"|format(re.runtime_seconds) }}{% endif %}</td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="font-mono text-xs text-navy/40 mt-3">{{ regenerated.source }}</p>
+  {% else %}
+  <div class="border border-dashed border-orange/40 rounded-lg p-4 bg-orange/5 text-sm text-navy/70">
+    No regenerated baselines yet for this benchmark.
+    Run <code class="font-mono text-xs bg-white px-2 py-0.5 rounded">archway-bench regenerate-baselines --tool scalpel</code>
+    to populate this section. Until then we only have the published Aug-2024 numbers (above),
+    which were scored against a different GT and aren't directly comparable.
+  </div>
+  {% endif %}
+</section>
+
 <section>
   <h2 class="text-xl font-medium mb-4">Per category (top exact counts)</h2>
   <div class="grid grid-cols-2 md:grid-cols-3 gap-3 font-mono text-sm">
