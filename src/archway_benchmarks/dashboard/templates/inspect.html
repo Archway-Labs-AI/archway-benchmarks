@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Inspector · Run #{{ run.id }}{% endblock %}
+{% block nav_right %}Inspector · Run #{{ run.id }}{% endblock %}
+
+{% block content %}
+<section class="mb-6">
+  <p class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-2">03 · Inspector</p>
+  <h1 class="text-3xl tracking-tight leading-[1.15] mb-2">Browse annotations</h1>
+  <p class="text-navy/70">Filter the {{ annotations|length }} matched annotations by category, kind, outcome, or target slice.</p>
+</section>
+
+<form method="get" class="mb-8 grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
+  <input type="text" name="category" value="{{ filters.category }}" placeholder="category"
+         class="px-3 py-2 border border-gray-200 rounded text-sm focus:outline-none focus:border-navy/50">
+  <select name="kind" class="px-3 py-2 border border-gray-200 rounded text-sm">
+    <option value="">any kind</option>
+    {% for k in ["return", "parameter", "variable"] %}
+      <option value="{{ k }}" {% if filters.kind == k %}selected{% endif %}>{{ k }}</option>
+    {% endfor %}
+  </select>
+  <select name="outcome" class="px-3 py-2 border border-gray-200 rounded text-sm">
+    <option value="">any outcome</option>
+    {% for o in ["EXACT", "TYPE_MISS", "LOCATION_MISS"] %}
+      <option value="{{ o }}" {% if filters.outcome == o %}selected{% endif %}>{{ o }}</option>
+    {% endfor %}
+  </select>
+  <label class="flex items-center gap-2 text-xs uppercase tracking-wider">
+    <input type="checkbox" name="fp_only" value="1" {% if filters.fp_only %}checked{% endif %} class="accent-orange">
+    FP only
+  </label>
+  <label class="flex items-center gap-2 text-xs uppercase tracking-wider">
+    <input type="checkbox" name="callable_only" value="1" {% if filters.callable_only %}checked{% endif %} class="accent-cyan">
+    callable GT
+  </label>
+  <button type="submit" class="bg-navy text-white px-4 py-2 text-xs uppercase tracking-widest hover:bg-navy/90">Apply</button>
+</form>
+
+<table class="w-full text-sm">
+  <thead class="border-b border-gray-200">
+    <tr class="text-left font-mono text-xs uppercase tracking-[0.15em] text-navy/50">
+      <th class="py-3 pr-4">Snippet</th>
+      <th class="py-3 pr-4">Line:Col</th>
+      <th class="py-3 pr-4">Kind</th>
+      <th class="py-3 pr-4">Name</th>
+      <th class="py-3 pr-4">Expected</th>
+      <th class="py-3 pr-4">Predicted</th>
+      <th class="py-3 pr-4">Outcome</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in annotations %}
+    <tr class="border-b border-gray-100 hover:bg-white/60">
+      <td class="py-2 pr-4 font-mono text-xs">
+        <a href="/runs/{{ run.id }}/snippets/{{ a.suite_path }}" class="text-cyan hover:text-orange">{{ a.suite_path }}</a>
+      </td>
+      <td class="py-2 pr-4 font-mono text-xs text-navy/60">{{ a.line }}:{{ a.col }}</td>
+      <td class="py-2 pr-4 text-xs">{{ a.kind }}</td>
+      <td class="py-2 pr-4 font-mono">{{ a.name }}</td>
+      <td class="py-2 pr-4 font-mono text-xs">{{ a.expected_types }}</td>
+      <td class="py-2 pr-4 font-mono text-xs text-navy/70">{{ a.predicted_types or '—' }}</td>
+      <td class="py-2 pr-4 font-mono text-xs">
+        <span class="px-2 py-0.5 rounded
+          {% if a.outcome == 'EXACT' %}bg-cyan/15 text-cyan
+          {% elif a.outcome == 'TYPE_MISS' %}bg-orange/15 text-orange
+          {% else %}bg-navy/10 text-navy{% endif %}">{{ a.outcome }}</span>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if not annotations %}
+  <p class="text-navy/60 mt-6">No annotations match this filter.</p>
+{% endif %}
+{% endblock %}

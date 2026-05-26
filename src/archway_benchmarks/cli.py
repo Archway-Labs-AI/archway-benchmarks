@@ -1,30 +1,239 @@
+"""Top-level CLI: `archway-bench run | score | export | serve | manifest`.
+
+Engines and benchmarks are pluggable by name. Today the only benchmark is
+TypeEvalPy and the only engine is the stub pair (real engines slot in via
+the registries below).
+"""
+from __future__ import annotations
+
 import argparse
+import json
 import sys
+from pathlib import Path
+from typing import Callable
+
+from archway_benchmarks.benchmarks import TypeEvalPyBenchmark
+from archway_benchmarks.benchmarks.base import Benchmark
+from archway_benchmarks.engines.base import AnalysisEngine, TranslationEngine
+from archway_benchmarks.engines.stubs import make_stub_pair
+from archway_benchmarks.outcome import Outcome
+from archway_benchmarks.runner import run as run_pipeline
+from archway_benchmarks.store import connect, get_scores, list_annotations, list_runs
+
+
+BENCHMARKS: dict[str, Callable[[], Benchmark]] = {
+    "typeevalpy": TypeEvalPyBenchmark,
+}
+
+
+def _build_stub_engines(benchmark: Benchmark, accuracy: float, seed: int | None):
+    snippets = benchmark.load()
+    translator, analyzer, adapter = make_stub_pair(snippets, accuracy=accuracy, seed=seed)
+    return translator, analyzer, adapter
+
+
+ENGINES: dict[
+    str,
+    Callable[[Benchmark, float, int | None], tuple[TranslationEngine, AnalysisEngine, object]],
+] = {
+    "stub": _build_stub_engines,
+}
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="archway-bench")
     sub = parser.add_subparsers(dest="cmd")
 
-    run = sub.add_parser("run", help="Run a benchmark suite")
-    run.add_argument("suite", help="Suite name under suites/")
+    p_run = sub.add_parser("run", help="Run a benchmark end-to-end and persist a run")
+    p_run.add_argument("--benchmark", default="typeevalpy", choices=list(BENCHMARKS))
+    p_run.add_argument("--engine", default="stub", choices=list(ENGINES))
+    p_run.add_argument("--stub-accuracy", type=float, default=0.67)
+    p_run.add_argument("--seed", type=int, default=None)
+    p_run.add_argument("--db", default="runs.db", help="Path to SQLite store")
+    p_run.add_argument("--notes", default=None)
 
-    sub.add_parser("list", help="List available suites")
+    p_score = sub.add_parser("score", help="Print stored scores for a run")
+    p_score.add_argument("run_id", type=int)
+    p_score.add_argument("--db", default="runs.db")
+
+    p_runs = sub.add_parser("runs", help="List stored runs")
+    p_runs.add_argument("--db", default="runs.db")
+
+    p_export = sub.add_parser(
+        "export",
+        help="Emit predictions in TypeEvalPy tool-output format (per-snippet JSON)",
+    )
+    p_export.add_argument("run_id", type=int)
+    p_export.add_argument("--db", default="runs.db")
+    p_export.add_argument(
+        "--output-dir",
+        default="export",
+        help="Directory to write <suite>/main_result.json files",
+    )
+
+    p_serve = sub.add_parser("serve", help="Start the inspector dashboard")
+    p_serve.add_argument("--db", default="runs.db")
+    p_serve.add_argument("--host", default="127.0.0.1")
+    p_serve.add_argument("--port", type=int, default=8088)
+
+    p_manifest = sub.add_parser("manifest", help="Regenerate the corpus manifest")
+    p_manifest.add_argument("--output", "-o", default="corpus_manifest.json")
 
     args = parser.parse_args(argv)
+
     if args.cmd is None:
         parser.print_help()
         return 0
-
-    if args.cmd == "list":
-        print("(no suites yet)")
-        return 0
-
     if args.cmd == "run":
-        print(f"Running suite: {args.suite}")
-        return 0
+        return _cmd_run(args)
+    if args.cmd == "score":
+        return _cmd_score(args)
+    if args.cmd == "runs":
+        return _cmd_runs(args)
+    if args.cmd == "export":
+        return _cmd_export(args)
+    if args.cmd == "serve":
+        return _cmd_serve(args)
+    if args.cmd == "manifest":
+        return _cmd_manifest(args)
+    parser.print_help()
+    return 1
 
+
+def _cmd_run(args) -> int:
+    bench = BENCHMARKS[args.benchmark]()
+    translator, analyzer, adapter = ENGINES[args.engine](
+        bench, args.stub_accuracy, args.seed
+    )
+    result = run_pipeline(
+        benchmark=bench,
+        translator=translator,
+        analyzer=analyzer,
+        adapter=adapter,
+        stub_accuracy=args.stub_accuracy,
+        seed=args.seed,
+        notes=args.notes,
+        db_path=Path(args.db),
+    )
+    a = result.all_scores
+    c = result.covered_scores
+    print(f"run id: {result.run_id}")
+    print(
+        f"  all     -> exact {a.exact_total}/{a.total_annotations} "
+        f"({a.exact_total / a.total_annotations:.1%})  "
+        f"files sound {a.files_sound}/{a.total_snippets}  "
+        f"files complete {a.files_complete}/{a.total_snippets}"
+    )
+    print(
+        f"  covered -> exact {c.exact_total}/{c.total_annotations} "
+        f"({c.exact_total / c.total_annotations if c.total_annotations else 0:.1%})  "
+        f"files sound {c.files_sound}/{c.total_snippets}  "
+        f"files complete {c.files_complete}/{c.total_snippets}"
+    )
     return 0
+
+
+def _cmd_score(args) -> int:
+    with connect(Path(args.db)) as conn:
+        scores = get_scores(conn, args.run_id)
+        if not scores:
+            print(f"no run {args.run_id} in {args.db}", file=sys.stderr)
+            return 1
+        for scope, row in scores.items():
+            print(
+                f"[{scope}] exact {row['exact_total']}/{row['total_annotations']}  "
+                f"sound {row['files_sound']}/{row['total_snippets']}  "
+                f"complete {row['files_complete']}/{row['total_snippets']}  "
+                f"precision {row['annotation_precision']:.3f}  "
+                f"recall {row['annotation_recall']:.3f}"
+            )
+    return 0
+
+
+def _cmd_runs(args) -> int:
+    with connect(Path(args.db)) as conn:
+        rows = list_runs(conn)
+        if not rows:
+            print("(no runs)")
+            return 0
+        for r in rows:
+            print(
+                f"#{r.id}  {r.created_at}  {r.benchmark}/{r.engine}  "
+                f"stub={r.stub_accuracy}  seed={r.seed}"
+            )
+    return 0
+
+
+def _cmd_export(args) -> int:
+    out_dir = Path(args.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with connect(Path(args.db)) as conn:
+        anns = list_annotations(conn, args.run_id)
+        emitted = list_annotations(conn, args.run_id, outcome=Outcome.EXACT)
+        emitted += list_annotations(conn, args.run_id, outcome=Outcome.TYPE_MISS)
+        # SPURIOUS rows are in a separate table; pull them too.
+        from archway_benchmarks.store import list_spurious
+
+        spurious_rows = list_spurious(conn, args.run_id)
+
+    grouped: dict[str, list[dict]] = {}
+    for r in emitted:
+        if r["predicted_types"] is None:
+            continue
+        grouped.setdefault(r["suite_path"], []).append(_db_row_to_record(r))
+    for r in spurious_rows:
+        grouped.setdefault(r["suite_path"], []).append(_db_row_to_record(r, spurious=True))
+
+    count = 0
+    for suite_path, records in grouped.items():
+        target = out_dir / suite_path
+        target.mkdir(parents=True, exist_ok=True)
+        (target / "main_result.json").write_text(json.dumps(records, indent=2) + "\n")
+        count += 1
+    print(f"exported {count} snippet results under {out_dir}/  (run {args.run_id})")
+    print(f"  {len(anns)} GT-keyed predictions, {len(spurious_rows)} spurious")
+    return 0
+
+
+def _db_row_to_record(row: dict, *, spurious: bool = False) -> dict:
+    types_raw = row["predicted_types"]
+    types = json.loads(types_raw) if types_raw else []
+    rec: dict = {
+        "file": "main.py",
+        "line_number": row["line"],
+        "col_offset": row["col"],
+        "type": types,
+    }
+    kind = row["kind"]
+    name = row["name"]
+    function = row["function"]
+    if kind == "return":
+        rec["function"] = name
+    elif kind == "parameter":
+        rec["function"] = function
+        rec["parameter"] = name
+    elif kind == "variable":
+        if function:
+            rec["function"] = function
+        rec["variable"] = name
+    return rec
+
+
+def _cmd_serve(args) -> int:
+    try:
+        from archway_benchmarks.dashboard.server import serve
+    except ImportError as e:
+        print(f"dashboard dependencies missing: {e}", file=sys.stderr)
+        print("install with: pip install '.[dashboard]'", file=sys.stderr)
+        return 1
+    serve(db_path=Path(args.db), host=args.host, port=args.port)
+    return 0
+
+
+def _cmd_manifest(args) -> int:
+    from archway_benchmarks.manifest import _cli
+
+    return _cli(["--output", args.output])
 
 
 if __name__ == "__main__":

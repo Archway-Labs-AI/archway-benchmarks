@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Compare run #{{ run_a.id }} ↔ #{{ run_b.id }}{% endblock %}
+{% block nav_right %}#{{ run_a.id }} ↔ #{{ run_b.id }}{% endblock %}
+
+{% block content %}
+<section class="mb-8">
+  <p class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-2">06 · Compare</p>
+  <h1 class="text-3xl tracking-tight leading-[1.15] mb-2">Run-over-run diff</h1>
+  <p class="text-navy/70">{{ flipped|length }} annotations flipped outcome between the two runs.</p>
+</section>
+
+<div class="grid md:grid-cols-2 gap-4 mb-10 text-sm">
+  <div class="border border-gray-200 rounded-lg p-4 bg-white">
+    <p class="font-mono text-xs uppercase tracking-widest text-navy/50 mb-2">Run #{{ run_a.id }} (baseline)</p>
+    <p class="font-mono">all: <strong>{{ scores_a.all.exact_total }}/{{ scores_a.all.total_annotations }}</strong>
+       · sound {{ scores_a.all.files_sound }}/{{ scores_a.all.total_snippets }}</p>
+  </div>
+  <div class="border border-gray-200 rounded-lg p-4 bg-white">
+    <p class="font-mono text-xs uppercase tracking-widest text-navy/50 mb-2">Run #{{ run_b.id }}</p>
+    <p class="font-mono">all: <strong>{{ scores_b.all.exact_total }}/{{ scores_b.all.total_annotations }}</strong>
+       · sound {{ scores_b.all.files_sound }}/{{ scores_b.all.total_snippets }}</p>
+  </div>
+</div>
+
+<section class="mb-10">
+  <h2 class="font-mono text-xs uppercase tracking-[0.2em] text-cyan mb-3">+ Gained EXACT ({{ gained_exact|length }})</h2>
+  <ul class="space-y-1 font-mono text-xs">
+    {% for f in gained_exact[:50] %}
+    <li><a href="/runs/{{ run_b.id }}/snippets/{{ f.b.suite_path }}" class="text-cyan hover:text-orange">{{ f.b.suite_path }}</a> · {{ f.b.line }}:{{ f.b.col }} · {{ f.b.name }} · was {{ f.a.outcome }}</li>
+    {% endfor %}
+    {% if gained_exact|length > 50 %}<li class="text-navy/40">... and {{ gained_exact|length - 50 }} more</li>{% endif %}
+  </ul>
+</section>
+
+<section>
+  <h2 class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-3">− Lost EXACT ({{ lost_exact|length }})</h2>
+  <ul class="space-y-1 font-mono text-xs">
+    {% for f in lost_exact[:50] %}
+    <li><a href="/runs/{{ run_a.id }}/snippets/{{ f.a.suite_path }}" class="text-cyan hover:text-orange">{{ f.a.suite_path }}</a> · {{ f.a.line }}:{{ f.a.col }} · {{ f.a.name }} · now {{ f.b.outcome }}</li>
+    {% endfor %}
+    {% if lost_exact|length > 50 %}<li class="text-navy/40">... and {{ lost_exact|length - 50 }} more</li>{% endif %}
+  </ul>
+</section>
+{% endblock %}

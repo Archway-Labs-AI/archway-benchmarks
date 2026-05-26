@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Target-set · Run #{{ run.id }}{% endblock %}
+{% block nav_right %}Targets · Run #{{ run.id }}{% endblock %}
+
+{% block content %}
+<section class="mb-10">
+  <p class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-2">05 · Target-set board</p>
+  <h1 class="text-3xl tracking-tight leading-[1.15] mb-2">The differentiator slices</h1>
+  <p class="text-navy/70 max-w-2xl">
+    Function parameters and <code class="font-mono text-sm">callable</code>-typed ground truth are the two
+    slices the field systematically misses. Beating these is the story.
+  </p>
+</section>
+
+<div class="grid md:grid-cols-2 gap-4 mb-10">
+  <div class="border border-gray-200 rounded-lg p-6 bg-white">
+    <p class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-3">Function parameters</p>
+    <div class="flex items-baseline gap-3 mb-2">
+      <span class="text-5xl font-bold">{{ fp_exact }}</span>
+      <span class="text-navy/50 font-mono">/ {{ fp_total }}</span>
+    </div>
+    <p class="font-mono text-xs text-navy/60 mb-4">
+      {{ "%.1f"|format((fp_exact / fp_total * 100) if fp_total else 0) }}% EXACT on FP annotations
+    </p>
+    <p class="text-sm text-navy/70">
+      Field's best on FP across the leaderboard: <strong>{{ fp_field_best }}/{{ fp_total }}</strong>
+      (Jedi=0, Pyright=8). Anything materially above 8 is a publishable claim.
+    </p>
+  </div>
+
+  <div class="border border-gray-200 rounded-lg p-6 bg-white">
+    <p class="font-mono text-xs uppercase tracking-[0.2em] text-cyan mb-3">Callable GT</p>
+    <div class="flex items-baseline gap-3 mb-2">
+      <span class="text-5xl font-bold">{{ callable_exact }}</span>
+      <span class="text-navy/50 font-mono">/ {{ callable_total }}</span>
+    </div>
+    <p class="font-mono text-xs text-navy/60 mb-4">
+      {{ "%.1f"|format((callable_exact / callable_total * 100) if callable_total else 0) }}% EXACT on callable-GT annotations
+    </p>
+    <p class="text-sm text-navy/70">
+      {{ callable_total }} annotations have GT type set <code class="font-mono text-xs">{callable}</code>
+      — the function-passed-by-reference failure class for most tools.
+    </p>
+  </div>
+</div>
+
+<div class="font-mono text-xs uppercase tracking-widest">
+  <a href="/runs/{{ run.id }}/inspect?fp_only=1" class="text-cyan hover:text-orange mr-6">browse FP annotations →</a>
+  <a href="/runs/{{ run.id }}/inspect?callable_only=1" class="text-cyan hover:text-orange">browse callable-GT annotations →</a>
+</div>
+{% endblock %}

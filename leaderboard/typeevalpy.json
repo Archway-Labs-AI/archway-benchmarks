@@ -1,0 +1,21 @@
+{
+  "benchmark": "typeevalpy",
+  "source": "vendor/TypeEvalPy/docs/webview/paper_tables/paper_table_1.csv (exact-match counts) and paper_table_3.csv (sound/complete)",
+  "total_annotations": 850,
+  "total_snippets": 153,
+  "kinds": ["function_returns", "function_parameters", "local_variables"],
+  "kind_totals": {
+    "function_returns": 230,
+    "function_parameters": 95,
+    "local_variables": 525
+  },
+  "tools": [
+    {"tool": "HeaderGen", "function_returns": 185, "function_parameters": 56, "local_variables": 291, "exact_total": 532},
+    {"tool": "Jedi",      "function_returns": 122, "function_parameters":  0, "local_variables": 293, "exact_total": 415},
+    {"tool": "Pyright",   "function_returns": 100, "function_parameters":  8, "local_variables": 297, "exact_total": 405},
+    {"tool": "HiTyper-DL","function_returns": 163, "function_parameters": 27, "local_variables": 179, "exact_total": 369},
+    {"tool": "HiTyper",   "function_returns": 141, "function_parameters":  7, "local_variables": 102, "exact_total": 250},
+    {"tool": "Scalpel",   "function_returns": 155, "function_parameters": 36, "local_variables":   6, "exact_total": 197},
+    {"tool": "Type4Py",   "function_returns":  39, "function_parameters": 19, "local_variables":  99, "exact_total": 157}
+  ]
+}

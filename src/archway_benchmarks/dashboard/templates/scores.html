@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Run #{{ run.id }} · Scores{% endblock %}
+{% block nav_right %}Run #{{ run.id }}{% endblock %}
+
+{% macro scores_card(label, row, total_anns_label) %}
+  {% set rate = (row.exact_total / row.total_annotations) if row.total_annotations else 0 %}
+  <div class="border border-gray-200 rounded-lg p-6 bg-white">
+    <p class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-3">{{ label }}</p>
+    <div class="flex items-baseline gap-3 mb-4">
+      <span class="text-4xl font-bold">{{ row.exact_total }}</span>
+      <span class="text-navy/50 font-mono text-sm">/ {{ row.total_annotations }}</span>
+      <span class="text-cyan font-mono text-sm">{{ "%.1f"|format(rate * 100) }}% exact</span>
+    </div>
+    <dl class="grid grid-cols-3 gap-3 font-mono text-xs uppercase tracking-wider">
+      <div>
+        <dt class="text-navy/50 mb-1">Sound</dt>
+        <dd class="text-navy">{{ row.files_sound }}/{{ row.total_snippets }}</dd>
+      </div>
+      <div>
+        <dt class="text-navy/50 mb-1">Complete</dt>
+        <dd class="text-navy">{{ row.files_complete }}/{{ row.total_snippets }}</dd>
+      </div>
+      <div>
+        <dt class="text-navy/50 mb-1">Recall · Prec</dt>
+        <dd class="text-navy">{{ "%.2f"|format(row.annotation_recall) }} · {{ "%.2f"|format(row.annotation_precision) }}</dd>
+      </div>
+    </dl>
+  </div>
+{% endmacro %}
+
+{% block content %}
+<section class="mb-10">
+  <p class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-2">02 · Run #{{ run.id }}</p>
+  <h1 class="text-3xl md:text-4xl tracking-tight leading-[1.15] mb-2">
+    Scores
+  </h1>
+  <p class="font-mono text-xs text-navy/50 mb-6">
+    {{ run.benchmark }} · {{ run.engine }} · stub_accuracy={{ run.stub_accuracy }} · seed={{ run.seed }} · {{ run.created_at }}
+  </p>
+
+  <div class="flex flex-wrap gap-3 mb-8 font-mono text-xs uppercase tracking-widest">
+    <a href="/runs/{{ run.id }}/inspect" class="border border-navy/30 px-4 py-2 hover:bg-navy hover:text-white transition-colors">Inspector</a>
+    <a href="/runs/{{ run.id }}/targets" class="border border-orange px-4 py-2 text-orange hover:bg-orange hover:text-white transition-colors">Target-set board</a>
+  </div>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-xl font-medium mb-4">All vs covered subset</h2>
+  <div class="grid md:grid-cols-2 gap-4">
+    {{ scores_card("All " ~ scores.all.total_snippets ~ " snippets", scores.all, "annotations") }}
+    {{ scores_card("Covered (" ~ scores.covered.total_snippets ~ " snippets)", scores.covered, "covered annotations") }}
+  </div>
+</section>
+
+<section class="mb-10">
+  <h2 class="text-xl font-medium mb-4">By kind (TypeEvalPy convention)</h2>
+  <table class="w-full text-sm">
+    <thead class="border-b border-gray-200">
+      <tr class="text-left font-mono text-xs uppercase tracking-[0.15em] text-navy/50">
+        <th class="py-3 pr-4">Kind</th>
+        <th class="py-3 pr-4">Total GT</th>
+        <th class="py-3 pr-4">Ours (all)</th>
+        <th class="py-3 pr-4">Ours (covered)</th>
+        {% for tool in leaderboard.tools %}
+          <th class="py-3 pr-4">{{ tool.tool }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% set kind_map = {"function_returns": "return", "function_parameters": "parameter", "local_variables": "variable"} %}
+      {% for vendor_kind, internal_kind in kind_map.items() %}
+      <tr class="border-b border-gray-100">
+        <td class="py-3 pr-4 font-mono text-xs">{{ vendor_kind }}</td>
+        <td class="py-3 pr-4 font-mono">{{ leaderboard.kind_totals[vendor_kind] }}</td>
+        <td class="py-3 pr-4 font-mono text-navy">{{ scores.all.exact_by_kind.get(internal_kind, 0) }}</td>
+        <td class="py-3 pr-4 font-mono text-cyan">{{ scores.covered.exact_by_kind.get(internal_kind, 0) }}</td>
+        {% for tool in leaderboard.tools %}
+          <td class="py-3 pr-4 font-mono text-navy/60">{{ tool[vendor_kind] }}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+      <tr class="border-b border-gray-200">
+        <td class="py-3 pr-4 font-mono text-xs uppercase tracking-wider font-medium">total</td>
+        <td class="py-3 pr-4 font-mono">{{ leaderboard.total_annotations }}</td>
+        <td class="py-3 pr-4 font-mono font-medium text-navy">{{ scores.all.exact_total }}</td>
+        <td class="py-3 pr-4 font-mono font-medium text-cyan">{{ scores.covered.exact_total }}</td>
+        {% for tool in leaderboard.tools %}
+          <td class="py-3 pr-4 font-mono">{{ tool.exact_total }}</td>
+        {% endfor %}
+      </tr>
+    </tbody>
+  </table>
+  <p class="font-mono text-xs text-navy/40 mt-3">{{ leaderboard.source }}</p>
+</section>
+
+<section>
+  <h2 class="text-xl font-medium mb-4">Per category (top exact counts)</h2>
+  <div class="grid grid-cols-2 md:grid-cols-3 gap-3 font-mono text-sm">
+    {% for cat, n in scores.all.exact_by_category.items()|sort(attribute=1, reverse=True) %}
+      <div class="border border-gray-100 rounded p-3 bg-white">
+        <div class="text-xs uppercase tracking-wider text-navy/50">{{ cat }}</div>
+        <div class="text-2xl font-medium">{{ n }}</div>
+        <div class="text-xs text-cyan">covered: {{ scores.covered.exact_by_category.get(cat, 0) }}</div>
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

@@ -41,6 +41,15 @@ dev = [
     "pytest>=7.0",
     "ruff>=0.1.0",
     "mypy>=1.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "jinja2>=3.1",
+    "httpx>=0.26",
+]
+dashboard = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "jinja2>=3.1",
 ]
 
 [project.scripts]
@@ -48,6 +57,7 @@ archway-bench = "archway_benchmarks.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/archway_benchmarks"]
+artifacts = ["src/archway_benchmarks/dashboard/templates/*.html", "src/archway_benchmarks/dashboard/static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

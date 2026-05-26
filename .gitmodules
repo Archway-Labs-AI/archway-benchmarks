@@ -1,0 +1,3 @@
+[submodule "vendor/TypeEvalPy"]
+	path = vendor/TypeEvalPy
+	url = https://github.com/secure-software-engineering/TypeEvalPy.git

@@ -1,0 +1,22 @@
+/* Brand polish on top of Tailwind CDN. Most styling lives in utility classes. */
+
+:root {
+  --paper: #FAF9F5;
+  --navy: #1a2744;
+  --orange: #e8742c;
+  --cyan: #3bb3e8;
+}
+
+body {
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+pre code {
+  font-feature-settings: "calt" 0;
+}
+
+table th {
+  font-weight: 500;
+}

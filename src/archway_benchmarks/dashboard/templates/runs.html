@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Runs · Archway Benchmarks{% endblock %}
+{% block nav_right %}{{ runs|length }} runs{% endblock %}
+
+{% block content %}
+<section class="mb-10">
+  <p class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-2">01 · Runs</p>
+  <h1 class="text-3xl md:text-4xl tracking-tight leading-[1.15] mb-4">
+    Stored benchmark runs
+  </h1>
+  <p class="text-navy/70 max-w-2xl">
+    Each row is a complete pass over the benchmark with a specific engine and seed.
+    Click a run to see scores against the leaderboard and inspect every annotation.
+  </p>
+</section>
+
+{% if not runs %}
+  <div class="border border-gray-200 rounded-lg bg-white p-8 text-center">
+    <p class="text-navy/60 mb-3">No runs yet.</p>
+    <code class="font-mono text-xs bg-gray-100 px-3 py-1.5 rounded">
+      archway-bench run --stub-accuracy 0.67 --seed 1
+    </code>
+  </div>
+{% else %}
+  <table class="w-full text-sm">
+    <thead class="border-b border-gray-200">
+      <tr class="text-left font-mono text-xs uppercase tracking-[0.15em] text-navy/50">
+        <th class="py-3 pr-4">#</th>
+        <th class="py-3 pr-4">Created</th>
+        <th class="py-3 pr-4">Benchmark</th>
+        <th class="py-3 pr-4">Engine</th>
+        <th class="py-3 pr-4">Stub acc.</th>
+        <th class="py-3 pr-4">Seed</th>
+        <th class="py-3 pr-4">Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in runs %}
+      <tr class="border-b border-gray-100 hover:bg-white/60">
+        <td class="py-3 pr-4 font-mono">
+          <a href="/runs/{{ r.id }}" class="text-cyan hover:text-orange transition-colors">#{{ r.id }}</a>
+        </td>
+        <td class="py-3 pr-4 font-mono text-xs text-navy/60">{{ r.created_at }}</td>
+        <td class="py-3 pr-4">{{ r.benchmark }}</td>
+        <td class="py-3 pr-4 font-mono text-xs">{{ r.engine }}</td>
+        <td class="py-3 pr-4 font-mono">{{ r.stub_accuracy or '—' }}</td>
+        <td class="py-3 pr-4 font-mono text-xs">{{ r.seed or '—' }}</td>
+        <td class="py-3 pr-4 text-navy/70">{{ r.notes or '' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endif %}
+{% endblock %}

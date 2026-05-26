@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Archway Benchmarks{% endblock %}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            navy: '#1a2744',
+            orange: '#e8742c',
+            cyan: '#3bb3e8',
+            paper: '#FAF9F5',
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+          },
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-paper text-navy font-sans">
+  <header class="border-b border-gray-100 bg-paper/90 backdrop-blur-sm sticky top-0 z-10">
+    <nav class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-3">
+        <span class="font-bold tracking-[0.18em] text-sm uppercase">ARCHWAY</span>
+        <span class="font-mono text-xs text-navy/50">/benchmarks</span>
+      </a>
+      <div class="font-mono text-xs text-navy/50 uppercase tracking-widest">
+        {% block nav_right %}{% endblock %}
+      </div>
+    </nav>
+  </header>
+  <main class="max-w-6xl mx-auto px-6 py-10">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="max-w-6xl mx-auto px-6 py-10 text-xs font-mono text-navy/40 uppercase tracking-widest">
+    Archway Benchmarks · TypeEvalPy vendored · scoring via vendor/result_analyzer
+  </footer>
+</body>
+</html>

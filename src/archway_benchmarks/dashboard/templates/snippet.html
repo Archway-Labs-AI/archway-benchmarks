@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ snippet.suite_path }} · Run #{{ run.id }}{% endblock %}
+{% block nav_right %}{{ snippet.suite_path }}{% endblock %}
+
+{% block content %}
+<section class="mb-6">
+  <p class="font-mono text-xs uppercase tracking-[0.2em] text-orange mb-2">04 · Snippet</p>
+  <h1 class="text-2xl tracking-tight leading-[1.15] mb-2 font-mono">{{ snippet.suite_path }}</h1>
+  <p class="font-mono text-xs text-navy/60">
+    coverage = {{ snippet.translation_status }}{% if snippet.error %} · error: {{ snippet.error }}{% endif %}
+  </p>
+</section>
+
+<div class="grid lg:grid-cols-2 gap-6">
+  <div>
+    <h2 class="font-mono text-xs uppercase tracking-widest text-navy/50 mb-3">main.py</h2>
+    <pre class="text-xs leading-relaxed font-mono bg-white border border-gray-200 rounded p-4 overflow-x-auto">
+{%- for lineno, text in lines -%}
+<span class="block flex items-start gap-3"><span class="text-navy/30 select-none w-8 text-right shrink-0">{{ lineno }}</span><code class="flex-1 whitespace-pre">{{ text }}</code>{% if marks_by_line[lineno] %}<span class="flex gap-1 shrink-0 ml-2">{% for m in marks_by_line[lineno] %}<span class="inline-block w-2.5 h-2.5 rounded-full
+{% if m.outcome == 'EXACT' %}bg-cyan
+{% elif m.outcome == 'TYPE_MISS' %}bg-orange
+{% else %}bg-navy/40{% endif %}" title="{{ m.kind }} {{ m.name }} → {{ m.outcome }}"></span>{% endfor %}</span>{% endif %}</span>
+{%- endfor -%}
+</pre>
+    <div class="flex gap-4 mt-3 font-mono text-xs text-navy/60">
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-cyan"></span>EXACT</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-orange"></span>TYPE_MISS</span>
+      <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-navy/40"></span>LOCATION_MISS</span>
+    </div>
+  </div>
+
+  <div>
+    <h2 class="font-mono text-xs uppercase tracking-widest text-navy/50 mb-3">annotations</h2>
+    <table class="w-full text-xs">
+      <thead class="border-b border-gray-200">
+        <tr class="text-left font-mono uppercase tracking-wider text-navy/50">
+          <th class="py-2 pr-3">L:C</th>
+          <th class="py-2 pr-3">Kind</th>
+          <th class="py-2 pr-3">Name</th>
+          <th class="py-2 pr-3">Expected</th>
+          <th class="py-2 pr-3">Predicted</th>
+          <th class="py-2 pr-3">Outcome</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in annotations %}
+        <tr class="border-b border-gray-100">
+          <td class="py-2 pr-3 font-mono text-navy/60">{{ a.line }}:{{ a.col }}</td>
+          <td class="py-2 pr-3">{{ a.kind }}</td>
+          <td class="py-2 pr-3 font-mono">{{ a.name }}</td>
+          <td class="py-2 pr-3 font-mono">{{ a.expected_types }}</td>
+          <td class="py-2 pr-3 font-mono text-navy/70">{{ a.predicted_types or '—' }}</td>
+          <td class="py-2 pr-3 font-mono">
+            <span class="px-1.5 py-0.5 rounded
+              {% if a.outcome == 'EXACT' %}bg-cyan/15 text-cyan
+              {% elif a.outcome == 'TYPE_MISS' %}bg-orange/15 text-orange
+              {% else %}bg-navy/10 text-navy{% endif %}">{{ a.outcome }}</span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if spurious %}
+    <h2 class="font-mono text-xs uppercase tracking-widest text-navy/50 mb-3 mt-8">spurious predictions</h2>
+    <table class="w-full text-xs">
+      <thead class="border-b border-gray-200">
+        <tr class="text-left font-mono uppercase tracking-wider text-navy/50">
+          <th class="py-2 pr-3">L:C</th>
+          <th class="py-2 pr-3">Kind</th>
+          <th class="py-2 pr-3">Name</th>
+          <th class="py-2 pr-3">Predicted</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in spurious %}
+        <tr class="border-b border-gray-100">
+          <td class="py-2 pr-3 font-mono text-navy/60">{{ s.line }}:{{ s.col }}</td>
+          <td class="py-2 pr-3">{{ s.kind }}</td>
+          <td class="py-2 pr-3 font-mono">{{ s.name }}</td>
+          <td class="py-2 pr-3 font-mono">{{ s.predicted_types }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+</div>
+
+<div class="mt-8">
+  <a href="/runs/{{ run.id }}/inspect" class="font-mono text-xs uppercase tracking-widest text-cyan hover:text-orange">← back to inspector</a>
+</div>
+{% endblock %}
