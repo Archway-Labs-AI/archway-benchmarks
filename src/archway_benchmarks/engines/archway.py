@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -39,14 +39,20 @@ class ArchwayTranslation:
 class ArchwayAnalysisResult:
     """Server response for one snippet.
 
-    Opaque to the harness; only ``ArchwayAnalysisResultAdapter`` reads
-    ``positioned``. ``error`` is set when the request failed or the server
-    returned a 422 (translation/analysis error), so the runner can keep
-    processing the rest of the corpus without an exception bubbling up.
+    Opaque to the harness; only ``ArchwayAnalysisResultAdapter`` reads the
+    fields. ``error`` is set when the request failed or the server returned
+    a 422 (translation/analysis error), so the runner can keep processing
+    the rest of the corpus without an exception bubbling up.
+
+    ``functions`` carries the observed-signature memo keyed by stringified
+    body id; the same id appears on ``Callable`` elements in ``positioned``,
+    so the adapter can resolve a callable wire to its observed return type
+    by string-keying into this dict.
     """
 
     snippet_path: str
     positioned: tuple[dict[str, Any], ...] = ()
+    functions: dict[str, dict[str, Any]] = field(default_factory=dict)
     error: str | None = None
 
 
@@ -90,6 +96,7 @@ class ArchwayAnalysisEngine:
             return ArchwayAnalysisResult(
                 snippet_path=translation.path,
                 positioned=tuple(payload.get("positioned", [])),
+                functions=payload.get("functions", {}) or {},
             )
         except urllib.error.HTTPError as e:
             try:

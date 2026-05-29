@@ -45,7 +45,7 @@ class ArchwayAnalysisResultAdapter(AnalysisResultAdapter):
             return []
         out: list[Annotation] = []
         for gt in snippet.annotations:
-            types = _lookup_predicted_types(gt, result.positioned)
+            types = _lookup_predicted_types(gt, result.positioned, result.functions)
             if types is None:
                 continue
             out.append(Annotation(location=gt.location, types=types))
@@ -53,7 +53,9 @@ class ArchwayAnalysisResultAdapter(AnalysisResultAdapter):
 
 
 def _lookup_predicted_types(
-    gt: Annotation, positioned: tuple[dict[str, Any], ...]
+    gt: Annotation,
+    positioned: tuple[dict[str, Any], ...],
+    functions: dict[str, dict[str, Any]],
 ) -> frozenset[str] | None:
     loc = gt.location
     base, is_indirect = _split_base(loc.name)
@@ -68,8 +70,56 @@ def _lookup_predicted_types(
         if is_indirect:
             inner = _value_element(elt)
             return _to_types(inner) if inner is not None else None
+        # GT `function:` entries (kind="return") want the return type of the
+        # callable, not the fact that it's callable. Look up the body id in
+        # the signatures map and union all observed returns. Falls back to
+        # element-level types when no signature is observed (function never
+        # called) or the wire isn't callable.
+        if loc.kind == "return":
+            returns = _callable_returns(elt, functions)
+            if returns is not None:
+                return returns
         return _to_types(elt)
     return None
+
+
+def _callable_returns(
+    elt: dict[str, Any], functions: dict[str, dict[str, Any]]
+) -> frozenset[str] | None:
+    """Union of all observed return types for the callable(s) in `elt`.
+
+    Returns ``None`` if the element carries no callable identity at all,
+    so the caller can fall back to element-level flattening.
+    """
+    ids: list[Any] = []
+    _collect_callable_bodies(elt, ids)
+    if not ids:
+        return None
+    out: set[str] = set()
+    saw_any = False
+    for body in ids:
+        sig = functions.get(str(body))
+        if not sig:
+            continue
+        saw_any = True
+        for inst in sig.get("instantiations", []):
+            out |= _to_types(inst.get("ret", {}))
+    if not saw_any:
+        # Element is a callable but the function was never called — no
+        # observed return. Surface as "no prediction" so the caller falls
+        # back to the static element-level types ("callable").
+        return None
+    return frozenset(out)
+
+
+def _collect_callable_bodies(elt: dict[str, Any], out: list[Any]) -> None:
+    """Walk an element tree and append every Callable body id encountered."""
+    kind = elt.get("kind")
+    if kind == "callable":
+        out.append(elt.get("body"))
+    elif kind == "union":
+        for m in elt.get("elements", []):
+            _collect_callable_bodies(m, out)
 
 
 def _split_base(name: str) -> tuple[str, bool]:
