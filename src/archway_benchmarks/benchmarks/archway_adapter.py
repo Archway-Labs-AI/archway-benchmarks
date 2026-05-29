@@ -45,7 +45,7 @@ class ArchwayAnalysisResultAdapter(AnalysisResultAdapter):
             return []
         out: list[Annotation] = []
         for gt in snippet.annotations:
-            types = _lookup_predicted_types(gt, result.positioned, result.functions)
+            types = _lookup_predicted_types(gt, result)
             if types is None:
                 continue
             out.append(Annotation(location=gt.location, types=types))
@@ -53,46 +53,91 @@ class ArchwayAnalysisResultAdapter(AnalysisResultAdapter):
 
 
 def _lookup_predicted_types(
-    gt: Annotation,
-    positioned: tuple[dict[str, Any], ...],
-    functions: dict[str, dict[str, Any]],
+    gt: Annotation, result: ArchwayAnalysisResult
 ) -> frozenset[str] | None:
     loc = gt.location
     base, is_indirect = _split_base(loc.name)
-    for w in positioned:
-        if w.get("wire_name") != base:
-            continue
-        if w.get("row") != loc.line:
-            continue
-        if loc.col is not None and (w.get("col", -1) + 1) != loc.col:
-            continue
-        elt = w.get("element", {})
-        if is_indirect:
+    matches = [w for w in _all_wires(result) if _matches(w, base, loc.line, loc.col)]
+    if not matches:
+        return None
+
+    if is_indirect:
+        out: set[str] = set()
+        for elt in (w["element"] for w in matches):
             inner = _value_element(elt)
-            return _to_types(inner) if inner is not None else None
-        # GT `function:` entries (kind="return") want the return type of the
-        # callable, not the fact that it's callable. Look up the body id in
-        # the signatures map and union all observed returns. Falls back to
-        # element-level types when no signature is observed (function never
-        # called) or the wire isn't callable.
-        if loc.kind == "return":
-            returns = _callable_returns(elt, functions)
-            if returns is not None:
-                return returns
-        return _to_types(elt)
-    return None
+            if inner is not None:
+                out |= _to_types(inner)
+        return frozenset(out) if out else None
+
+    # GT `function:` entries (kind="return") want the return type of the
+    # callable. Look up the body id in functions[] and union all observed
+    # returns; fall back to element-level types when not callable or never
+    # called.
+    if loc.kind == "return":
+        returns = _callable_returns_for(
+            (w["element"] for w in matches), result.functions
+        )
+        if returns is not None:
+            return returns
+
+    out = set()
+    for w in matches:
+        out |= _to_types(w["element"])
+    return frozenset(out) if out else None
 
 
-def _callable_returns(
-    elt: dict[str, Any], functions: dict[str, dict[str, Any]]
-) -> frozenset[str] | None:
-    """Union of all observed return types for the callable(s) in `elt`.
+def _all_wires(result: ArchwayAnalysisResult):
+    """Walk every named-or-unnamed wire that could match a GT lookup.
 
-    Returns ``None`` if the element carries no callable identity at all,
-    so the caller can fall back to element-level flattening.
+    Includes top-level positioned wires AND per-instantiation body wires
+    surfaced under ``functions[].instantiations[].wires``. The body wires
+    expose parameters, locals, and intermediates with their source
+    positions, so the adapter doesn't need a separate code path for
+    parameter or use-site lookups — they all flow through the same
+    ``(name, line, col)`` match.
+
+    ``unbound_cell`` wires are skipped — those carry Bottom by design
+    (pre-allocation in the cell model) and would otherwise drag a real
+    typing into ``any`` via union.
     """
+    for w in result.positioned:
+        yield w
+    for fn in result.functions.values():
+        for inst in fn.get("instantiations", []) or []:
+            for w in inst.get("wires", []) or []:
+                if w.get("role") == "unbound_cell":
+                    continue
+                pos = w.get("position") or {}
+                yield {
+                    "wire_name": w.get("name"),
+                    "row": pos.get("row"),
+                    "col": pos.get("col"),
+                    "end_row": pos.get("end_row"),
+                    "end_col": pos.get("end_col"),
+                    "element": w.get("element", {}),
+                    "_role": w.get("role"),
+                }
+
+
+def _matches(w: dict[str, Any], name: str, line: int, col: int | None) -> bool:
+    if w.get("wire_name") != name:
+        return False
+    if w.get("row") != line:
+        return False
+    if col is not None and (w.get("col", -1) + 1) != col:
+        return False
+    return True
+
+
+def _callable_returns_for(
+    elements, functions: dict[str, dict[str, Any]]
+) -> frozenset[str] | None:
+    """Union observed return types across all callable body ids in
+    `elements`. Returns ``None`` if no element carries a callable identity,
+    so the caller can fall back to element-level flattening."""
     ids: list[Any] = []
-    _collect_callable_bodies(elt, ids)
+    for elt in elements:
+        _collect_callable_bodies(elt, ids)
     if not ids:
         return None
     out: set[str] = set()
@@ -104,12 +149,7 @@ def _callable_returns(
         saw_any = True
         for inst in sig.get("instantiations", []):
             out |= _to_types(inst.get("ret", {}))
-    if not saw_any:
-        # Element is a callable but the function was never called — no
-        # observed return. Surface as "no prediction" so the caller falls
-        # back to the static element-level types ("callable").
-        return None
-    return frozenset(out)
+    return frozenset(out) if saw_any else None
 
 
 def _collect_callable_bodies(elt: dict[str, Any], out: list[Any]) -> None:
