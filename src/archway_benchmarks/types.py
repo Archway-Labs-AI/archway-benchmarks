@@ -68,3 +68,11 @@ class Scores:
     # derived per-annotation rates (Layer-B; for error analysis)
     annotation_precision: float = 0.0
     annotation_recall: float = 0.0
+
+    # Engine telemetry: snippets where the adapter emitted at least one
+    # prediction (i.e. the analysis didn't bail). A snippet that errored
+    # before reaching the adapter still appears in `total_snippets` but
+    # contributes only LOCATION_MISS outcomes, so this is the honest
+    # "how many files did we actually evaluate" count. Defaults to 0 for
+    # backward compatibility with rows stored before this field existed.
+    files_processed: int = 0

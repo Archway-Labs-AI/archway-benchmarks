@@ -8,7 +8,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import signal
+import subprocess
 import sys
+import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import Callable
 
@@ -91,6 +97,23 @@ def main(argv: list[str] | None = None) -> int:
     p_manifest = sub.add_parser("manifest", help="Regenerate the corpus manifest")
     p_manifest.add_argument("--output", "-o", default="corpus_manifest.json")
 
+    p_iter = sub.add_parser(
+        "iterate",
+        help="One-shot: restart the Archway analysis server, run the harness, update the progress report, stop the server. The lifecycle wrap ensures every run uses freshly loaded analysis code — no staleness from the long-running server holding pre-edit modules.",
+    )
+    p_iter.add_argument("--archway-dir", default=os.environ.get("ARCHWAY_DIR", os.path.expanduser("~/Projects/Archway")),
+                        help="Archway repo (default: $ARCHWAY_DIR or ~/Projects/Archway).")
+    p_iter.add_argument("--repo-root",
+                        default=os.environ.get("ARCHWAY_ANALYZE_REPO_ROOT", "/Users/benoconnor/Projects/archRepos/TypeEvalPy/micro-benchmark"),
+                        help="Benchmark repo root the analysis server resolves modules under.")
+    p_iter.add_argument("--port", type=int, default=int(os.environ.get("ARCHWAY_ANALYZE_PORT", "8788")))
+    p_iter.add_argument("--server-log", default="/tmp/archway_analyze.log")
+    p_iter.add_argument("--benchmark", default="typeevalpy", choices=list(BENCHMARKS))
+    p_iter.add_argument("--db", default="runs.db")
+    p_iter.add_argument("--notes", default=None)
+    p_iter.add_argument("--out-md", default="archway_progress.md",
+                        help="Path for the markdown progress report (empty string to skip).")
+
     p_progress = sub.add_parser(
         "progress",
         help="Show recent runs with score deltas — for tracking iterative improvements.",
@@ -154,6 +177,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_serve(args)
     if args.cmd == "manifest":
         return _cmd_manifest(args)
+    if args.cmd == "iterate":
+        return _cmd_iterate(args)
     if args.cmd == "progress":
         return _cmd_progress(args)
     if args.cmd == "regenerate-baselines":
@@ -185,14 +210,16 @@ def _cmd_run(args) -> int:
     print(
         f"  all     -> exact {a.exact_total}/{a.total_annotations} "
         f"({a.exact_total / a.total_annotations:.1%})  "
-        f"files sound {a.files_sound}/{a.total_snippets}  "
-        f"files complete {a.files_complete}/{a.total_snippets}"
+        f"processed {a.files_processed}/{a.total_snippets}  "
+        f"sound {a.files_sound}/{a.total_snippets}  "
+        f"complete {a.files_complete}/{a.total_snippets}"
     )
     print(
         f"  covered -> exact {c.exact_total}/{c.total_annotations} "
         f"({c.exact_total / c.total_annotations if c.total_annotations else 0:.1%})  "
-        f"files sound {c.files_sound}/{c.total_snippets}  "
-        f"files complete {c.files_complete}/{c.total_snippets}"
+        f"processed {c.files_processed}/{c.total_snippets}  "
+        f"sound {c.files_sound}/{c.total_snippets}  "
+        f"complete {c.files_complete}/{c.total_snippets}"
     )
     return 0
 
@@ -228,6 +255,122 @@ def _cmd_runs(args) -> int:
     return 0
 
 
+def _cmd_iterate(args) -> int:
+    """One-shot: restart the analysis server, run, write progress, stop the server.
+
+    The point of the lifecycle wrap is to guarantee every run uses freshly
+    loaded analysis code. A long-running server holds Python module state
+    in memory, so source edits made after server start aren't reflected in
+    its responses — that's the staleness we've already been bitten by.
+    Killing + restarting before each run is the simple, reliable answer.
+    """
+
+    def _server_pid() -> int | None:
+        try:
+            out = subprocess.check_output(
+                ["lsof", "-ti", f":{args.port}"], stderr=subprocess.DEVNULL
+            )
+        except subprocess.CalledProcessError:
+            return None
+        for line in out.decode().splitlines():
+            line = line.strip()
+            if line:
+                try:
+                    return int(line.split()[0])
+                except ValueError:
+                    pass
+        return None
+
+    def _kill_server() -> None:
+        pid = _server_pid()
+        if pid is None:
+            return
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            return
+        for _ in range(50):  # ~5s
+            if _server_pid() is None:
+                return
+            time.sleep(0.1)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    def _start_server() -> subprocess.Popen:
+        log = open(args.server_log, "w")
+        proc = subprocess.Popen(
+            ["hatch", "run", "analyze", "--repo-root", args.repo_root, "--port", str(args.port)],
+            cwd=args.archway_dir,
+            stdout=log,
+            stderr=log,
+            start_new_session=True,
+        )
+        url = f"http://localhost:{args.port}/health"
+        for _ in range(150):  # ~30s
+            try:
+                with urllib.request.urlopen(url, timeout=1) as r:
+                    if r.status == 200:
+                        return proc
+            except (urllib.error.URLError, TimeoutError, OSError):
+                pass
+            if proc.poll() is not None:
+                raise RuntimeError(
+                    f"analyze server exited before becoming ready (rc={proc.returncode}); "
+                    f"see {args.server_log}"
+                )
+            time.sleep(0.2)
+        proc.terminate()
+        raise RuntimeError(f"analyze server didn't become healthy in 30s; see {args.server_log}")
+
+    print(f"[iterate] stopping any server on :{args.port}", flush=True)
+    _kill_server()
+    print(f"[iterate] starting fresh server (repo-root: {args.repo_root})", flush=True)
+    _start_server()
+
+    rc = 0
+    try:
+        bench = BENCHMARKS[args.benchmark]()
+        translator, analyzer, adapter = ENGINES["archway"](bench, 0.0, None)
+        print(f"[iterate] running {args.benchmark} / archway", flush=True)
+        result = run_pipeline(
+            benchmark=bench,
+            translator=translator,
+            analyzer=analyzer,
+            adapter=adapter,
+            stub_accuracy=0.0,
+            seed=None,
+            notes=args.notes,
+            db_path=Path(args.db),
+        )
+        a = result.all_scores
+        print(
+            f"[iterate] run #{result.run_id}  "
+            f"exact {a.exact_total}/{a.total_annotations} "
+            f"({a.exact_total / a.total_annotations:.1%})  "
+            f"processed {a.files_processed}/{a.total_snippets}  "
+            f"sound {a.files_sound}/{a.total_snippets}  "
+            f"complete {a.files_complete}/{a.total_snippets}",
+            flush=True,
+        )
+
+        if args.out_md:
+            print(f"[iterate] writing progress to {args.out_md}", flush=True)
+            progress_args = argparse.Namespace(
+                engine="archway", limit=5, db=args.db, out_md=args.out_md,
+            )
+            _cmd_progress(progress_args)
+    except Exception as e:
+        print(f"[iterate] failed: {type(e).__name__}: {e}", file=sys.stderr)
+        rc = 1
+    finally:
+        print(f"[iterate] stopping server", flush=True)
+        _kill_server()
+
+    return rc
+
+
 def _cmd_progress(args) -> int:
     """List recent runs (newest first) with score deltas vs the previous run.
 
@@ -261,21 +404,21 @@ def _cmd_progress(args) -> int:
 
 
 def _compute_progress_deltas(runs, scores_by_run):
-    """For each run id, deltas (exact, complete) vs the next-older run."""
+    """For each run id, deltas (exact, files_processed) vs the next-older run."""
     chronological = list(reversed(runs))  # oldest -> newest
-    prev_exact = prev_complete = None
+    prev_exact = prev_proc = None
     deltas: dict[int, tuple[int | None, int | None]] = {}
     for r in chronological:
         sc = scores_by_run.get(r.id, {}).get("all")
         ex = sc["exact_total"] if sc else None
-        co = sc["files_complete"] if sc else None
+        fp = sc.get("files_processed") if sc else None
         dx = (ex - prev_exact) if (ex is not None and prev_exact is not None) else None
-        dc = (co - prev_complete) if (co is not None and prev_complete is not None) else None
-        deltas[r.id] = (dx, dc)
+        dp = (fp - prev_proc) if (fp is not None and prev_proc is not None) else None
+        deltas[r.id] = (dx, dp)
         if ex is not None:
             prev_exact = ex
-        if co is not None:
-            prev_complete = co
+        if fp is not None:
+            prev_proc = fp
     return deltas
 
 
@@ -283,14 +426,17 @@ def _progress_line(r, scores_by_run, deltas) -> str:
     sc = scores_by_run.get(r.id, {}).get("all")
     if not sc:
         return f"#{r.id:<3}  {r.created_at[:19]}  (no scores stored)"
-    dx, dc = deltas.get(r.id, (None, None))
+    dx, dp = deltas.get(r.id, (None, None))
     dx_s = f" ({dx:+d})" if dx is not None else ""
-    dc_s = f" ({dc:+d})" if dc is not None else ""
+    dp_s = f" ({dp:+d})" if dp is not None else ""
     note = f'  "{r.notes}"' if r.notes else ""
+    fp = sc.get("files_processed")
+    proc_s = f"  processed {fp}/{sc['total_snippets']}{dp_s}" if fp is not None else ""
     return (
         f"#{r.id:<3}  {r.created_at[:19]}  "
-        f"exact {sc['exact_total']}/{sc['total_annotations']}{dx_s}  "
-        f"complete {sc['files_complete']}/{sc['total_snippets']}{dc_s}{note}"
+        f"exact {sc['exact_total']}/{sc['total_annotations']}{dx_s}{proc_s}  "
+        f"sound {sc['files_sound']}/{sc['total_snippets']}  "
+        f"complete {sc['files_complete']}/{sc['total_snippets']}{note}"
     )
 
 
@@ -304,9 +450,13 @@ def _progress_markdown(runs, scores_by_run, deltas, engine_filter: str) -> str:
     if latest is not None:
         sc = scores_by_run[latest.id]["all"]
         pct = sc["exact_total"] / sc["total_annotations"] * 100 if sc["total_annotations"] else 0.0
+        fp = sc.get("files_processed")
+        proc_part = f" · {fp} / {sc['total_snippets']} files processed" if fp is not None else ""
         lines.append(
             f"**Current:** {sc['exact_total']} / {sc['total_annotations']} exact ({pct:.1f}%)"
-            f" · {sc['files_complete']} / {sc['total_snippets']} files complete"
+            f"{proc_part}"
+            f" · {sc['files_sound']} / {sc['total_snippets']} sound"
+            f" · {sc['files_complete']} / {sc['total_snippets']} complete"
             f" · run #{latest.id} ({latest.created_at[:19]})"
         )
         lines.append("")
@@ -316,8 +466,17 @@ def _progress_markdown(runs, scores_by_run, deltas, engine_filter: str) -> str:
     lines.append("")
     lines.append("## History")
     lines.append("")
-    lines.append("| # | Created | Exact | Δ | Complete | Δ | Notes |")
-    lines.append("|---:|---|---:|---:|---:|---:|---|")
+    lines.append(
+        "_Columns: **Exact** = annotations matching GT type set; "
+        "**Processed** = files where the analysis emitted predictions (didn't error); "
+        "**Sound** = files where every GT entry was answered correctly (full coverage); "
+        "**Complete** = files where every prediction was correct (no wrong types). "
+        "Note: Complete is inflated by errored files producing zero predictions, which "
+        "vacuously satisfy the metric._"
+    )
+    lines.append("")
+    lines.append("| # | Created | Exact | Δ | Processed | Δ | Sound | Complete | Notes |")
+    lines.append("|---:|---|---:|---:|---:|---:|---:|---:|---|")
     escape_pipe = "\\|"
     for r in runs:
         sc = scores_by_run.get(r.id, {}).get("all")
@@ -325,16 +484,20 @@ def _progress_markdown(runs, scores_by_run, deltas, engine_filter: str) -> str:
         note = notes_raw.replace("|", escape_pipe)
         if not sc:
             lines.append(
-                f"| {r.id} | {r.created_at[:19]} | — | — | — | — | {note} |"
+                f"| {r.id} | {r.created_at[:19]} | — | — | — | — | — | — | {note} |"
             )
             continue
-        dx, dc = deltas.get(r.id, (None, None))
+        dx, dp = deltas.get(r.id, (None, None))
         dx_s = f"{dx:+d}" if dx is not None else "—"
-        dc_s = f"{dc:+d}" if dc is not None else "—"
+        dp_s = f"{dp:+d}" if dp is not None else "—"
+        fp = sc.get("files_processed")
+        proc_s = f"{fp}/{sc['total_snippets']}" if fp is not None else "—"
         lines.append(
             f"| {r.id} | {r.created_at[:19]} | "
             f"{sc['exact_total']}/{sc['total_annotations']} | {dx_s} | "
-            f"{sc['files_complete']}/{sc['total_snippets']} | {dc_s} | {note} |"
+            f"{proc_s} | {dp_s} | "
+            f"{sc['files_sound']}/{sc['total_snippets']} | "
+            f"{sc['files_complete']}/{sc['total_snippets']} | {note} |"
         )
     lines.append("")
     return "\n".join(lines) + "\n"

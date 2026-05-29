@@ -221,6 +221,13 @@ def score_predictions(
 def _aggregate(per_snippet: list[SnippetScores]) -> Scores:
     files_sound = sum(1 for s in per_snippet if s.is_sound)
     files_complete = sum(1 for s in per_snippet if s.is_complete)
+    # "Processed" = adapter emitted at least one prediction. With the
+    # current GT-keyed adapter this equals "engine didn't error on the
+    # snippet" — the canonical "how many files did we actually evaluate".
+    files_processed = sum(
+        1 for s in per_snippet
+        if s.spurious_predictions or any(o.outcome != Outcome.LOCATION_MISS for o in s.outcomes)
+    )
 
     exact_total = 0
     type_miss_total = 0
@@ -253,6 +260,7 @@ def _aggregate(per_snippet: list[SnippetScores]) -> Scores:
     return Scores(
         total_snippets=len(per_snippet),
         total_annotations=total_annotations,
+        files_processed=files_processed,
         files_sound=files_sound,
         files_complete=files_complete,
         exact_total=exact_total,

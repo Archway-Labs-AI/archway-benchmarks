@@ -152,6 +152,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     score_cols = {r["name"] for r in conn.execute("PRAGMA table_info(scores)").fetchall()}
     if "exact_by_bucket_kind_json" not in score_cols:
         conn.execute("ALTER TABLE scores ADD COLUMN exact_by_bucket_kind_json TEXT")
+    if "files_processed" not in score_cols:
+        # Nullable so legacy rows can be migrated/backfilled if anyone cares;
+        # otherwise readers treat NULL the same as "unknown" and report a dash.
+        conn.execute("ALTER TABLE scores ADD COLUMN files_processed INTEGER")
 
 
 # ----- writers -----
@@ -262,8 +266,9 @@ def record_scores(
         "INSERT OR REPLACE INTO scores "
         "(run_id, scope, total_snippets, total_annotations, files_sound, files_complete, "
         " exact_total, annotation_precision, annotation_recall, "
-        " exact_by_kind_json, exact_by_category_json, exact_by_bucket_kind_json) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        " exact_by_kind_json, exact_by_category_json, exact_by_bucket_kind_json, "
+        " files_processed) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             run_id,
             scope,
@@ -277,6 +282,7 @@ def record_scores(
             json.dumps(scores.exact_by_kind),
             json.dumps(scores.exact_by_category),
             json.dumps(scores.exact_by_bucket_kind) if scores.exact_by_bucket_kind else None,
+            scores.files_processed,
         ),
     )
 
