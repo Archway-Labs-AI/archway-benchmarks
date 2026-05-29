@@ -32,11 +32,23 @@ def _build_stub_engines(benchmark: Benchmark, accuracy: float, seed: int | None)
     return translator, analyzer, adapter
 
 
+def _build_archway_engines(benchmark: Benchmark, accuracy: float, seed: int | None):
+    """Construct the Archway engine triple. ``accuracy``/``seed`` are unused
+    (kept for signature parity with the stub factory). Assumes the analysis
+    dev server is running locally on its default port (``hatch run analyze``
+    in ``~/Projects/Archway``)."""
+    from archway_benchmarks.benchmarks.archway_adapter import ArchwayAnalysisResultAdapter
+    from archway_benchmarks.engines.archway import ArchwayAnalysisEngine, ArchwayTranslationEngine
+
+    return ArchwayTranslationEngine(), ArchwayAnalysisEngine(), ArchwayAnalysisResultAdapter()
+
+
 ENGINES: dict[
     str,
     Callable[[Benchmark, float, int | None], tuple[TranslationEngine, AnalysisEngine, object]],
 ] = {
     "stub": _build_stub_engines,
+    "archway": _build_archway_engines,
 }
 
 
@@ -78,6 +90,23 @@ def main(argv: list[str] | None = None) -> int:
 
     p_manifest = sub.add_parser("manifest", help="Regenerate the corpus manifest")
     p_manifest.add_argument("--output", "-o", default="corpus_manifest.json")
+
+    p_progress = sub.add_parser(
+        "progress",
+        help="Show recent runs with score deltas — for tracking iterative improvements.",
+    )
+    p_progress.add_argument(
+        "--engine",
+        default="archway",
+        help="Engine prefix to filter on (default: archway). Pass empty string for all runs.",
+    )
+    p_progress.add_argument("--limit", type=int, default=5, help="Number of recent runs to show on stdout (the markdown report always includes the full history).")
+    p_progress.add_argument("--db", default="runs.db")
+    p_progress.add_argument(
+        "--out-md",
+        default=None,
+        help="If set, also write a Markdown progress report (full history) to this path.",
+    )
 
     p_regen = sub.add_parser(
         "regenerate-baselines",
@@ -125,6 +154,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_serve(args)
     if args.cmd == "manifest":
         return _cmd_manifest(args)
+    if args.cmd == "progress":
+        return _cmd_progress(args)
     if args.cmd == "regenerate-baselines":
         return _cmd_regenerate(args)
     if args.cmd == "baselines-report":
@@ -195,6 +226,118 @@ def _cmd_runs(args) -> int:
                 f"stub={r.stub_accuracy}  seed={r.seed}"
             )
     return 0
+
+
+def _cmd_progress(args) -> int:
+    """List recent runs (newest first) with score deltas vs the previous run.
+
+    Defaults to the ``archway`` engine. Stdout shows the most recent
+    ``--limit`` runs (one line each) for terminal use; ``--out-md`` writes
+    a committable Markdown report containing the full history.
+    """
+    with connect(Path(args.db)) as conn:
+        runs = list_runs(conn)
+        prefix = args.engine.lower().strip()
+        if prefix:
+            runs = [r for r in runs if r.engine.lower().startswith(prefix)]
+        if not runs:
+            label = f"engine prefix {args.engine!r}" if prefix else "any engine"
+            print(f"(no runs found for {label} in {args.db})")
+            return 0
+        scores_by_run = {r.id: get_scores(conn, r.id) for r in runs}
+
+    deltas = _compute_progress_deltas(runs, scores_by_run)
+
+    # stdout: most recent --limit runs, one line each
+    for r in runs[: args.limit]:
+        print(_progress_line(r, scores_by_run, deltas))
+
+    if args.out_md:
+        out_path = Path(args.out_md)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(_progress_markdown(runs, scores_by_run, deltas, args.engine))
+        print(f"\nwrote {out_path}")
+    return 0
+
+
+def _compute_progress_deltas(runs, scores_by_run):
+    """For each run id, deltas (exact, complete) vs the next-older run."""
+    chronological = list(reversed(runs))  # oldest -> newest
+    prev_exact = prev_complete = None
+    deltas: dict[int, tuple[int | None, int | None]] = {}
+    for r in chronological:
+        sc = scores_by_run.get(r.id, {}).get("all")
+        ex = sc["exact_total"] if sc else None
+        co = sc["files_complete"] if sc else None
+        dx = (ex - prev_exact) if (ex is not None and prev_exact is not None) else None
+        dc = (co - prev_complete) if (co is not None and prev_complete is not None) else None
+        deltas[r.id] = (dx, dc)
+        if ex is not None:
+            prev_exact = ex
+        if co is not None:
+            prev_complete = co
+    return deltas
+
+
+def _progress_line(r, scores_by_run, deltas) -> str:
+    sc = scores_by_run.get(r.id, {}).get("all")
+    if not sc:
+        return f"#{r.id:<3}  {r.created_at[:19]}  (no scores stored)"
+    dx, dc = deltas.get(r.id, (None, None))
+    dx_s = f" ({dx:+d})" if dx is not None else ""
+    dc_s = f" ({dc:+d})" if dc is not None else ""
+    note = f'  "{r.notes}"' if r.notes else ""
+    return (
+        f"#{r.id:<3}  {r.created_at[:19]}  "
+        f"exact {sc['exact_total']}/{sc['total_annotations']}{dx_s}  "
+        f"complete {sc['files_complete']}/{sc['total_snippets']}{dc_s}{note}"
+    )
+
+
+def _progress_markdown(runs, scores_by_run, deltas, engine_filter: str) -> str:
+    """Render the progress report as Markdown. Full history, newest-first."""
+    from datetime import datetime, timezone
+
+    lines: list[str] = ["# Archway on TypeEvalPy — Progress", ""]
+    # Headline: most recent run with scores
+    latest = next((r for r in runs if scores_by_run.get(r.id, {}).get("all")), None)
+    if latest is not None:
+        sc = scores_by_run[latest.id]["all"]
+        pct = sc["exact_total"] / sc["total_annotations"] * 100 if sc["total_annotations"] else 0.0
+        lines.append(
+            f"**Current:** {sc['exact_total']} / {sc['total_annotations']} exact ({pct:.1f}%)"
+            f" · {sc['files_complete']} / {sc['total_snippets']} files complete"
+            f" · run #{latest.id} ({latest.created_at[:19]})"
+        )
+        lines.append("")
+    label = engine_filter if engine_filter.strip() else "(all engines)"
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    lines.append(f"_Engine filter: `{label}` · Last updated {now}_")
+    lines.append("")
+    lines.append("## History")
+    lines.append("")
+    lines.append("| # | Created | Exact | Δ | Complete | Δ | Notes |")
+    lines.append("|---:|---|---:|---:|---:|---:|---|")
+    escape_pipe = "\\|"
+    for r in runs:
+        sc = scores_by_run.get(r.id, {}).get("all")
+        notes_raw = r.notes or ("_(no scores stored)_" if not sc else "_(no notes)_")
+        note = notes_raw.replace("|", escape_pipe)
+        if not sc:
+            lines.append(
+                f"| {r.id} | {r.created_at[:19]} | — | — | — | — | {note} |"
+            )
+            continue
+        dx, dc = deltas.get(r.id, (None, None))
+        dx_s = f"{dx:+d}" if dx is not None else "—"
+        dc_s = f"{dc:+d}" if dc is not None else "—"
+        lines.append(
+            f"| {r.id} | {r.created_at[:19]} | "
+            f"{sc['exact_total']}/{sc['total_annotations']} | {dx_s} | "
+            f"{sc['files_complete']}/{sc['total_snippets']} | {dc_s} | {note} |"
+        )
+    lines.append("")
+    return "\n".join(lines) + "\n"
 
 
 def _cmd_export(args) -> int:
