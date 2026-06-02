@@ -1,16 +1,16 @@
 {
-  "generated_at": "2026-05-26T03:57:12+00:00",
+  "generated_at": "2026-06-02T17:33:37+00:00",
   "snapshots": {
     "typeevalpy": {
       "tools": [
         {
           "tool": "headergen",
-          "function_returns": 0,
-          "function_parameters": 0,
-          "local_variables": 0,
-          "exact_total": 0,
-          "files_sound": 0,
-          "files_complete": 4,
+          "function_returns": 196,
+          "function_parameters": 63,
+          "local_variables": 321,
+          "exact_total": 580,
+          "files_sound": 60,
+          "files_complete": 59,
           "function_returns_lenient": 196,
           "function_parameters_lenient": 63,
           "local_variables_lenient": 332,
@@ -19,10 +19,10 @@
           "files_complete_lenient": 63,
           "total_snippets": 153,
           "total_annotations": 850,
-          "runtime_seconds": 30.54,
-          "image_digest": "sha256:5390fd71ee8cd11f8dbff6f0ddb5e306bfcf10a63107366c034e46afcb0cf080",
-          "regenerated_at": "2026-05-26T02:49:58+00:00",
-          "run_id": 6,
+          "runtime_seconds": 20.47,
+          "image_digest": "sha256:f005ea5bbf1c7eda4ad980f3c4f5452b6e2f1e561b5436a0286d7f0ed241cf61",
+          "regenerated_at": "2026-06-02T17:21:37+00:00",
+          "run_id": 9,
           "bucket_kind": {
             "A1": {
               "return": 144,
@@ -55,44 +55,44 @@
         },
         {
           "tool": "jedi",
-          "function_returns": 0,
+          "function_returns": 119,
           "function_parameters": 0,
-          "local_variables": 0,
-          "exact_total": 0,
-          "files_sound": 0,
-          "files_complete": 0,
-          "function_returns_lenient": 117,
+          "local_variables": 357,
+          "exact_total": 476,
+          "files_sound": 40,
+          "files_complete": 39,
+          "function_returns_lenient": 119,
           "function_parameters_lenient": 0,
-          "local_variables_lenient": 297,
-          "exact_total_lenient": 414,
-          "files_sound_lenient": 26,
-          "files_complete_lenient": 33,
+          "local_variables_lenient": 357,
+          "exact_total_lenient": 476,
+          "files_sound_lenient": 40,
+          "files_complete_lenient": 41,
           "total_snippets": 153,
           "total_annotations": 850,
-          "runtime_seconds": 33.15,
-          "image_digest": "sha256:c413ad3a6f6e7f68ad3d5f47a1854034dbe1c32dac70cc45d5810761664eee2f",
-          "regenerated_at": "2026-05-26T01:54:28+00:00",
-          "run_id": 4,
+          "runtime_seconds": 9.83,
+          "image_digest": "sha256:e10e5d76edcf4b50d8ba32a60e8deea6d86b427729adb75851cf1319de05b0ed",
+          "regenerated_at": "2026-06-02T17:21:47+00:00",
+          "run_id": 10,
           "bucket_kind": {
             "A1": {
-              "return": 89,
+              "return": 91,
               "parameter": 0,
-              "variable": 176
+              "variable": 181
             },
             "A2": {
               "return": 5,
               "parameter": 0,
-              "variable": 4
+              "variable": 57
             },
             "A3": {
               "return": 9,
               "parameter": 0,
-              "variable": 56
+              "variable": 57
             },
             "A4": {
               "return": 8,
               "parameter": 0,
-              "variable": 15
+              "variable": 16
             },
             "A5": {
               "return": 6,
@@ -100,17 +100,17 @@
               "variable": 46
             }
           },
-          "delta_vs_published": -1,
+          "delta_vs_published": 61,
           "delta_basis": "lenient (paper-era scorer)"
         },
         {
           "tool": "scalpel",
-          "function_returns": 0,
-          "function_parameters": 0,
-          "local_variables": 0,
-          "exact_total": 0,
+          "function_returns": 140,
+          "function_parameters": 33,
+          "local_variables": 7,
+          "exact_total": 180,
           "files_sound": 0,
-          "files_complete": 44,
+          "files_complete": 83,
           "function_returns_lenient": 140,
           "function_parameters_lenient": 33,
           "local_variables_lenient": 10,
@@ -119,10 +119,10 @@
           "files_complete_lenient": 83,
           "total_snippets": 153,
           "total_annotations": 850,
-          "runtime_seconds": 24.41,
-          "image_digest": "sha256:5ee6dff1483989991b33c44f018a088df839a738aee3885fc911e4200ab72ae8",
-          "regenerated_at": "2026-05-26T01:53:55+00:00",
-          "run_id": 3,
+          "runtime_seconds": 15.69,
+          "image_digest": "sha256:7932618c7b00175a130d26bf1b1606bb9bccd85b96014d400af1c1838c87322a",
+          "regenerated_at": "2026-06-02T17:22:02+00:00",
+          "run_id": 11,
           "bucket_kind": {
             "A1": {
               "return": 109,
@@ -213,144 +213,144 @@
       "tools": [
         {
           "tool": "headergen",
-          "function_returns": 0,
-          "function_parameters": 0,
-          "local_variables": 0,
-          "exact_total": 0,
-          "files_sound": 0,
-          "files_complete": 44,
-          "function_returns_lenient": 14317,
-          "function_parameters_lenient": 508,
-          "local_variables_lenient": 39634,
-          "exact_total_lenient": 54459,
-          "files_sound_lenient": 991,
-          "files_complete_lenient": 1440,
-          "total_snippets": 5454,
-          "total_annotations": 76844,
-          "runtime_seconds": 128.21,
-          "image_digest": "sha256:5390fd71ee8cd11f8dbff6f0ddb5e306bfcf10a63107366c034e46afcb0cf080",
-          "regenerated_at": "2026-05-26T02:56:13+00:00",
-          "run_id": 7,
+          "function_returns": 13999,
+          "function_parameters": 340,
+          "local_variables": 35460,
+          "exact_total": 49799,
+          "files_sound": 598,
+          "files_complete": 875,
+          "function_returns_lenient": 14086,
+          "function_parameters_lenient": 350,
+          "local_variables_lenient": 38787,
+          "exact_total_lenient": 53223,
+          "files_sound_lenient": 750,
+          "files_complete_lenient": 1418,
+          "total_snippets": 5453,
+          "total_annotations": 77268,
+          "runtime_seconds": 88.29,
+          "image_digest": "sha256:f005ea5bbf1c7eda4ad980f3c4f5452b6e2f1e561b5436a0286d7f0ed241cf61",
+          "regenerated_at": "2026-06-02T17:25:36+00:00",
+          "run_id": 12,
           "bucket_kind": {
             "A1": {
-              "return": 4854,
-              "parameter": 157,
-              "variable": 13958
+              "return": 4784,
+              "parameter": 103,
+              "variable": 13940
             },
             "A2": {
-              "return": 325,
-              "parameter": 278,
-              "variable": 14478
+              "return": 242,
+              "parameter": 194,
+              "variable": 13899
             },
             "A3": {
-              "return": 4824,
-              "parameter": 28,
-              "variable": 6257
+              "return": 4762,
+              "parameter": 17,
+              "variable": 6243
             },
             "A4": {
-              "return": 4295,
-              "parameter": 27,
-              "variable": 3471
+              "return": 4239,
+              "parameter": 18,
+              "variable": 3466
             },
             "A5": {
-              "return": 19,
+              "return": 59,
               "parameter": 18,
-              "variable": 1470
+              "variable": 1239
             }
           },
-          "delta_vs_published": 3657,
+          "delta_vs_published": 2421,
           "delta_basis": "lenient (paper-era scorer)"
         },
         {
           "tool": "jedi",
-          "function_returns": 0,
+          "function_returns": 12125,
           "function_parameters": 0,
-          "local_variables": 0,
-          "exact_total": 0,
-          "files_sound": 0,
-          "files_complete": 254,
-          "function_returns_lenient": 12001,
+          "local_variables": 24380,
+          "exact_total": 36505,
+          "files_sound": 585,
+          "files_complete": 2249,
+          "function_returns_lenient": 12128,
           "function_parameters_lenient": 0,
-          "local_variables_lenient": 15002,
-          "exact_total_lenient": 27003,
-          "files_sound_lenient": 164,
-          "files_complete_lenient": 1568,
-          "total_snippets": 5454,
-          "total_annotations": 76844,
-          "runtime_seconds": 120.94,
-          "image_digest": "sha256:c413ad3a6f6e7f68ad3d5f47a1854034dbe1c32dac70cc45d5810761664eee2f",
-          "regenerated_at": "2026-05-26T02:58:18+00:00",
-          "run_id": 8,
+          "local_variables_lenient": 26198,
+          "exact_total_lenient": 38326,
+          "files_sound_lenient": 589,
+          "files_complete_lenient": 3011,
+          "total_snippets": 5453,
+          "total_annotations": 77268,
+          "runtime_seconds": 118.78,
+          "image_digest": "sha256:e10e5d76edcf4b50d8ba32a60e8deea6d86b427729adb75851cf1319de05b0ed",
+          "regenerated_at": "2026-06-02T17:27:38+00:00",
+          "run_id": 13,
           "bucket_kind": {
             "A1": {
-              "return": 3762,
+              "return": 3810,
               "parameter": 0,
-              "variable": 3470
+              "variable": 3638
             },
             "A2": {
-              "return": 84,
+              "return": 85,
               "parameter": 0,
-              "variable": 51
+              "variable": 10872
             },
             "A3": {
-              "return": 5533,
+              "return": 5605,
               "parameter": 0,
-              "variable": 7660
+              "variable": 7916
             },
             "A4": {
-              "return": 2575,
+              "return": 2623,
               "parameter": 0,
-              "variable": 2651
+              "variable": 2812
             },
             "A5": {
-              "return": 47,
+              "return": 5,
               "parameter": 0,
-              "variable": 1170
+              "variable": 960
             }
           },
-          "delta_vs_published": -1560,
+          "delta_vs_published": 9763,
           "delta_basis": "lenient (paper-era scorer)"
         },
         {
           "tool": "scalpel",
-          "function_returns": 0,
-          "function_parameters": 0,
-          "local_variables": 0,
-          "exact_total": 0,
+          "function_returns": 15289,
+          "function_parameters": 171,
+          "local_variables": 18,
+          "exact_total": 15478,
           "files_sound": 0,
-          "files_complete": 648,
-          "function_returns_lenient": 15114,
-          "function_parameters_lenient": 254,
-          "local_variables_lenient": 25,
-          "exact_total_lenient": 15393,
+          "files_complete": 3928,
+          "function_returns_lenient": 15428,
+          "function_parameters_lenient": 174,
+          "local_variables_lenient": 22,
+          "exact_total_lenient": 15624,
           "files_sound_lenient": 0,
-          "files_complete_lenient": 4138,
-          "total_snippets": 5454,
-          "total_annotations": 76844,
-          "runtime_seconds": 349.1,
-          "image_digest": "sha256:5ee6dff1483989991b33c44f018a088df839a738aee3885fc911e4200ab72ae8",
-          "regenerated_at": "2026-05-26T02:47:04+00:00",
-          "run_id": 5,
+          "files_complete_lenient": 3928,
+          "total_snippets": 5453,
+          "total_annotations": 77268,
+          "runtime_seconds": 344.97,
+          "image_digest": "sha256:7932618c7b00175a130d26bf1b1606bb9bccd85b96014d400af1c1838c87322a",
+          "regenerated_at": "2026-06-02T17:33:26+00:00",
+          "run_id": 14,
           "bucket_kind": {
             "A1": {
-              "return": 4510,
-              "parameter": 67,
-              "variable": 12
+              "return": 4604,
+              "parameter": 27,
+              "variable": 10
             },
             "A2": {
-              "return": 155,
-              "parameter": 183,
+              "return": 156,
+              "parameter": 142,
               "variable": 0
             },
             "A3": {
-              "return": 6887,
+              "return": 7019,
               "parameter": 0,
               "variable": 11
             },
             "A4": {
-              "return": 3347,
-              "parameter": 4,
-              "variable": 2
+              "return": 3434,
+              "parameter": 5,
+              "variable": 1
             },
             "A5": {
               "return": 215,
@@ -358,7 +358,7 @@
               "variable": 0
             }
           },
-          "delta_vs_published": -179,
+          "delta_vs_published": 52,
           "delta_basis": "lenient (paper-era scorer)"
         }
       ],
