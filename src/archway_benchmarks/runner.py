@@ -76,6 +76,13 @@ def run(
             for ann in adapter.to_annotations(result, snip):
                 predictions[ann.location] = ann.types
             status = coverage_probe(snip)
+            # Engines may return a soft error on the result (e.g. Archway's
+            # server-side 422 — translation/analysis failed for this snippet
+            # but the rest of the corpus can still proceed). Capture it so
+            # `report` can categorize the non-translating set.
+            engine_err = getattr(result, "error", None)
+            if engine_err:
+                error = str(engine_err)
         except UnsupportedSourceError as e:
             status = CoverageStatus.UNSUPPORTED
             error = str(e) or None

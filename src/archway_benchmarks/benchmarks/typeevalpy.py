@@ -33,8 +33,6 @@ _DEFAULT_AUTOGEN_CORPUS = (
     _REPO_ROOT
     / "vendor"
     / "TypeEvalPy"
-    / "autogen"
-    / "data"
     / "autogen_typeevalpy_benchmark"
     / "python_features"
 )

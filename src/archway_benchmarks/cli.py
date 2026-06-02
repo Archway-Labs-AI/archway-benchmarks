@@ -18,7 +18,7 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
-from archway_benchmarks.benchmarks import TypeEvalPyBenchmark
+from archway_benchmarks.benchmarks import TypeEvalPyAutogenBenchmark, TypeEvalPyBenchmark
 from archway_benchmarks.benchmarks.base import Benchmark
 from archway_benchmarks.engines.base import AnalysisEngine, TranslationEngine
 from archway_benchmarks.engines.stubs import make_stub_pair
@@ -29,6 +29,7 @@ from archway_benchmarks.store import connect, get_scores, list_annotations, list
 
 BENCHMARKS: dict[str, Callable[[], Benchmark]] = {
     "typeevalpy": TypeEvalPyBenchmark,
+    "typeevalpy_autogen": TypeEvalPyAutogenBenchmark,
 }
 
 
@@ -113,6 +114,14 @@ def main(argv: list[str] | None = None) -> int:
     p_iter.add_argument("--notes", default=None)
     p_iter.add_argument("--out-md", default="archway_progress.md",
                         help="Path for the markdown progress report (empty string to skip).")
+    p_iter.add_argument(
+        "--detail", action="store_true",
+        help="Also write a per-run detail report (outcomes, categories, TYPE_MISS patterns, translation errors) to archway_report_run<N>.md.",
+    )
+    p_iter.add_argument(
+        "--detail-full", action="store_true",
+        help="With --detail, include the full per-annotation non-EXACT listing.",
+    )
 
     p_progress = sub.add_parser(
         "progress",
@@ -160,6 +169,24 @@ def main(argv: list[str] | None = None) -> int:
     p_report.add_argument("--out-md", default=None)
     p_report.add_argument("--out-json", default=None)
 
+    p_run_report = sub.add_parser(
+        "report",
+        help="Write a per-run detail report (outcomes, categories, TYPE_MISS patterns, translation errors).",
+    )
+    p_run_report.add_argument(
+        "run_id", type=int, nargs="?",
+        help="Run id to report on. Defaults to the most recent run in the store.",
+    )
+    p_run_report.add_argument("--db", default="runs.db")
+    p_run_report.add_argument(
+        "--out-md", default=None,
+        help="Output path (default: archway_report_run<N>.md in cwd).",
+    )
+    p_run_report.add_argument(
+        "--full", action="store_true",
+        help="Include the full per-annotation non-EXACT listing (can be long).",
+    )
+
     args = parser.parse_args(argv)
 
     if args.cmd is None:
@@ -185,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_regenerate(args)
     if args.cmd == "baselines-report":
         return _cmd_report(args)
+    if args.cmd == "report":
+        return _cmd_run_report(args)
     parser.print_help()
     return 1
 
@@ -361,6 +390,12 @@ def _cmd_iterate(args) -> int:
                 engine="archway", limit=5, db=args.db, out_md=args.out_md,
             )
             _cmd_progress(progress_args)
+
+        if args.detail:
+            from archway_benchmarks.reports import write_report
+            detail_path = f"archway_report_run{result.run_id}.md"
+            print(f"[iterate] writing detail report to {detail_path}", flush=True)
+            write_report(args.db, result.run_id, detail_path, include_miss_listing=args.detail_full)
     except Exception as e:
         print(f"[iterate] failed: {type(e).__name__}: {e}", file=sys.stderr)
         rc = 1
@@ -595,6 +630,24 @@ def _cmd_regenerate(args) -> int:
 
     script = Path(__file__).resolve().parents[2] / "scripts" / "regenerate_baselines.py"
     return subprocess.call([sys.executable, str(script), *cmd_argv])
+
+
+def _cmd_run_report(args) -> int:
+    from archway_benchmarks.reports import write_report
+    from archway_benchmarks.store import connect
+
+    run_id = args.run_id
+    if run_id is None:
+        with connect(Path(args.db)) as conn:
+            row = conn.execute("SELECT id FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+            if row is None:
+                print("no runs in store", file=sys.stderr)
+                return 1
+            run_id = row[0]
+    out_md = args.out_md or f"archway_report_run{run_id}.md"
+    out = write_report(args.db, run_id, out_md, include_miss_listing=args.full)
+    print(f"wrote {out}")
+    return 0
 
 
 def _cmd_report(args) -> int:

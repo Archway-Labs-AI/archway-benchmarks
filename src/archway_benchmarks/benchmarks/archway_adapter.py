@@ -120,8 +120,14 @@ def _all_wires(result: ArchwayAnalysisResult):
 
 
 def _matches(w: dict[str, Any], name: str, line: int, col: int | None) -> bool:
-    if w.get("wire_name") != name:
-        return False
+    """Position-based match.
+
+    The analysis server no longer carries a bound identifier on top-level
+    wires (``wire_name`` is always empty); GT entries are joined by
+    ``(row, col)`` alone. Parameter body wires still carry ``name``, but
+    each parameter has a unique source position, so position is sufficient
+    to disambiguate.
+    """
     if w.get("row") != line:
         return False
     if col is not None and (w.get("col", -1) + 1) != col:
