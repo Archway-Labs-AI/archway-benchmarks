@@ -1,33 +1,36 @@
 """Adapter: ``ArchwayAnalysisResult`` -> ``list[Annotation]``.
 
-The only code in the harness that knows the analysis server's response shape.
-Walks the snippet's ground-truth annotations and, for each one, looks up the
-matching Archway positioned-wire prediction and emits an ``Annotation``
-keyed at the GT's ``Location`` carrying the predicted type set.
+The only code in the harness that knows the analysis server's response shape
+(ADR-046 `FinalizedAnalysis`). Walks the snippet's ground-truth annotations
+and, for each one, looks up the matching binding in the finalized projection
+and emits an ``Annotation`` keyed at the GT's ``Location`` carrying the
+predicted type set.
 
 The lookup is GT-keyed (not engine-keyed) by design — the runner's join is
 ``Location``-based, so we only emit predictions at locations the GT actually
-asks about. Extra wires Archway produces but GT doesn't track are dropped here.
-Switching to engine-keyed enumeration (so we can also surface spurious
-predictions) is a follow-up.
+asks about. Extra bindings the server produces but GT doesn't track are
+dropped here.
 
 Post-processing applied:
 
-- Archway's wire ``col`` is 0-indexed (Python AST convention); the harness
-  ``Location.col`` is 1-indexed. We add 1 when matching.
+- Source positions are 1-indexed for rows and 0-indexed for cols (Python AST
+  convention); ``Location.col`` is 1-indexed. We add 1 to the binding's col
+  when matching.
 - Compound Archway types (``dict``, ``list``, ``tuple``) flatten to TypeEvalPy's
   flat strings.
 - GT entries for subscript expressions (``a[0]``, ``d['key']``) resolve to the
-  parent wire's value/element type.
-- GT entries for attribute expressions (``self.x``) resolve to the base wire's
-  inner element. Best-effort; rich attribute support is TBD.
+  parent binding's value/element type.
 - ``Top``/``Bottom`` map to ``"any"``.
 - ``Union`` produces a ``frozenset`` of all members' flattened forms; the
   scorer intersects with GT's type set.
+- For ``return`` GT entries, the binding at the def-identifier position carries
+  a callable element; we resolve its body id in ``functions[]`` and union the
+  observed ``inst.ret.element`` types. Builtin callable bodies (``body`` is a
+  dict per ADR-045) carry no instantiation log and are skipped.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Iterator
 
 from archway_benchmarks.benchmarks.base import AnalysisResultAdapter
 from archway_benchmarks.engines.archway import ArchwayAnalysisResult
@@ -57,91 +60,125 @@ def _lookup_predicted_types(
 ) -> frozenset[str] | None:
     loc = gt.location
     base, is_indirect = _split_base(loc.name)
-    matches = [w for w in _all_wires(result) if _matches(w, base, loc.line, loc.col)]
+    matches = [b for b in _all_bindings(result) if _matches(b, loc.line, loc.col)]
     if not matches:
         return None
 
     if is_indirect:
         out: set[str] = set()
-        for elt in (w["element"] for w in matches):
+        for elt in (b["element"] for b in matches):
             inner = _value_element(elt)
             if inner is not None:
-                out |= _to_types(inner)
+                out |= _to_types(inner, result.functions)
         return frozenset(out) if out else None
 
-    # GT `function:` entries (kind="return") want the return type of the
-    # callable. Look up the body id in functions[] and union all observed
-    # returns; fall back to element-level types when not callable or never
-    # called.
+    # GT `return` entries want the function's observed return types. The
+    # def identifier binding carries the callable; resolve through fn_id to
+    # `functions[].instantiations[].ret`. Falls back to element-flatten when
+    # the callable has no instantiations (uninstantiated function — empty
+    # returns) or carries a builtin body (no per-call log per ADR-045).
     if loc.kind == "return":
         returns = _callable_returns_for(
-            (w["element"] for w in matches), result.functions
+            (b["element"] for b in matches), result.functions
         )
         if returns is not None:
             return returns
 
     out = set()
-    for w in matches:
-        out |= _to_types(w["element"])
+    for b in matches:
+        out |= _to_types(b["element"], result.functions)
     return frozenset(out) if out else None
 
 
-def _all_wires(result: ArchwayAnalysisResult):
-    """Walk every named-or-unnamed wire that could match a GT lookup.
+def _all_bindings(result: ArchwayAnalysisResult) -> Iterator[dict[str, Any]]:
+    """Yield every position-bearing binding-event from the finalized projection.
 
-    Includes top-level positioned wires AND per-instantiation body wires
-    surfaced under ``functions[].instantiations[].wires``. The body wires
-    expose parameters, locals, and intermediates with their source
-    positions, so the adapter doesn't need a separate code path for
-    parameter or use-site lookups — they all flow through the same
-    ``(name, line, col)`` match.
+    Per ADR-046, each named-binding slot in ``module.bindings`` and the per-
+    instantiation ``params``/``captures``/``locals`` maps is a JSON array of
+    events (one per STORE / AUG_STORE / FRAME_SETUP / etc. that wrote that
+    name). Sequential rebinds, chained assignment, and augmented assignment
+    each produce length ≥ 2. We iterate every event so position-based GT
+    matching naturally picks the right rebind site.
 
-    ``unbound_cell`` wires are skipped — those carry Bottom by design
-    (pre-allocation in the cell model) and would otherwise drag a real
-    typing into ``any`` via union.
+    ``ret`` remains a single Binding (not an event list) per the ADR.
+
+    Each yielded dict has the shape ``{row, col, end_row, end_col, element}``,
+    matching what ``_matches`` consumes. Events without a ``source_position``
+    (synthetic per ADR-046) are skipped.
     """
-    for w in result.positioned:
-        yield w
-    for fn in result.functions.values():
+    # Module-level bindings — each name is a list of binding events.
+    for _, events in result.module_bindings.items():
+        for event in _as_list(events):
+            yield from _emit(event)
+
+    # Per-function: the def-identifier itself (so `return` GT entries at the
+    # def line match a callable element), then every binding-event inside
+    # each instantiation (params + captures + locals + the ret expression).
+    for fn in result.functions:
+        fn_pos = fn.get("source_position")
+        fn_id = fn.get("fn_id")
+        if fn_pos is not None and fn_id is not None:
+            yield _binding_dict(fn_pos, {"kind": "callable", "body": fn_id})
+
         for inst in fn.get("instantiations", []) or []:
-            for w in inst.get("wires", []) or []:
-                if w.get("role") == "unbound_cell":
-                    continue
-                pos = w.get("position") or {}
-                yield {
-                    "wire_name": w.get("name"),
-                    "row": pos.get("row"),
-                    "col": pos.get("col"),
-                    "end_row": pos.get("end_row"),
-                    "end_col": pos.get("end_col"),
-                    "element": w.get("element", {}),
-                    "_role": w.get("role"),
-                }
+            for scope in ("params", "captures", "locals"):
+                for _, events in (inst.get(scope) or {}).items():
+                    for event in _as_list(events):
+                        yield from _emit(event)
+            ret = inst.get("ret")
+            if isinstance(ret, dict):
+                yield from _emit(ret)
 
 
-def _matches(w: dict[str, Any], name: str, line: int, col: int | None) -> bool:
-    """Position-based match.
+def _as_list(value: Any) -> list[dict[str, Any]]:
+    """Normalize a binding slot to a list of events. New shape is always a
+    list; tolerates the legacy single-dict shape just in case."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        return [value]
+    return []
 
-    The analysis server no longer carries a bound identifier on top-level
-    wires (``wire_name`` is always empty); GT entries are joined by
-    ``(row, col)`` alone. Parameter body wires still carry ``name``, but
-    each parameter has a unique source position, so position is sufficient
-    to disambiguate.
-    """
-    if w.get("row") != line:
+
+def _emit(binding: dict[str, Any]) -> Iterator[dict[str, Any]]:
+    pos = binding.get("source_position")
+    elt = binding.get("element")
+    if pos is None or elt is None:
+        return
+    yield _binding_dict(pos, elt)
+
+
+def _binding_dict(pos: dict[str, Any], elt: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "row": pos.get("row"),
+        "col": pos.get("col"),
+        "end_row": pos.get("end_row"),
+        "end_col": pos.get("end_col"),
+        "element": elt,
+    }
+
+
+def _matches(b: dict[str, Any], line: int, col: int | None) -> bool:
+    """Position-based match. col is 0-indexed in the response; GT is 1-indexed."""
+    if b.get("row") != line:
         return False
-    if col is not None and (w.get("col", -1) + 1) != col:
+    if col is not None and (b.get("col", -1) + 1) != col:
         return False
     return True
 
 
 def _callable_returns_for(
-    elements, functions: dict[str, dict[str, Any]]
+    elements, functions_list: tuple[dict[str, Any], ...]
 ) -> frozenset[str] | None:
-    """Union observed return types across all callable body ids in
-    `elements`. Returns ``None`` if no element carries a callable identity,
-    so the caller can fall back to element-level flattening."""
-    ids: list[Any] = []
+    """Union observed return types across all user-function callable body ids
+    in ``elements``. Returns ``None`` if no element carries a resolvable
+    user-function identity (so the caller falls back to element flattening)."""
+    by_fn_id: dict[int, dict[str, Any]] = {
+        fn["fn_id"]: fn for fn in functions_list if "fn_id" in fn
+    }
+    ids: list[int] = []
     for elt in elements:
         _collect_callable_bodies(elt, ids)
     if not ids:
@@ -149,20 +186,32 @@ def _callable_returns_for(
     out: set[str] = set()
     saw_any = False
     for body in ids:
-        sig = functions.get(str(body))
-        if not sig:
+        fn = by_fn_id.get(body)
+        if fn is None:
             continue
         saw_any = True
-        for inst in sig.get("instantiations", []):
-            out |= _to_types(inst.get("ret", {}))
+        for inst in fn.get("instantiations", []) or []:
+            ret = inst.get("ret") or {}
+            if isinstance(ret, dict):
+                ret_elt = ret.get("element")
+                if ret_elt:
+                    out |= _to_types(ret_elt, functions_list)
     return frozenset(out) if saw_any else None
 
 
-def _collect_callable_bodies(elt: dict[str, Any], out: list[Any]) -> None:
-    """Walk an element tree and append every Callable body id encountered."""
+def _collect_callable_bodies(elt: dict[str, Any], out: list[int]) -> None:
+    """Walk an element tree and append every user-function callable body id.
+
+    Per ADR-045, builtin callables encode ``body`` as a dict
+    (``{"kind": "builtin", "name": ...}``) and aren't tracked in ``functions[]``
+    — skip them. User-function bodies are ints (fn_id).
+    """
     kind = elt.get("kind")
     if kind == "callable":
-        out.append(elt.get("body"))
+        body = elt.get("body")
+        if isinstance(body, int):
+            out.append(body)
+        # Builtin bodies (dicts) intentionally skipped.
     elif kind == "union":
         for m in elt.get("elements", []):
             _collect_callable_bodies(m, out)
@@ -176,8 +225,16 @@ def _split_base(name: str) -> tuple[str, bool]:
     return name, False
 
 
-def _to_types(elt: dict[str, Any]) -> frozenset[str]:
-    """Archway element -> TypeEvalPy type set."""
+def _to_types(
+    elt: dict[str, Any], functions: tuple[dict[str, Any], ...] = ()
+) -> frozenset[str]:
+    """Archway element -> TypeEvalPy type set.
+
+    ``functions`` (the FinalizedAnalysis function list) is consulted only for
+    ``instance`` elements, whose ``cls.body`` is a fn_id we resolve to a
+    user-facing class name. Passing an empty tuple is safe for elements
+    that don't include any instance kinds.
+    """
     kind = elt.get("kind")
     if kind == "pytype":
         return frozenset({elt["name"]})
@@ -185,10 +242,24 @@ def _to_types(elt: dict[str, Any]) -> frozenset[str]:
         return frozenset({kind})
     if kind in ("top", "bottom"):
         return frozenset({"any"})
+    if kind == "instance":
+        # GT names instances by the bound class name (e.g., `Person`).
+        cls = elt.get("cls") or {}
+        cls_body = cls.get("body")
+        if cls_body is not None:
+            for fn in functions:
+                if fn.get("fn_id") == cls_body:
+                    name = fn.get("name")
+                    if name:
+                        return frozenset({name})
+        return frozenset()
+    if kind == "class":
+        # The element itself IS a class object — TypeEvalPy types these as `type`.
+        return frozenset({"type"})
     if kind == "union":
         out: set[str] = set()
         for m in elt.get("elements", []):
-            out |= _to_types(m)
+            out |= _to_types(m, functions)
         return frozenset(out)
     return frozenset()
 

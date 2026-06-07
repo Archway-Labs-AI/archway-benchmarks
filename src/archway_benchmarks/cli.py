@@ -47,7 +47,14 @@ def _build_archway_engines(benchmark: Benchmark, accuracy: float, seed: int | No
     from archway_benchmarks.benchmarks.archway_adapter import ArchwayAnalysisResultAdapter
     from archway_benchmarks.engines.archway import ArchwayAnalysisEngine, ArchwayTranslationEngine
 
-    return ArchwayTranslationEngine(), ArchwayAnalysisEngine(), ArchwayAnalysisResultAdapter()
+    # The analysis engine sends GET /types?module=main.py&root=<abs_snippet_dir>
+    # — it resolves Snippet.file_path (suite-relative) against this corpus root.
+    corpus_root = getattr(benchmark, "corpus_root", None)
+    return (
+        ArchwayTranslationEngine(),
+        ArchwayAnalysisEngine(corpus_root=corpus_root),
+        ArchwayAnalysisResultAdapter(),
+    )
 
 
 ENGINES: dict[
