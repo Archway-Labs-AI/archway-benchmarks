@@ -88,6 +88,8 @@ RUNNER_REGISTRY: dict[str, str] = {
     "hityper": "HityperRunner",
     "type4py": "Type4pyRunner",
     "hityperdl": "HityperDLRunner",
+    "sonar": "SonarRunner",
+    "ty": "TyRunner",
 }
 
 
