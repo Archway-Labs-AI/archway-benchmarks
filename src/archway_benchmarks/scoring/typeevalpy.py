@@ -2,11 +2,11 @@
 
 We re-use the vendored primitives — do NOT redefine the metrics:
   - `is_same_element` — the location join key
-    (vendor/TypeEvalPy/src/result_analyzer/analysis_utils.py:173-183)
+    (extras/TypeEvalPy/src/result_analyzer/analysis_utils.py:173-183)
   - `format_type` / `transform_type_string` — normalization
-    (vendor/TypeEvalPy/src/result_analyzer/analysis_utils.py:107-170)
+    (extras/TypeEvalPy/src/result_analyzer/analysis_utils.py:107-170)
   - `check_match` — exact-match predicate (combines the two above)
-    (vendor/TypeEvalPy/src/result_analyzer/analysis_utils.py:186-257)
+    (extras/TypeEvalPy/src/result_analyzer/analysis_utils.py:186-257)
 
 `equal_sound` / `equal_complete` in the vendor module operate on file paths;
 we apply the same predicate in memory on the same `check_match` primitive,
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 # ----- vendor scorer bootstrap -----
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_VENDOR_SRC = _REPO_ROOT / "vendor" / "TypeEvalPy" / "src"
+_VENDOR_SRC = _REPO_ROOT / "extras" / "TypeEvalPy" / "src"
 if str(_VENDOR_SRC) not in sys.path:
     sys.path.insert(0, str(_VENDOR_SRC))
 

@@ -151,7 +151,7 @@ def main(argv: list[str] | None = None) -> int:
         "regenerate-baselines",
         help="Re-run published baselines against the current GT (Phase 1 work).",
         description=(
-            "Builds each tool's Docker image (via vendor/TypeEvalPy/src/runner_class),"
+            "Builds each tool's Docker image (via extras/TypeEvalPy/src/runner_class),"
             " runs it on the named benchmark(s), scores with result_analyzer, and"
             " persists each result as an external-baseline run in the store."
         ),

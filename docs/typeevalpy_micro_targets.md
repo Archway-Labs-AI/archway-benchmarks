@@ -564,6 +564,6 @@ Snippets: `external/*` (12 misses, all surface as either `LOCATION_MISS` or a TY
 
 ## How to consume this doc
 
-- **Translation agents**: every snippet here is a current TypeEvalPy micro test case (`vendor/TypeEvalPy/micro-benchmark/python_features/<bucket>/<name>/main.py`). The translation can succeed against any of them; whether the resulting wires let the analysis answer the GT is the goal.
+- **Translation agents**: every snippet here is a current TypeEvalPy micro test case (`extras/TypeEvalPy/micro-benchmark/python_features/<bucket>/<name>/main.py`). The translation can succeed against any of them; whether the resulting wires let the analysis answer the GT is the goal.
 - **Analysis agents**: for each in-scope bucket, the source + GT comment shows what type the wire must carry at the GT location. Use the snippet as a unit test for the analysis pass that closes the gap.
 - **Triage**: buckets 1–8 (LOCATION_MISS-dominant, ~110 misses combined) are the highest-leverage targets — closing them roughly tracks toward HeaderGen-equivalent on the strict scorer.

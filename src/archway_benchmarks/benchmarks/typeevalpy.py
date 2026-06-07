@@ -1,6 +1,6 @@
 """TypeEvalPy benchmark.
 
-Loads snippets from `vendor/TypeEvalPy/micro-benchmark/python_features/**/`,
+Loads snippets from `extras/TypeEvalPy/micro-benchmark/python_features/**/`,
 parses ground-truth JSON into harness-native `Annotation`s, and exposes a
 `to_tool_format` round-trip so we can hand predictions back to TypeEvalPy's
 scorer (Layer A).
@@ -28,10 +28,10 @@ from archway_benchmarks.types import Annotation, Location, Scores, Snippet
 # Resolved at import time so the package can be installed editable from
 # anywhere; we walk up from this module to the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_DEFAULT_CORPUS = _REPO_ROOT / "vendor" / "TypeEvalPy" / "micro-benchmark" / "python_features"
+_DEFAULT_CORPUS = _REPO_ROOT / "extras" / "TypeEvalPy" / "micro-benchmark" / "python_features"
 _DEFAULT_AUTOGEN_CORPUS = (
     _REPO_ROOT
-    / "vendor"
+    / "extras"
     / "TypeEvalPy"
     / "autogen_typeevalpy_benchmark"
     / "python_features"
@@ -134,7 +134,7 @@ class TypeEvalPyBenchmark(Benchmark):
 class TypeEvalPyAutogenBenchmark(TypeEvalPyBenchmark):
     """TypeEvalPy autogen dataset (~5.5k snippets, ~77k annotations).
 
-    Generated from `vendor/TypeEvalPy/autogen/generate_typeevalpy_dataset.py`;
+    Generated from `extras/TypeEvalPy/autogen/generate_typeevalpy_dataset.py`;
     we point at the stable symlink at
     `autogen/data/autogen_typeevalpy_benchmark/python_features/`.
     """

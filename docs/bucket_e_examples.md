@@ -6,7 +6,7 @@ Four micro-benchmark snippets whose misses don't fit the known translation/analy
 
 ## 1. `assignments/chained` — chained assignment binding
 
-`vendor/TypeEvalPy/micro-benchmark/python_features/assignments/chained/main.py`:
+`extras/TypeEvalPy/micro-benchmark/python_features/assignments/chained/main.py`:
 
 ```python
  1  # Two variables are assigned a function via chained assignment.
@@ -43,7 +43,7 @@ Four micro-benchmark snippets whose misses don't fit the known translation/analy
 
 ## 2. `assignments/augmented` — augmented assign rebind not surfacing
 
-`vendor/TypeEvalPy/micro-benchmark/python_features/assignments/augmented/main.py`:
+`extras/TypeEvalPy/micro-benchmark/python_features/assignments/augmented/main.py`:
 
 ```python
  1  # A program to demonstrate the use of augmented assignments.
@@ -72,7 +72,7 @@ The parameter `a` at line 5 col 11 (`["int"]`) is EXACT, and the return at line 
 
 ## 3. `assignments/starred` — starred-middle name binding
 
-`vendor/TypeEvalPy/micro-benchmark/python_features/assignments/starred/main.py`:
+`extras/TypeEvalPy/micro-benchmark/python_features/assignments/starred/main.py`:
 
 ```python
  1  # Functions are assigned to variables via starred assignment
@@ -120,7 +120,7 @@ Related (TYPE_MISS, not LM, but same snippet):
 
 ## 4. `direct_calls/return_call` — qualified name on nested function
 
-`vendor/TypeEvalPy/micro-benchmark/python_features/direct_calls/return_call/main.py`:
+`extras/TypeEvalPy/micro-benchmark/python_features/direct_calls/return_call/main.py`:
 
 ```python
  1  # A function `func` is called and returns a function `return_func` which is later called directly in the form func()().

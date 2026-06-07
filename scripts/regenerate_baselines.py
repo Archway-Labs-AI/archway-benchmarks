@@ -64,7 +64,7 @@ def _benchmark_for(name: str):
 
 def _gt_commit() -> str:
     out = subprocess.check_output(
-        ["git", "-C", str(REPO_ROOT / "vendor" / "TypeEvalPy"), "rev-parse", "HEAD"]
+        ["git", "-C", str(REPO_ROOT / "extras" / "TypeEvalPy"), "rev-parse", "HEAD"]
     )
     return out.decode().strip()
 

@@ -1,7 +1,7 @@
 {
   "benchmark": "typeevalpy_autogen",
   "label": "Published 30 Aug 2024 (stale GT + different generation)",
-  "source": "vendor/TypeEvalPy/README.md (table generated 30 Aug 2024 against a 78,373-annotation Autogen run; our regenerated Autogen has 76,844 annotations — denominators don't even match)",
+  "source": "extras/TypeEvalPy/README.md (table generated 30 Aug 2024 against a 78,373-annotation Autogen run; our regenerated Autogen has 76,844 annotations — denominators don't even match)",
   "total_annotations": 78373,
   "total_snippets": 7121,
   "kinds": ["function_returns", "function_parameters", "local_variables"],

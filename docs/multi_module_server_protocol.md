@@ -4,7 +4,7 @@ Most of the 37 remaining import-blocked TypeEvalPy micro snippets are **cross-mo
 
 ## What the benchmark has on disk
 
-Each multi-module snippet is a self-contained directory under `vendor/TypeEvalPy/micro-benchmark/python_features/<category>/<snippet>/`. The layouts that occur:
+Each multi-module snippet is a self-contained directory under `extras/TypeEvalPy/micro-benchmark/python_features/<category>/<snippet>/`. The layouts that occur:
 
 ### Pattern A — flat sibling (most common, ~15 snippets)
 
@@ -68,7 +68,7 @@ GET  /types?module=<rel-path> → resolve under --repo-root, analyze that one fi
 
 The benchmark currently uses `POST` with the entire source as the body, because that:
 - Doesn't require the server's `--repo-root` to point at the snippet's directory
-- Keeps a single global `--repo-root` (`vendor/TypeEvalPy/micro-benchmark`) across the whole run
+- Keeps a single global `--repo-root` (`extras/TypeEvalPy/micro-benchmark`) across the whole run
 
 Neither endpoint exposes sibling files to the analyzer. So even if the analyzer learned about `import` semantics, it can't reach into `to_import.py` because nothing has told it where that file is.
 
@@ -81,7 +81,7 @@ The server has to:
 4. Support **relative imports** (`from . import x`, `from .. import y`) — which only makes sense given a package context
 
 The benchmark side has to:
-1. Identify each snippet's root directory (`vendor/TypeEvalPy/micro-benchmark/python_features/<category>/<snippet>/`)
+1. Identify each snippet's root directory (`extras/TypeEvalPy/micro-benchmark/python_features/<category>/<snippet>/`)
 2. Communicate that root to the server per request
 
 ## Endpoint design options

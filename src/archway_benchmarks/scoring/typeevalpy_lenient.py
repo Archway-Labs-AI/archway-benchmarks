@@ -1,6 +1,6 @@
 """Lenient (publication-era) scoring against TypeEvalPy current GT.
 
-Uses `vendor/TypeEvalPy/src/result_analyzer/large_scale_analysis.check_match`
+Uses `extras/TypeEvalPy/src/result_analyzer/large_scale_analysis.check_match`
 verbatim — that scorer has the `col_offset` and `line_number` checks
 commented out (lines 46-51) and matches predictions to GT on
 `file + function/parameter/variable + type` only.
@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 
 # Vendor scorer bootstrap.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_VENDOR_SRC = _REPO_ROOT / "vendor" / "TypeEvalPy" / "src"
+_VENDOR_SRC = _REPO_ROOT / "extras" / "TypeEvalPy" / "src"
 _VENDOR_RA = _VENDOR_SRC / "result_analyzer"
 for p in (_VENDOR_SRC, _VENDOR_RA):
     if str(p) not in sys.path:

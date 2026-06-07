@@ -3,7 +3,7 @@
 Drives the vendored TypeEvalPy runner classes per tool, parses the
 produced `*_result.json` files into harness-native predictions, scores
 them via our existing scoring layer (which itself wraps
-`vendor/TypeEvalPy/src/result_analyzer/`), and ingests the result as a
+`extras/TypeEvalPy/src/result_analyzer/`), and ingests the result as a
 run in the harness store flagged as an external baseline.
 
 Why this exists: the published TypeEvalPy leaderboard was scored on a
@@ -48,9 +48,9 @@ from archway_benchmarks.store import (
 from archway_benchmarks.types import Annotation, Location
 
 # Vendor TypeEvalPy bootstrap — runner_class uses relative paths so we must
-# import it from inside vendor/TypeEvalPy/src/.
+# import it from inside extras/TypeEvalPy/src/.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_VENDOR_SRC = _REPO_ROOT / "vendor" / "TypeEvalPy" / "src"
+_VENDOR_SRC = _REPO_ROOT / "extras" / "TypeEvalPy" / "src"
 if str(_VENDOR_SRC) not in sys.path:
     sys.path.insert(0, str(_VENDOR_SRC))
 
@@ -116,7 +116,7 @@ def run_vendor_tool(
     (per-tool results dir, wall-clock seconds, image digest).
 
     All paths are normalised to absolute. Runner classes expect to be invoked
-    with cwd = vendor/TypeEvalPy/src so their relative dockerfile_path resolves;
+    with cwd = extras/TypeEvalPy/src so their relative dockerfile_path resolves;
     we save+restore cwd around the call.
     """
     if tool not in RUNNER_REGISTRY:

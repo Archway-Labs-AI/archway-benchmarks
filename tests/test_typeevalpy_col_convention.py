@@ -10,7 +10,7 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-CORPUS = ROOT / "vendor" / "TypeEvalPy" / "micro-benchmark" / "python_features"
+CORPUS = ROOT / "extras" / "TypeEvalPy" / "micro-benchmark" / "python_features"
 
 
 def _find(records, **fields):

@@ -26,7 +26,7 @@ column is 1). Python's `ast` module reports `col_offset` **0-indexed**.
   the value MUST be 1-indexed (TypeEvalPy convention). If your engine emits
   ast-derived columns, **add 1** before passing to `MappedLocation`.
 
-Empirically verified against `vendor/TypeEvalPy/micro-benchmark/python_features/`
+Empirically verified against `extras/TypeEvalPy/micro-benchmark/python_features/`
 samples (see `tests/test_typeevalpy_col_convention.py`):
 
   source `a, b = func1, func2`            line 14:
