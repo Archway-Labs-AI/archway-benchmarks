@@ -1,8 +1,8 @@
 # Archway on TypeEvalPy — Progress
 
-**Current:** 52266 / 77268 exact (67.6%) · 5439 / 5453 files processed · 1014 / 5453 sound · 1694 / 5453 complete · run #45 (2026-06-05T17:05:49)
+**Current:** 602 / 850 exact (70.8%) · 152 / 153 files processed · 63 / 153 sound · 107 / 153 complete · run #47 (2026-06-08T21:40:20)
 
-_Engine filter: `archway` · Last updated 2026-06-05 17:05 UTC_
+_Engine filter: `archway` · Last updated 2026-06-08 21:40 UTC_
 
 ## History
 
@@ -10,6 +10,8 @@ _Columns: **Exact** = annotations matching GT type set; **Processed** = files wh
 
 | # | Created | Exact | Δ | Processed | Δ | Sound | Complete | Notes |
 |---:|---|---:|---:|---:|---:|---:|---:|---|
+| 47 | 2026-06-08T21:40:20 | 602/850 | +0 | 152/153 | +0 | 63/153 | 107/153 | loop worktree |
+| 46 | 2026-06-07T19:44:54 | 602/850 | -51664 | 152/153 | -5287 | 63/153 | 107/153 | loop worktree (exceptions support) |
 | 45 | 2026-06-05T17:05:49 | 52266/77268 | +51667 | 5439/5453 | +5287 | 1014/5453 | 1694/5453 | loop worktree |
 | 44 | 2026-06-05T17:03:49 | 599/850 | -51589 | 152/153 | -5287 | 62/153 | 107/153 | loop worktree |
 | 43 | 2026-06-05T13:48:32 | 52188/77268 | +51590 | 5439/5453 | +5287 | 1014/5453 | 1652/5453 | loop worktree |
