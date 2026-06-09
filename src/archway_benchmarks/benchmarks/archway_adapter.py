@@ -59,30 +59,47 @@ def _lookup_predicted_types(
     gt: Annotation, result: ArchwayAnalysisResult
 ) -> frozenset[str] | None:
     loc = gt.location
-    base, is_indirect = _split_base(loc.name)
     matches = [b for b in _all_bindings(result) if _matches(b, loc.line, loc.col)]
     if not matches:
         return None
 
-    if is_indirect:
-        out: set[str] = set()
-        for elt in (b["element"] for b in matches):
-            inner = _value_element(elt)
-            if inner is not None:
-                out |= _to_types(inner, result.functions)
-        return frozenset(out) if out else None
-
-    # GT `return` entries want the function's observed return types. The
-    # def identifier binding carries the callable; resolve through fn_id to
-    # `functions[].instantiations[].ret`. Falls back to element-flatten when
-    # the callable has no instantiations (uninstantiated function — empty
-    # returns) or carries a builtin body (no per-call log per ADR-045).
+    # GT `return` entries want the function's observed return types. The def
+    # identifier binding carries the callable; resolve through fn_id to
+    # `functions[].instantiations[].ret`. This MUST run before the "." handling
+    # below: method and nested-function returns are named `Class.method` /
+    # `outer.inner` / `func.dec` (dotted), but the dot there is a name
+    # qualifier, not an attribute read — routing them through the subscript
+    # path drops every one of them. Falls back to element-flatten when the
+    # callable has no instantiations (uninstantiated function — empty returns)
+    # or carries a builtin body (no per-call log per ADR-045).
     if loc.kind == "return":
         returns = _callable_returns_for(
             (b["element"] for b in matches), result.functions
         )
         if returns is not None:
             return returns
+
+    _, is_indirect = _split_base(loc.name)
+    if is_indirect:
+        # Two shapes reach here:
+        #  (a) the engine emits a FLAT binding whose name is the whole dotted
+        #      expression — instance-attribute stores like `self.smth` land as
+        #      a single `self.smth` binding carrying the value. The matched
+        #      element IS the value; flatten it directly.
+        #  (b) only the base container binding sits at this position
+        #      (`d['a']`, `a[0]`); project the value/element type out of it.
+        named = [b for b in matches if b.get("name") == loc.name]
+        if named:
+            out: set[str] = set()
+            for b in named:
+                out |= _to_types(b["element"], result.functions)
+            return frozenset(out) if out else None
+        out = set()
+        for elt in (b["element"] for b in matches):
+            inner = _value_element(elt)
+            if inner is not None:
+                out |= _to_types(inner, result.functions)
+        return frozenset(out) if out else None
 
     out = set()
     for b in matches:
@@ -102,14 +119,16 @@ def _all_bindings(result: ArchwayAnalysisResult) -> Iterator[dict[str, Any]]:
 
     ``ret`` remains a single Binding (not an event list) per the ADR.
 
-    Each yielded dict has the shape ``{row, col, end_row, end_col, element}``,
-    matching what ``_matches`` consumes. Events without a ``source_position``
+    Each yielded dict has the shape ``{row, col, end_row, end_col, element,
+    name}``, matching what ``_matches`` consumes. ``name`` is the binding's key
+    (e.g. ``self.smth``), used to prefer an exact-name match over value
+    projection for attribute reads. Events without a ``source_position``
     (synthetic per ADR-046) are skipped.
     """
     # Module-level bindings — each name is a list of binding events.
-    for _, events in result.module_bindings.items():
+    for name, events in result.module_bindings.items():
         for event in _as_list(events):
-            yield from _emit(event)
+            yield from _emit(event, name)
 
     # Per-function: the def-identifier itself (so `return` GT entries at the
     # def line match a callable element), then every binding-event inside
@@ -118,13 +137,13 @@ def _all_bindings(result: ArchwayAnalysisResult) -> Iterator[dict[str, Any]]:
         fn_pos = fn.get("source_position")
         fn_id = fn.get("fn_id")
         if fn_pos is not None and fn_id is not None:
-            yield _binding_dict(fn_pos, {"kind": "callable", "body": fn_id})
+            yield _binding_dict(fn_pos, {"kind": "callable", "body": fn_id}, fn.get("name"))
 
         for inst in fn.get("instantiations", []) or []:
             for scope in ("params", "captures", "locals"):
-                for _, events in (inst.get(scope) or {}).items():
+                for name, events in (inst.get(scope) or {}).items():
                     for event in _as_list(events):
-                        yield from _emit(event)
+                        yield from _emit(event, name)
             ret = inst.get("ret")
             if isinstance(ret, dict):
                 yield from _emit(ret)
@@ -142,21 +161,24 @@ def _as_list(value: Any) -> list[dict[str, Any]]:
     return []
 
 
-def _emit(binding: dict[str, Any]) -> Iterator[dict[str, Any]]:
+def _emit(binding: dict[str, Any], name: str | None = None) -> Iterator[dict[str, Any]]:
     pos = binding.get("source_position")
     elt = binding.get("element")
     if pos is None or elt is None:
         return
-    yield _binding_dict(pos, elt)
+    yield _binding_dict(pos, elt, name)
 
 
-def _binding_dict(pos: dict[str, Any], elt: dict[str, Any]) -> dict[str, Any]:
+def _binding_dict(
+    pos: dict[str, Any], elt: dict[str, Any], name: str | None = None
+) -> dict[str, Any]:
     return {
         "row": pos.get("row"),
         "col": pos.get("col"),
         "end_row": pos.get("end_row"),
         "end_col": pos.get("end_col"),
         "element": elt,
+        "name": name,
     }
 
 
