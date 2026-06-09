@@ -27,6 +27,22 @@ from archway_benchmarks.runner import run as run_pipeline
 from archway_benchmarks.store import connect, get_scores, list_annotations, list_runs
 
 
+def _machine_slug() -> str:
+    """Filename-safe machine label for per-machine report names.
+
+    Run numbers are machine-local (the run DBs aren't merged across machines),
+    so reports are tagged with the machine to avoid cross-machine collisions.
+    Honours ``$ARCHWAY_BENCH_MACHINE``; otherwise derives a slug from the short
+    hostname (e.g. ``Bens-Mac-mini.local`` -> ``bens-mac-mini``).
+    """
+    import re
+    import socket
+
+    label = os.environ.get("ARCHWAY_BENCH_MACHINE") or socket.gethostname().split(".", 1)[0]
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-").lower()
+    return slug or "local"
+
+
 BENCHMARKS: dict[str, Callable[[], Benchmark]] = {
     "typeevalpy": TypeEvalPyBenchmark,
     "typeevalpy_autogen": TypeEvalPyAutogenBenchmark,
@@ -119,11 +135,16 @@ def main(argv: list[str] | None = None) -> int:
     p_iter.add_argument("--benchmark", default="typeevalpy", choices=list(BENCHMARKS))
     p_iter.add_argument("--db", default="runs.db")
     p_iter.add_argument("--notes", default=None)
+    p_iter.add_argument(
+        "--machine", default=_machine_slug(),
+        help="Machine label for the detail-report filename (run numbers are "
+             "machine-local). Default: $ARCHWAY_BENCH_MACHINE or a slug of the hostname.",
+    )
     p_iter.add_argument("--out-md", default="archway_progress.md",
                         help="Path for the markdown progress report (empty string to skip).")
     p_iter.add_argument(
         "--detail", action="store_true",
-        help="Also write a per-run detail report (outcomes, categories, TYPE_MISS patterns, translation errors) to archway_report_run<N>.md.",
+        help="Also write a per-run detail report (outcomes, categories, TYPE_MISS patterns, translation errors) to archway_report_<machine>_run<N>.md.",
     )
     p_iter.add_argument(
         "--detail-full", action="store_true",
@@ -400,7 +421,7 @@ def _cmd_iterate(args) -> int:
 
         if args.detail:
             from archway_benchmarks.reports import write_report
-            detail_path = f"archway_report_run{result.run_id}.md"
+            detail_path = f"archway_report_{args.machine}_run{result.run_id}.md"
             print(f"[iterate] writing detail report to {detail_path}", flush=True)
             write_report(args.db, result.run_id, detail_path, include_miss_listing=args.detail_full)
     except Exception as e:
