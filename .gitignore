@@ -35,8 +35,8 @@ baselines.log
 baselines_*.log
 .baselines_checkpoint.json
 
-# Run store (rebuildable; per-user)
-runs.db
+# Local SQLite stores (rebuildable; per-machine — run numbers are machine-local)
+*.db
 
 # DreamTeam tracking
 .dreamteam/
