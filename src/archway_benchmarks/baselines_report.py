@@ -159,7 +159,7 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
     lines.append(
         "| Column | What it is | When to cite |\n"
         "| --- | --- | --- |\n"
-        "| **Regenerated · lenient** (headline) | Each tool's `*_result.json` files against current GT, scored with `vendor/TypeEvalPy/src/result_analyzer/large_scale_analysis.check_match` (col_offset and line checks commented out, lines 46-51). This is the predicate that generated the published board. | Head-to-head comparisons. |\n"
+        "| **Regenerated · lenient** (headline) | Each tool's `*_result.json` files against current GT, scored with `extras/TypeEvalPy/src/result_analyzer/large_scale_analysis.check_match` (col_offset and line checks commented out, lines 46-51). This is the predicate that generated the published board. | Head-to-head comparisons. |\n"
         "| **Historical** | Published `paper_table_*.csv` from the vendored repo. Generated 14 Jan 2024 (micro) / 30 Aug 2024 (autogen) against an older GT snapshot. | As a reference. **Do not cross-compare against the regenerated columns directly** — different answer keys. |\n"
         "| **Δ vs Historical** | `lenient − historical`. | Headline finding. Sign + magnitude is GT drift only (and, for autogen, generation-composition drift). |\n"
         "| **Regenerated · strict** | Same outputs scored with `analysis_utils.is_same_element` (added Oct 2025, commit `2f7c6056`), which requires `col_offset` to match. None of the shipped tool runners emit `col_offset` — so 0 here is a runner-format artifact, **not** an inference result. Archway emits `col_offset` and is the one tool that meets this bar today. | Only as a transparency note. **Never cite a 0 in this column as a competitive result.** |\n"
@@ -341,7 +341,7 @@ def _summary_paragraph(report: dict[str, Any]) -> str:
     parts.append(
         "Shaky / not run: Pyright (LSP stuck >40 min on micro; needs a longer "
         "budget or a non-LSP runner); HiTyper (vendor Dockerfile expects a "
-        "`requirements.txt` that's missing from `vendor/TypeEvalPy/src/target_tools/hityper/` — "
+        "`requirements.txt` that's missing from `extras/TypeEvalPy/src/target_tools/hityper/` — "
         "upstream bug); Type4Py / HiTyper-DL (require a model server we are not "
         "running). For now, **only the three solid tools should be cited** as "
         "regenerated-on-current-GT baselines."

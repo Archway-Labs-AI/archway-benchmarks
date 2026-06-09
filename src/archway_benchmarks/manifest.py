@@ -288,7 +288,7 @@ def _cli(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--corpus",
         default=None,
-        help="Override the corpus root (defaults to vendor/TypeEvalPy/micro-benchmark/python_features)",
+        help="Override the corpus root (defaults to extras/TypeEvalPy/micro-benchmark/python_features)",
     )
     args = parser.parse_args(argv)
 

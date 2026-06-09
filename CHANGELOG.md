@@ -8,10 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- TypeEvalPy benchmark (153 snippets / 850 annotations) vendored as a git submodule at `vendor/TypeEvalPy/`.
+- TypeEvalPy benchmark (153 snippets / 850 annotations) vendored as a git submodule at `extras/TypeEvalPy/`.
 - Engine `Protocol`s + stub trio (`StubTranslationEngine`, `StubAnalysisEngine`, `StubAnalysisResultAdapter`) with tunable accuracy `p` — full harness runs against stubs today.
 - `Benchmark` / `AnalysisResultAdapter` ABCs with a concrete `TypeEvalPyBenchmark` (load + `to_tool_format` round-trip).
-- Three-bucket per-annotation scoring (`EXACT` / `TYPE_MISS` / `LOCATION_MISS` / `SPURIOUS`) built on `vendor/TypeEvalPy/src/result_analyzer` primitives — no metric re-implementation.
+- Three-bucket per-annotation scoring (`EXACT` / `TYPE_MISS` / `LOCATION_MISS` / `SPURIOUS`) built on `extras/TypeEvalPy/src/result_analyzer` primitives — no metric re-implementation.
 - Coverage model (`COVERED` / `PARTIAL` / `UNSUPPORTED`) with dual all-vs-covered scoring.
 - SQLite-backed result store; CLI `run` / `score` / `runs` / `export` / `serve` / `manifest`.
 - Corpus manifest generator (AST feature detection, import profile, payoff-curve slices; reproduces 399/550/732/95/150).

@@ -24,7 +24,7 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-VENDOR_SRC = ROOT / "vendor" / "TypeEvalPy" / "src"
+VENDOR_SRC = ROOT / "extras" / "TypeEvalPy" / "src"
 sys.path.insert(0, str(VENDOR_SRC))
 
 # Vendor imports (must happen before we monkey-patch).
@@ -112,7 +112,7 @@ def main() -> int:
             host_results_path=str(results_root),
             nocache=False,
             custom_benchmark_dir=str(
-                ROOT / "vendor" / "TypeEvalPy" / "micro-benchmark" / "python_features"
+                ROOT / "extras" / "TypeEvalPy" / "micro-benchmark" / "python_features"
             ),
         )
         runner.run_tool_test()
@@ -139,13 +139,13 @@ def main() -> int:
         # The vendor's run copies main.py + main_gt.json out with the
         # results; we may need to point at the original.
         rel = sample.relative_to(archway_results)
-        gt = ROOT / "vendor" / "TypeEvalPy" / "micro-benchmark" / "python_features" / rel.parent / "main_gt.json"
+        gt = ROOT / "extras" / "TypeEvalPy" / "micro-benchmark" / "python_features" / rel.parent / "main_gt.json"
     if not gt.exists():
         # Fallback: micro-benchmark naming wraps with the container dir name.
         rel_parts = list(sample.relative_to(archway_results).parts)
         if rel_parts and rel_parts[0] in {"micro-benchmark", "python_features"}:
             rel_parts = rel_parts[1:]
-        gt = ROOT / "vendor" / "TypeEvalPy" / "micro-benchmark" / "python_features"
+        gt = ROOT / "extras" / "TypeEvalPy" / "micro-benchmark" / "python_features"
         for p in rel_parts[:-1]:
             gt = gt / p
         gt = gt / "main_gt.json"

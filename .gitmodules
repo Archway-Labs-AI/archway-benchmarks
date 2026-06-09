@@ -1,3 +1,3 @@
-[submodule "vendor/TypeEvalPy"]
-	path = vendor/TypeEvalPy
-	url = https://github.com/secure-software-engineering/TypeEvalPy.git
+[submodule "extras/TypeEvalPy"]
+	path = extras/TypeEvalPy
+	url = git@github.com:Archway-Labs-AI/TypeEvalPy.git

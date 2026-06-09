@@ -2,11 +2,11 @@
 
 We re-use the vendored primitives — do NOT redefine the metrics:
   - `is_same_element` — the location join key
-    (vendor/TypeEvalPy/src/result_analyzer/analysis_utils.py:173-183)
+    (extras/TypeEvalPy/src/result_analyzer/analysis_utils.py:173-183)
   - `format_type` / `transform_type_string` — normalization
-    (vendor/TypeEvalPy/src/result_analyzer/analysis_utils.py:107-170)
+    (extras/TypeEvalPy/src/result_analyzer/analysis_utils.py:107-170)
   - `check_match` — exact-match predicate (combines the two above)
-    (vendor/TypeEvalPy/src/result_analyzer/analysis_utils.py:186-257)
+    (extras/TypeEvalPy/src/result_analyzer/analysis_utils.py:186-257)
 
 `equal_sound` / `equal_complete` in the vendor module operate on file paths;
 we apply the same predicate in memory on the same `check_match` primitive,
@@ -33,7 +33,7 @@ if TYPE_CHECKING:
 # ----- vendor scorer bootstrap -----
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_VENDOR_SRC = _REPO_ROOT / "vendor" / "TypeEvalPy" / "src"
+_VENDOR_SRC = _REPO_ROOT / "extras" / "TypeEvalPy" / "src"
 if str(_VENDOR_SRC) not in sys.path:
     sys.path.insert(0, str(_VENDOR_SRC))
 
@@ -221,6 +221,13 @@ def score_predictions(
 def _aggregate(per_snippet: list[SnippetScores]) -> Scores:
     files_sound = sum(1 for s in per_snippet if s.is_sound)
     files_complete = sum(1 for s in per_snippet if s.is_complete)
+    # "Processed" = adapter emitted at least one prediction. With the
+    # current GT-keyed adapter this equals "engine didn't error on the
+    # snippet" — the canonical "how many files did we actually evaluate".
+    files_processed = sum(
+        1 for s in per_snippet
+        if s.spurious_predictions or any(o.outcome != Outcome.LOCATION_MISS for o in s.outcomes)
+    )
 
     exact_total = 0
     type_miss_total = 0
@@ -253,6 +260,7 @@ def _aggregate(per_snippet: list[SnippetScores]) -> Scores:
     return Scores(
         total_snippets=len(per_snippet),
         total_annotations=total_annotations,
+        files_processed=files_processed,
         files_sound=files_sound,
         files_complete=files_complete,
         exact_total=exact_total,
