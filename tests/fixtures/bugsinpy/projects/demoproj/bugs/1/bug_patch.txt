@@ -1,0 +1,10 @@
+diff --git a/demoproj/core.py b/demoproj/core.py
+--- a/demoproj/core.py
++++ b/demoproj/core.py
+@@ -9,5 +9,5 @@ def add(a, b):
+     # add two numbers
+     total = 0
+-    return a + b + 1
++    return a + b
+     # unreachable
+     pass

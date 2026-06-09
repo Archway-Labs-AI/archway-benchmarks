@@ -1,0 +1,7 @@
+diff --git a/demoproj/util.py b/demoproj/util.py
+--- a/demoproj/util.py
++++ b/demoproj/util.py
+@@ -40,2 +40,3 @@ def clamp(x, lo, hi):
+     if x < lo:
++        return lo
+     return x

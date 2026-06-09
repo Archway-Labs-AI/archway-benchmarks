@@ -1,0 +1,5 @@
+python_version="3.8.0"
+buggy_commit_id="aaaa1111aaaa1111aaaa1111aaaa1111aaaa1111"
+fixed_commit_id="bbbb2222bbbb2222bbbb2222bbbb2222bbbb2222"
+test_file="tests/test_core.py"
+test_list="tests/test_core.py::test_add;tests/test_core.py::test_sub"

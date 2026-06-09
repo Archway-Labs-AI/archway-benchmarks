@@ -26,6 +26,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Iterator
 
+from archway_benchmarks.bugsinpy_types import (
+    DetectionOutcome,
+    DetectionScores,
+    RepairScores,
+    TestOutcome,
+)
 from archway_benchmarks.coverage import CoverageStatus
 from archway_benchmarks.outcome import Outcome
 from archway_benchmarks.scoring.typeevalpy import SnippetScores
@@ -108,6 +114,52 @@ CREATE TABLE IF NOT EXISTS scores (
     -- Nullable so legacy rows can be migrated/backfilled.
     exact_by_bucket_kind_json TEXT,
     PRIMARY KEY (run_id, scope)
+);
+
+-- ===== BugsInPy (parallel benchmark; shares `runs`) =====
+-- A BugsInPy run is a `runs` row with benchmark='bugsinpy' and provenance in
+-- `runs.metadata` JSON: {mode, engine_sha, corpus_commit, subset, ...}. Its
+-- per-bug results + aggregate land in the tables below, mirroring how
+-- TypeEvalPy uses annotations/spurious/scores. Created here (IF NOT EXISTS) so
+-- existing DBs gain them on next connect — no separate migration needed.
+
+CREATE TABLE IF NOT EXISTS bugsinpy_detection (
+    run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    project TEXT NOT NULL,
+    bug_id TEXT NOT NULL,
+    bug_key TEXT NOT NULL,
+    kind TEXT NOT NULL,                 -- DETECTED | WRONG_FILE | MISSED
+    flagged_count INTEGER NOT NULL,
+    matched_locations_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, bug_key)
+);
+CREATE INDEX IF NOT EXISTS idx_bugsinpy_detection_run ON bugsinpy_detection(run_id);
+
+CREATE TABLE IF NOT EXISTS bugsinpy_repair (
+    run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    project TEXT NOT NULL,
+    bug_id TEXT NOT NULL,
+    bug_key TEXT NOT NULL,
+    passed INTEGER NOT NULL,            -- 1 iff all previously-failing tests pass
+    n_tests INTEGER NOT NULL,
+    n_passed INTEGER NOT NULL,
+    n_failed INTEGER NOT NULL,
+    detail TEXT,
+    PRIMARY KEY (run_id, bug_key)
+);
+CREATE INDEX IF NOT EXISTS idx_bugsinpy_repair_run ON bugsinpy_repair(run_id);
+
+CREATE TABLE IF NOT EXISTS bugsinpy_scores (
+    run_id INTEGER NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+    mode TEXT NOT NULL,                 -- detection | repair
+    scope TEXT NOT NULL,                -- all | subset
+    total_bugs INTEGER NOT NULL,
+    bugs_attempted INTEGER NOT NULL,
+    hit INTEGER NOT NULL,               -- detected (detection) | repaired (repair)
+    file_level_detected INTEGER,        -- detection only; NULL for repair
+    by_project_json TEXT NOT NULL,      -- {project: hit}
+    total_by_project_json TEXT NOT NULL,
+    PRIMARY KEY (run_id, mode, scope)
 );
 """
 
@@ -285,6 +337,97 @@ def record_scores(
             scores.files_processed,
         ),
     )
+
+
+# ----- BugsInPy writers (parallel benchmark; reuse `create_run`) -----
+
+def record_bugsinpy_detection(
+    conn: sqlite3.Connection,
+    run_id: int,
+    outcomes: Iterable[DetectionOutcome],
+) -> None:
+    for o in outcomes:
+        project, _, bug_id = o.bug_key.partition(":")
+        conn.execute(
+            "INSERT OR REPLACE INTO bugsinpy_detection "
+            "(run_id, project, bug_id, bug_key, kind, flagged_count, matched_locations_json) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (
+                run_id, o.project, bug_id, o.bug_key, o.kind, o.flagged_count,
+                json.dumps([
+                    {"file": m.file, "start": m.start, "end": m.end, "lines": sorted(m.lines)}
+                    for m in o.matched_locations
+                ]),
+            ),
+        )
+
+
+def record_bugsinpy_repair(
+    conn: sqlite3.Connection,
+    run_id: int,
+    outcomes: Iterable[TestOutcome],
+) -> None:
+    for o in outcomes:
+        project, _, bug_id = o.bug_key.partition(":")
+        conn.execute(
+            "INSERT OR REPLACE INTO bugsinpy_repair "
+            "(run_id, project, bug_id, bug_key, passed, n_tests, n_passed, n_failed, detail) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (run_id, o.project, bug_id, o.bug_key, 1 if o.passed else 0,
+             o.n_tests, o.n_passed, o.n_failed, o.detail),
+        )
+
+
+def record_bugsinpy_scores(
+    conn: sqlite3.Connection,
+    run_id: int,
+    *,
+    mode: str,
+    scope: str,
+    scores: DetectionScores | RepairScores,
+) -> None:
+    if mode not in {"detection", "repair"}:
+        raise ValueError(f"unknown bugsinpy mode: {mode}")
+    if scope not in {"all", "subset"}:
+        raise ValueError(f"unknown scope: {scope}")
+    if isinstance(scores, DetectionScores):
+        hit, file_level = scores.detected, scores.file_level_detected
+        by_project, total_by_project = scores.detected_by_project, scores.total_by_project
+    else:
+        hit, file_level = scores.repaired, None
+        by_project, total_by_project = scores.repaired_by_project, scores.total_by_project
+    conn.execute(
+        "INSERT OR REPLACE INTO bugsinpy_scores "
+        "(run_id, mode, scope, total_bugs, bugs_attempted, hit, file_level_detected, "
+        " by_project_json, total_by_project_json) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (run_id, mode, scope, scores.total_bugs, scores.bugs_attempted, hit, file_level,
+         json.dumps(by_project), json.dumps(total_by_project)),
+    )
+
+
+def get_bugsinpy_scores(conn: sqlite3.Connection, run_id: int) -> dict[tuple[str, str], dict]:
+    """`(mode, scope) -> score row` for a BugsInPy run."""
+    rows = conn.execute(
+        "SELECT * FROM bugsinpy_scores WHERE run_id = ?", (run_id,)
+    ).fetchall()
+    return {(r["mode"], r["scope"]): dict(r) for r in rows}
+
+
+def list_bugsinpy_detection(conn: sqlite3.Connection, run_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM bugsinpy_detection WHERE run_id = ? ORDER BY project, bug_id",
+        (run_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_bugsinpy_repair(conn: sqlite3.Connection, run_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT * FROM bugsinpy_repair WHERE run_id = ? ORDER BY project, bug_id",
+        (run_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 # ----- readers -----

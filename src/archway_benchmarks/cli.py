@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 from typing import Callable
 
+from archway_benchmarks import bugsinpy_cli
 from archway_benchmarks.benchmarks import TypeEvalPyAutogenBenchmark, TypeEvalPyBenchmark
 from archway_benchmarks.benchmarks.base import Benchmark
 from archway_benchmarks.engines.base import AnalysisEngine, TranslationEngine
@@ -168,6 +169,9 @@ def main(argv: list[str] | None = None) -> int:
         help="If set, also write a Markdown progress report (full history) to this path.",
     )
 
+    # BugsInPy (parallel benchmark): bugsinpy-manifest|detect|repair|progress.
+    bugsinpy_cli.register(sub)
+
     p_regen = sub.add_parser(
         "regenerate-baselines",
         help="Re-run published baselines against the current GT (Phase 1 work).",
@@ -236,6 +240,9 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_iterate(args)
     if args.cmd == "progress":
         return _cmd_progress(args)
+    bugsinpy_rv = bugsinpy_cli.dispatch(args)
+    if bugsinpy_rv is not None:
+        return bugsinpy_rv
     if args.cmd == "regenerate-baselines":
         return _cmd_regenerate(args)
     if args.cmd == "baselines-report":

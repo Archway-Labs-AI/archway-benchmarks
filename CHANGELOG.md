@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- BugsInPy benchmark machinery (parallel to TypeEvalPy; **machinery only — nothing run, classified, or scored**): submodule declaration at `extras/BugsInPy/`, a per-bug loader (`benchmarks/bugsinpy.py`) exposing project / commits / patch-derived bug locations / failing tests / fix-shape metadata, a **both-modes scorer** (`scoring/bugsinpy.py` — detection vs. known location, repair via test-suite-passes), a repair-runner engine seam (`engines/bugsinpy.py`), `store.py` `bugsinpy_*` tables sharing `runs` with provenance (mode/engine_sha/corpus_commit/subset), a progress report (`bugsinpy_report.py`), a metadata-only manifest (`bugsinpy_manifest.py`), and CLI `bugsinpy-manifest|detect|repair|progress`. See `docs/BUGSINPY.md`.
 - TypeEvalPy benchmark (153 snippets / 850 annotations) vendored as a git submodule at `extras/TypeEvalPy/`.
 - Engine `Protocol`s + stub trio (`StubTranslationEngine`, `StubAnalysisEngine`, `StubAnalysisResultAdapter`) with tunable accuracy `p` — full harness runs against stubs today.
 - `Benchmark` / `AnalysisResultAdapter` ABCs with a concrete `TypeEvalPyBenchmark` (load + `to_tool_format` round-trip).

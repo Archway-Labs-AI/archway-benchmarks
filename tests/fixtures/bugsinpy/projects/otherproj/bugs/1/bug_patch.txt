@@ -1,0 +1,14 @@
+diff --git a/otherproj/a.py b/otherproj/a.py
+--- a/otherproj/a.py
++++ b/otherproj/a.py
+@@ -3,3 +3,3 @@ def one():
+     x = 1
+-    return x * 2
++    return x * 3
+diff --git a/otherproj/b.py b/otherproj/b.py
+--- a/otherproj/b.py
++++ b/otherproj/b.py
+@@ -10,3 +10,3 @@ def two():
+     y = 5
+-    return y - 1
++    return y + 1
