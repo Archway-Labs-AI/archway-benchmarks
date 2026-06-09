@@ -93,7 +93,36 @@ archway-bench bugsinpy-manifest -o bugsinpy_manifest.json
   framework (tests); `--runner framework` shells out to `bugsinpy-checkout` +
   `bugsinpy-run_test`.
 
+## Directional bucketer (DIAGNOSTIC — not claim-grade)
+`bugsinpy_bucketer.py` derives a coarse bug **class** from what the fix PATCH
+does — `none_or_null` · `type_check` · `missing_branch` · `exception_handling` ·
+`api_misuse_lib` · `other` — to *direct* attention, not to make a claim. Every
+output is labelled **DIRECTIONAL/DIAGNOSTIC pending Ben's validation**.
+
+- **Patch-evidenced**: e.g. a fix that adds `is None` → `none_or_null`; adds
+  `except` → `exception_handling`; adds `isinstance(` → `type_check`. A merely
+  *changed* return value is **not** a missing branch (→ `other`).
+- **Confidence**: `high` where the patch confirms the class, `low` where guessed.
+  `api_misuse_lib` is always `low` (not cheaply confirmable).
+- **Re-computable + versioned**: buckets are stored keyed by
+  `(bug_key, BUCKETER_VERSION)` — a property of the bug, **not** of a run. Bumping
+  the version (or editing rules) and re-running re-buckets the SAME stored
+  detection results **without re-running the benchmark**.
+- **Reportable by bucket**: `bugsinpy-bucket-report` joins a detection run ×
+  a bucketer version → detection rate × class, with version + confidence visible.
+- **Needs-adjudication queue**: the `low`-confidence + `api_misuse_lib` bugs are
+  surfaced as the human-review list (`bugsinpy-adjudicate`).
+
+```bash
+archway-bench bugsinpy-bucket --version v1          # compute + store buckets (DIRECTIONAL)
+archway-bench bugsinpy-adjudicate --version v1      # the needs-adjudication queue
+archway-bench bugsinpy-bucket-report --run <N> --version v1   # detection rate × class
+```
+
+It classifies **nothing definitively**. Tractability decisions remain Ben's
+separate manual pass.
+
 ## Explicitly out of scope (not in this layer)
-Running the benchmark / producing any number; classifying bugs into tractable
-classes (Ben's manual pass); the IR-vs-no-IR repair experiment; committing any
-result.
+Running the benchmark / producing any number; classifying bugs definitively into
+tractable classes (Ben's manual pass — the bucketer is directional input to it,
+not a substitute); the IR-vs-no-IR repair experiment; committing any result.

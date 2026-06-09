@@ -55,6 +55,24 @@ def register(sub) -> None:
     pp.add_argument("--out-md", default="bugsinpy_progress.md")
     pp.add_argument("--mode", choices=["detection", "repair"], default=None)
 
+    pb = sub.add_parser("bugsinpy-bucket",
+                        help="DIRECTIONAL: patch-evidenced bug bucketer. Re-computable, versioned.")
+    pb.add_argument("--corpus", default=None)
+    pb.add_argument("--db", default="runs.db")
+    pb.add_argument("--version", default=None, help="Bucketer version tag (default: BUCKETER_VERSION).")
+
+    pa = sub.add_parser("bugsinpy-adjudicate",
+                        help="Dump the needs-adjudication list (low-confidence + api_misuse_lib).")
+    pa.add_argument("--db", default="runs.db")
+    pa.add_argument("--version", default=None)
+
+    pbr = sub.add_parser("bugsinpy-bucket-report",
+                         help="DIRECTIONAL detection rate × bucket class for a run (run × version join).")
+    pbr.add_argument("--run", type=int, required=True)
+    pbr.add_argument("--version", default=None)
+    pbr.add_argument("--db", default="runs.db")
+    pbr.add_argument("--out-md", default="bugsinpy_buckets.md")
+
 
 def dispatch(args) -> int | None:
     cmd = getattr(args, "cmd", None)
@@ -66,6 +84,12 @@ def dispatch(args) -> int | None:
         return _cmd_repair(args)
     if cmd == "bugsinpy-progress":
         return _cmd_progress(args)
+    if cmd == "bugsinpy-bucket":
+        return _cmd_bucket(args)
+    if cmd == "bugsinpy-adjudicate":
+        return _cmd_adjudicate(args)
+    if cmd == "bugsinpy-bucket-report":
+        return _cmd_bucket_report(args)
     return None
 
 
@@ -172,4 +196,47 @@ def _cmd_progress(args) -> int:
     from archway_benchmarks import bugsinpy_report
     out = bugsinpy_report.write_progress(Path(args.db), args.out_md, mode=args.mode)
     print(f"wrote {out}")
+    return 0
+
+
+def _cmd_bucket(args) -> int:
+    from archway_benchmarks import bugsinpy_bucketer
+    from archway_benchmarks.store import connect, record_bugsinpy_buckets
+
+    version = args.version or bugsinpy_bucketer.BUCKETER_VERSION
+    bench = _bench(args)
+    results = bugsinpy_bucketer.bucket_all(bench, version=version)
+    with connect(Path(args.db)) as conn:
+        record_bugsinpy_buckets(conn, results)
+    s = bugsinpy_bucketer.summarize(results)
+    print(f"DIRECTIONAL bucketer `{version}` — {s['total']} bugs, "
+          f"{s['needs_adjudication']} need adjudication. NOT claim-grade.")
+    for cls, conf in s["by_bucket"].items():
+        if conf["high"] or conf["low"]:
+            print(f"  {cls:20} high={conf['high']:<4} low={conf['low']}")
+    print(f"  → buckets stored keyed by (bug, version='{version}'); re-run to re-bucket "
+          "stored detection results without re-running the benchmark.")
+    return 0
+
+
+def _cmd_adjudicate(args) -> int:
+    from archway_benchmarks import bugsinpy_bucketer
+    from archway_benchmarks.store import connect, get_bugsinpy_buckets
+
+    version = args.version or bugsinpy_bucketer.BUCKETER_VERSION
+    with connect(Path(args.db)) as conn:
+        buckets = get_bugsinpy_buckets(conn, version)
+    queue = [b for b in buckets.values() if b["confidence"] == "low" or b["bucket"] == "api_misuse_lib"]
+    print(f"needs-adjudication (version `{version}`): {len(queue)} bugs "
+          f"(DIRECTIONAL — confirm class before any counts as claim-grade)")
+    for b in sorted(queue, key=lambda r: (r["bucket"], r["bug_key"])):
+        print(f"  {b['bug_key']:20} {b['bucket']:18} conf={b['confidence']:5} :: {(b['evidence'] or '')[:70]}")
+    return 0
+
+
+def _cmd_bucket_report(args) -> int:
+    from archway_benchmarks import bugsinpy_bucketer, bugsinpy_report
+    version = args.version or bugsinpy_bucketer.BUCKETER_VERSION
+    out = bugsinpy_report.write_detection_by_bucket(Path(args.db), args.run, args.out_md, version=version)
+    print(f"wrote {out} (DIRECTIONAL detection × bucket, version `{version}`)")
     return 0

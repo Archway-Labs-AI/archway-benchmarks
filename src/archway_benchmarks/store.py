@@ -161,6 +161,21 @@ CREATE TABLE IF NOT EXISTS bugsinpy_scores (
     total_by_project_json TEXT NOT NULL,
     PRIMARY KEY (run_id, mode, scope)
 );
+
+-- DIRECTIONAL bucketer output. Keyed by (bug_key, bucketer_version), NOT run_id:
+-- a bucket is a property of the BUG (its patch), so re-running the bucketer
+-- re-buckets the SAME stored detection results WITHOUT a benchmark re-run. Report
+-- time JOINs bugsinpy_detection (per run) × this (per version). NOT claim-grade.
+CREATE TABLE IF NOT EXISTS bugsinpy_buckets (
+    bug_key TEXT NOT NULL,
+    bucketer_version TEXT NOT NULL,
+    project TEXT NOT NULL,
+    bucket TEXT NOT NULL,               -- one of bugsinpy_bucketer.BUCKET_CLASSES
+    confidence TEXT NOT NULL,           -- high | low
+    evidence TEXT,                      -- matched pattern + sample line (for a human check)
+    PRIMARY KEY (bug_key, bucketer_version)
+);
+CREATE INDEX IF NOT EXISTS idx_bugsinpy_buckets_version ON bugsinpy_buckets(bucketer_version);
 """
 
 
@@ -347,7 +362,7 @@ def record_bugsinpy_detection(
     outcomes: Iterable[DetectionOutcome],
 ) -> None:
     for o in outcomes:
-        project, _, bug_id = o.bug_key.partition(":")
+        _, _, bug_id = o.bug_key.partition(":")
         conn.execute(
             "INSERT OR REPLACE INTO bugsinpy_detection "
             "(run_id, project, bug_id, bug_key, kind, flagged_count, matched_locations_json) "
@@ -368,7 +383,7 @@ def record_bugsinpy_repair(
     outcomes: Iterable[TestOutcome],
 ) -> None:
     for o in outcomes:
-        project, _, bug_id = o.bug_key.partition(":")
+        _, _, bug_id = o.bug_key.partition(":")
         conn.execute(
             "INSERT OR REPLACE INTO bugsinpy_repair "
             "(run_id, project, bug_id, bug_key, passed, n_tests, n_passed, n_failed, detail) "
@@ -428,6 +443,36 @@ def list_bugsinpy_repair(conn: sqlite3.Connection, run_id: int) -> list[dict]:
         (run_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def record_bugsinpy_buckets(conn: sqlite3.Connection, results) -> None:
+    """Store DIRECTIONAL bucket results, keyed by (bug_key, bucketer_version).
+
+    INSERT OR REPLACE so re-running the SAME version overwrites in place, and a
+    NEW version coexists — both kept, so reports can compare versions. `results`
+    is any iterable of `bugsinpy_bucketer.BucketResult` (duck-typed)."""
+    for r in results:
+        conn.execute(
+            "INSERT OR REPLACE INTO bugsinpy_buckets "
+            "(bug_key, bucketer_version, project, bucket, confidence, evidence) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (r.bug_key, r.bucketer_version, r.project, r.bucket, r.confidence, r.evidence),
+        )
+
+
+def get_bugsinpy_buckets(conn: sqlite3.Connection, version: str) -> dict[str, dict]:
+    """`bug_key -> bucket row` for one bucketer version."""
+    rows = conn.execute(
+        "SELECT * FROM bugsinpy_buckets WHERE bucketer_version = ?", (version,)
+    ).fetchall()
+    return {r["bug_key"]: dict(r) for r in rows}
+
+
+def list_bugsinpy_bucket_versions(conn: sqlite3.Connection) -> list[str]:
+    rows = conn.execute(
+        "SELECT DISTINCT bucketer_version FROM bugsinpy_buckets ORDER BY bucketer_version"
+    ).fetchall()
+    return [r["bucketer_version"] for r in rows]
 
 
 # ----- readers -----

@@ -148,3 +148,86 @@ def write_progress(db_path: Path | str, out_path: Path | str, *, mode: str | Non
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render_progress(db_path, mode=mode))
     return out
+
+
+# ----- detection BY directional bucket (JOIN run × bucketer version) -----
+
+def render_detection_by_bucket(db_path: Path | str, run_id: int, *, version: str) -> str:
+    """Join a detection run's per-bug outcomes with the bucketer's classes.
+
+    Reports detection rate × class with the bucketer version + confidence
+    visible, plus the needs-adjudication queue. Labelled DIRECTIONAL — the
+    buckets are diagnostic, not claim-grade. Re-runnable against a NEW bucketer
+    version with the SAME stored detection results (no benchmark re-run)."""
+    from archway_benchmarks.bugsinpy_bucketer import BUCKET_CLASSES, DIRECTIONAL_NOTE
+
+    with _connect(db_path) as conn:
+        det = conn.execute(
+            "SELECT bug_key, project, kind FROM bugsinpy_detection WHERE run_id = ?", (run_id,)
+        ).fetchall()
+        buckets = {
+            r["bug_key"]: dict(r)
+            for r in conn.execute(
+                "SELECT bug_key, bucket, confidence, evidence FROM bugsinpy_buckets "
+                "WHERE bucketer_version = ?", (version,)
+            ).fetchall()
+        }
+
+    if not det:
+        return f"# BugsInPy detection × bucket — run #{run_id}\n\n_No detection results for this run._\n"
+
+    # per-bucket totals/detected + confidence tally
+    agg: dict[str, dict] = {c: {"total": 0, "detected": 0, "high": 0, "low": 0} for c in BUCKET_CLASSES}
+    adjudicate: list[tuple] = []
+    unbucketed = 0
+    for d in det:
+        b = buckets.get(d["bug_key"])
+        if b is None:
+            unbucketed += 1
+            continue
+        cell = agg.setdefault(b["bucket"], {"total": 0, "detected": 0, "high": 0, "low": 0})
+        cell["total"] += 1
+        if d["kind"] == "DETECTED":
+            cell["detected"] += 1
+        cell[b["confidence"]] += 1
+        if b["confidence"] == "low" or b["bucket"] == "api_misuse_lib":
+            adjudicate.append((d["bug_key"], b["bucket"], b["confidence"], d["kind"], b.get("evidence", "")))
+
+    lines = [
+        f"# BugsInPy detection × directional bucket — run #{run_id}",
+        "",
+        f"> **{DIRECTIONAL_NOTE}**  Bucketer version: `{version}`.",
+        "",
+        "| Bucket | Detected | Total | Rate | conf high | conf low |",
+        "| --- | ---: | ---: | ---: | ---: | ---: |",
+    ]
+    for c in BUCKET_CLASSES:
+        cell = agg[c]
+        if cell["total"] == 0:
+            continue
+        rate = cell["detected"] / cell["total"]
+        lines.append(f"| {c} | {cell['detected']} | {cell['total']} | {rate:.0%} | "
+                     f"{cell['high']} | {cell['low']} |")
+    if unbucketed:
+        lines.append(f"| _(unbucketed — no bucket for version `{version}`)_ | | {unbucketed} | | | |")
+
+    lines += ["", f"## Needs adjudication ({len(adjudicate)})", "",
+              "_Low-confidence or `api_misuse_lib` bugs — a human must confirm the class "
+              "before any of these counts as claim-grade._", ""]
+    if adjudicate:
+        lines += ["| Bug | Bucket | Confidence | Detection | Evidence |",
+                  "| --- | --- | --- | --- | --- |"]
+        for key, bucket, conf, kind, ev in adjudicate:
+            lines.append(f"| `{key}` | {bucket} | {conf} | {kind} | `{ev[:80]}` |")
+    else:
+        lines.append("_None._")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def write_detection_by_bucket(db_path: Path | str, run_id: int, out_path: Path | str,
+                              *, version: str) -> Path:
+    out = Path(out_path)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(render_detection_by_bucket(db_path, run_id, version=version))
+    return out
