@@ -17,9 +17,9 @@ version. Two standard scoring modes, both first-class in the machinery:
 
 Both modes are supported even though **neither is run here**.
 
-## Vendoring (the one remaining step — needs the GitHub fork)
-TypeEvalPy is vendored as a submodule on the `Archway-Labs-AI` fork. BugsInPy
-mirrors that. `.gitmodules` already declares it:
+## Vendoring (done — pinned submodule on our fork)
+Vendored as a submodule on the `Archway-Labs-AI` fork, exactly like TypeEvalPy.
+`.gitmodules` declares it and the gitlink is committed:
 
 ```
 [submodule "extras/BugsInPy"]
@@ -27,30 +27,20 @@ mirrors that. `.gitmodules` already declares it:
 	url = git@github.com:Archway-Labs-AI/BugsInPy.git
 ```
 
-To populate it (Ben, once the fork exists):
+Populate it on a fresh checkout with `git submodule update --init extras/BugsInPy`.
 
-```bash
-# 1. fork upstream -> Archway-Labs-AI/BugsInPy
-# 2. register + pin the submodule at the path .gitmodules already declares
-git submodule add git@github.com:Archway-Labs-AI/BugsInPy.git extras/BugsInPy
-git -C extras/BugsInPy checkout <pinned-commit>
-git add .gitmodules extras/BugsInPy
-```
-
-**Current state (not yet done):** `extras/BugsInPy/` is presently a *direct,
-untracked clone of `soarsmu/BugsInPy`* (501 bugs / 17 projects) — the loader and
-flagger work against it, but it is **not** the pinned Archway-Labs-AI submodule
-`.gitmodules` declares. So `git submodule update --init` will currently *fail*
-(the fork does not exist yet); the loader's error message says as much. The
-remaining step is the outward one: create the fork, pin it, and commit the
-gitlink.
-
-**Pick the upstream deliberately.** `soarsmu/BugsInPy` is the stale original —
-an independent study reproduced only ~67% of its bugs, and it tracks no
-active/deprecated status. Prefer forking a better-maintained descendant
-(`nus-apr/bugs-in-py-benchmark`, the Cerberus version; or the UIUC
-`reproducing-research-projects/BugsInPy`) so the corpus you pin is the
-reproducible subset.
+**Upstream choice.** We deliberately did **not** fork the stale original
+`soarsmu/BugsInPy` (an independent study reproduced only ~67% of its bugs, and
+it tracks no active/deprecated status). `Archway-Labs-AI/BugsInPy` is forked from
+the UIUC **`reproducing-research-projects/BugsInPy`** — the "Reproducing and
+Improving BugsInPy" reproduction, which keeps the identical
+`projects/<p>/bugs/<id>/{bug.info,bug_patch.txt,run_test.sh}` layout the loader
+expects (plus extras like `bug_buggy.txt`/`bug_fixed.txt`/`bugsinpy-index.csv`,
+which the loader ignores) while fixing reproducibility. The Cerberus
+`nus-apr/bugs-in-py-benchmark` was rejected: it restructures the corpus around
+its own framework (root-level projects + build scaffolding), a poor fit for our
+loader. Pinned at `316b95e` (501 bugs / 17 projects; 500 carry patch-derived
+locations).
 
 The unit tests do **not** need the corpus — they run against
 `tests/fixtures/bugsinpy/` (a 3-bug, 2-project fixture mirroring the real
