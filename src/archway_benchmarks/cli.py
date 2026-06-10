@@ -43,6 +43,19 @@ def _machine_slug() -> str:
     return slug or "local"
 
 
+def _default_reports_dir() -> str:
+    """Directory run reports / progress are written to.
+
+    Reports are machine-local working artifacts — and the analyses among them
+    are internal — so they belong in the private ``archway-context`` repo, not
+    this public one. Override with ``$ARCHWAY_REPORTS_DIR`` (e.g. on CI or
+    another machine).
+    """
+    return os.environ.get("ARCHWAY_REPORTS_DIR") or os.path.expanduser(
+        "~/Technical_Projects/archway-context/benchmarks/reports"
+    )
+
+
 BENCHMARKS: dict[str, Callable[[], Benchmark]] = {
     "typeevalpy": TypeEvalPyBenchmark,
     "typeevalpy_autogen": TypeEvalPyAutogenBenchmark,
@@ -140,11 +153,20 @@ def main(argv: list[str] | None = None) -> int:
         help="Machine label for the detail-report filename (run numbers are "
              "machine-local). Default: $ARCHWAY_BENCH_MACHINE or a slug of the hostname.",
     )
-    p_iter.add_argument("--out-md", default="archway_progress.md",
-                        help="Path for the markdown progress report (empty string to skip).")
+    p_iter.add_argument(
+        "--report-dir", default=None,
+        help="Directory for the run's detail + progress reports. Default: "
+             "$ARCHWAY_REPORTS_DIR or ~/Technical_Projects/archway-context/benchmarks/reports "
+             "(kept out of this public repo).",
+    )
+    p_iter.add_argument(
+        "--out-md", default=None,
+        help="Progress-report path. Default: <report-dir>/archway_progress_<machine>.md. "
+             "Pass an empty string to skip.",
+    )
     p_iter.add_argument(
         "--detail", action="store_true",
-        help="Also write a per-run detail report (outcomes, categories, TYPE_MISS patterns, translation errors) to archway_report_<machine>_run<N>.md.",
+        help="Also write a per-run detail report (outcomes, categories, TYPE_MISS patterns, translation errors) to <report-dir>/archway_report_<machine>_run<N>.md.",
     )
     p_iter.add_argument(
         "--detail-full", action="store_true",
@@ -412,16 +434,26 @@ def _cmd_iterate(args) -> int:
             flush=True,
         )
 
-        if args.out_md:
-            print(f"[iterate] writing progress to {args.out_md}", flush=True)
+        report_dir = args.report_dir or _default_reports_dir()
+        os.makedirs(report_dir, exist_ok=True)
+
+        # --out-md default (None) -> machine-tagged progress in the report dir;
+        # explicit "" skips it.
+        out_md = args.out_md
+        if out_md is None:
+            out_md = os.path.join(report_dir, f"archway_progress_{args.machine}.md")
+        if out_md:
+            print(f"[iterate] writing progress to {out_md}", flush=True)
             progress_args = argparse.Namespace(
-                engine="archway", limit=5, db=args.db, out_md=args.out_md,
+                engine="archway", limit=5, db=args.db, out_md=out_md,
             )
             _cmd_progress(progress_args)
 
         if args.detail:
             from archway_benchmarks.reports import write_report
-            detail_path = f"archway_report_{args.machine}_run{result.run_id}.md"
+            detail_path = os.path.join(
+                report_dir, f"archway_report_{args.machine}_run{result.run_id}.md"
+            )
             print(f"[iterate] writing detail report to {detail_path}", flush=True)
             write_report(args.db, result.run_id, detail_path, include_miss_listing=args.detail_full)
     except Exception as e:
@@ -672,7 +704,10 @@ def _cmd_run_report(args) -> int:
                 print("no runs in store", file=sys.stderr)
                 return 1
             run_id = row[0]
-    out_md = args.out_md or f"archway_report_run{run_id}.md"
+    out_md = args.out_md or os.path.join(
+        _default_reports_dir(), f"archway_report_run{run_id}.md"
+    )
+    os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
     out = write_report(args.db, run_id, out_md, include_miss_listing=args.full)
     print(f"wrote {out}")
     return 0
