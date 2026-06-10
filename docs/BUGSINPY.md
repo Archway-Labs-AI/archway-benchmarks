@@ -30,17 +30,31 @@ mirrors that. `.gitmodules` already declares it:
 To populate it (Ben, once the fork exists):
 
 ```bash
-# 1. fork soarsmu/BugsInPy -> Archway-Labs-AI/BugsInPy
+# 1. fork upstream -> Archway-Labs-AI/BugsInPy
 # 2. register + pin the submodule at the path .gitmodules already declares
 git submodule add git@github.com:Archway-Labs-AI/BugsInPy.git extras/BugsInPy
 git -C extras/BugsInPy checkout <pinned-commit>
 git add .gitmodules extras/BugsInPy
 ```
 
-Until then the loader raises a clear `FileNotFoundError` pointing at
-`git submodule update --init`. The unit tests do **not** need the corpus — they
-run against `tests/fixtures/bugsinpy/` (a 3-bug, 2-project fixture mirroring the
-real on-disk layout).
+**Current state (not yet done):** `extras/BugsInPy/` is presently a *direct,
+untracked clone of `soarsmu/BugsInPy`* (501 bugs / 17 projects) — the loader and
+flagger work against it, but it is **not** the pinned Archway-Labs-AI submodule
+`.gitmodules` declares. So `git submodule update --init` will currently *fail*
+(the fork does not exist yet); the loader's error message says as much. The
+remaining step is the outward one: create the fork, pin it, and commit the
+gitlink.
+
+**Pick the upstream deliberately.** `soarsmu/BugsInPy` is the stale original —
+an independent study reproduced only ~67% of its bugs, and it tracks no
+active/deprecated status. Prefer forking a better-maintained descendant
+(`nus-apr/bugs-in-py-benchmark`, the Cerberus version; or the UIUC
+`reproducing-research-projects/BugsInPy`) so the corpus you pin is the
+reproducible subset.
+
+The unit tests do **not** need the corpus — they run against
+`tests/fixtures/bugsinpy/` (a 3-bug, 2-project fixture mirroring the real
+on-disk layout).
 
 ## Layout (parallel to TypeEvalPy)
 | Concern | TypeEvalPy | BugsInPy |

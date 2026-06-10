@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 
@@ -44,7 +45,7 @@ def _prov_line(prov: dict) -> str:
 # ----- per-run report -----
 
 def render_run_report(db_path: Path | str, run_id: int) -> str:
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn:
         run = conn.execute(
             "SELECT id, created_at, benchmark, engine, notes, metadata FROM runs WHERE id = ?",
             (run_id,),
@@ -93,7 +94,7 @@ def render_progress(db_path: Path | str, *, mode: str | None = None) -> str:
     One row per (run, mode, scope) with provenance + subset, so 'subset AND full'
     are both visible rather than a single number.
     """
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn:
         runs = conn.execute(
             "SELECT id, created_at, engine, notes, metadata FROM runs "
             "WHERE benchmark = 'bugsinpy' ORDER BY id DESC"
@@ -161,7 +162,7 @@ def render_detection_by_bucket(db_path: Path | str, run_id: int, *, version: str
     version with the SAME stored detection results (no benchmark re-run)."""
     from archway_benchmarks.bugsinpy_bucketer import BUCKET_CLASSES, DIRECTIONAL_NOTE
 
-    with _connect(db_path) as conn:
+    with closing(_connect(db_path)) as conn:
         det = conn.execute(
             "SELECT bug_key, project, kind FROM bugsinpy_detection WHERE run_id = ?", (run_id,)
         ).fetchall()
