@@ -45,12 +45,14 @@ def test_detection_gt_from_removed_line(bench):
     assert 11 in loc.lines
 
 
-def test_detection_gt_pure_insertion_anchors(bench):
-    # demoproj:2 is a pure insertion at old-side line 40 -> anchored there.
+def test_detection_gt_pure_insertion_brackets(bench):
+    # demoproj:2 inserts `return lo` between buggy lines 40 (`if x < lo:`) and
+    # 41 (`return x`). A pure insertion has no removed line, so the GT brackets
+    # the gap the fix fills — both lines, not a single hunk-start anchor.
     bug = next(b for b in bench.load() if b.key == "demoproj:2")
     (loc,) = bug.bug_locations
     assert loc.file == "demoproj/util.py"
-    assert 40 in loc.lines
+    assert loc.lines == frozenset({40, 41})
 
 
 def test_multi_file_patch(bench):
@@ -90,6 +92,19 @@ def test_parse_patch_directly():
     (loc,) = _parse_patch(patch)
     assert loc.file == "m.py"
     assert loc.lines == frozenset({6})  # the removed line
+
+
+def test_parse_patch_pure_insertion_brackets():
+    # No removed line: GT = the buggy lines bracketing the insertion point
+    # (the existing line before and after), not just the hunk-start anchor.
+    patch = (
+        "diff --git a/u.py b/u.py\n"
+        "--- a/u.py\n+++ b/u.py\n"
+        "@@ -40,2 +40,3 @@\n     if x < lo:\n+        return lo\n     return x\n"
+    )
+    (loc,) = _parse_patch(patch)
+    assert loc.file == "u.py"
+    assert loc.lines == frozenset({40, 41})
 
 
 def test_manifest_metadata_only(bench):

@@ -196,31 +196,39 @@ def _parse_patch(patch: str) -> tuple[BugLocation, ...]:
 
     BugsInPy's `bug_patch.txt` is a `buggy -> fixed` diff, so the old-side
     (`-`) lines are the BUGGY locations. For each hunk we walk the old-side
-    line counter and record every removed line; a pure-insertion hunk (no `-`
-    lines) records its old-side anchor so the file/region is still captured.
-    Direction-robust at file granularity regardless of patch convention.
+    line counter and record every removed line.
+
+    A pure-insertion fix (a hunk that removes nothing — e.g. adding a missing
+    guard or branch) has no removed line to anchor on. There the bug lives *at
+    the gap* the inserted code fills, so we record the buggy-side context lines
+    immediately bracketing each insertion point (the line before and after),
+    not a single hunk-start anchor — a tighter, more faithful detection region.
+    A hunk with neither removed nor bracketing lines falls back to its old-side
+    start. Direction-robust at file granularity regardless of patch convention.
     """
     locations: list[BugLocation] = []
     current_file: str | None = None
     old_line = 0
-    hunk_lines: set[int] = set()
+    hunk_lines: set[int] = set()      # buggy lines the patch removed
+    ins_brackets: set[int] = set()    # buggy lines bracketing pure insertions
     hunk_old_start = 0
 
-    def flush(file: str | None, lines: set[int], anchor: int) -> None:
+    def flush(file: str | None, removed: set[int], brackets: set[int], anchor: int) -> None:
         if file is None:
             return
+        # Removed lines are the truest signal; for a pure insertion fall back to
+        # the lines bracketing the insertion; failing both, the hunk's anchor.
+        lines = removed or brackets or ({anchor} if anchor else set())
         if lines:
             locations.append(BugLocation(file=file, start=min(lines), end=max(lines),
                                          lines=frozenset(lines)))
-        elif anchor:
-            locations.append(BugLocation(file=file, start=anchor, end=anchor,
-                                         lines=frozenset({anchor})))
 
     for line in patch.splitlines():
         fm = _DIFF_FILE_RE.match(line)
         if fm:
-            flush(current_file, hunk_lines, hunk_old_start)
+            flush(current_file, hunk_lines, ins_brackets, hunk_old_start)
             hunk_lines = set()
+            ins_brackets = set()
             hunk_old_start = 0  # don't let this file's anchor leak into the next
             current_file = fm.group(1)
             continue
@@ -231,8 +239,9 @@ def _parse_patch(patch: str) -> tuple[BugLocation, ...]:
             continue
         hm = _HUNK_RE.match(line)
         if hm:
-            flush(current_file, hunk_lines, hunk_old_start)
+            flush(current_file, hunk_lines, ins_brackets, hunk_old_start)
             hunk_lines = set()
+            ins_brackets = set()
             old_line = int(hm.group(1))
             hunk_old_start = old_line
             continue
@@ -242,11 +251,16 @@ def _parse_patch(patch: str) -> tuple[BugLocation, ...]:
             hunk_lines.add(old_line)
             old_line += 1
         elif line.startswith('+') and not line.startswith('+++'):
-            pass  # fixed-side only; doesn't advance the buggy counter
+            # Fixed-side only; doesn't advance the buggy counter. Record the
+            # buggy lines bracketing this insertion point (used only if the hunk
+            # removes nothing): the existing line after it, and the one before.
+            ins_brackets.add(old_line)
+            if old_line - 1 >= 1:
+                ins_brackets.add(old_line - 1)
         elif line.startswith(' ') or line == '':
             old_line += 1
 
-    flush(current_file, hunk_lines, hunk_old_start)
+    flush(current_file, hunk_lines, ins_brackets, hunk_old_start)
     # merge per-file
     by_file: dict[str, set[int]] = {}
     for loc in locations:
