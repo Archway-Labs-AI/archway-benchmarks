@@ -21,15 +21,16 @@ NEW = "/tmp/bugsinpy_results_run2.json"
 MAN = "/tmp/bugsinpy_manifest_full_recovered.json"
 
 
-def main(out_json: str) -> int:
+def main(out_json: str, new_path: str = NEW, old_path: str = OLD,
+         man_path: str = MAN) -> int:
     bench = BugsInPyBenchmark()
     bugs = {b.key: b for b in bench.load()}
-    manifest = json.loads(Path(MAN).read_text())
+    manifest = json.loads(Path(man_path).read_text())
     man_by_key = {b["key"]: b for b in manifest}
-    old = json.loads(Path(OLD).read_text())
-    new = json.loads(Path(NEW).read_text())
+    old = json.loads(Path(old_path).read_text())
+    new = json.loads(Path(new_path).read_text())
 
-    done = sorted(new)  # the run #2 measured subset
+    done = sorted(new)  # the new-pin measured subset
     new_man = [man_by_key[k] for k in done if k in man_by_key]
 
     # ---- detection on the measured subset (new pin) ----
@@ -107,7 +108,7 @@ def main(out_json: str) -> int:
     }
     Path(out_json).write_text(json.dumps(summary, indent=2))
     d = summary["detection"]; cv = summary["coverage_subset"]; df = summary["diff_vs_old_pin"]
-    print(f"=== RUN #2 (pin 78e147bc) over {len(done)} measured bugs ===")
+    print(f"=== NEW={new_path} vs OLD={old_path} over {len(done)} measured bugs ===")
     print(f"DETECTION: {d['detected']} detected / {d['total_in_subset']} ({d['rate']:.2%}); "
           f"file-level {d['file_level']}; any-flag bugs {cv['bugs_with_any_flag']}.")
     print(f"COVERAGE(subset): GT-file analyzed for {cv['gt_file_analyzed_bugs']}/{len(done)} bugs.")
@@ -120,4 +121,9 @@ def main(out_json: str) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else "/tmp/bugsinpy_run2_compare.json"))
+    # usage: bugsinpy_run2_compare.py [out_json] [new_results] [old_results] [manifest]
+    _out = sys.argv[1] if len(sys.argv) > 1 else "/tmp/bugsinpy_run2_compare.json"
+    _new = sys.argv[2] if len(sys.argv) > 2 else NEW
+    _old = sys.argv[3] if len(sys.argv) > 3 else OLD
+    _man = sys.argv[4] if len(sys.argv) > 4 else MAN
+    sys.exit(main(_out, _new, _old, _man))

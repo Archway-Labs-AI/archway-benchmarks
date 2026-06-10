@@ -15,11 +15,13 @@ inflation. Whole-file translate/analyze FAILURE is NOT a flag (it happens on
 buggy AND fixed code); it is recorded separately as the coverage weakness.
 
 Per file we stage the pipeline so the weakness can be attributed:
-  parse_error    — not even valid Python at this commit (environmental)
+  parse_error      — not even valid Python at this commit (environmental)
   translate_error/translate_empty — engine can't translate the construct
-  analyze_error  — translated but analysis raised (e.g. FixpointError)
-  analyze_timeout— analysis exceeded the per-file budget (pathological)
-  analyzed       — full success; `bottom_rows` are the flags
+  translate_timeout— translate exceeded the per-file budget (translator perf/non-term;
+                     often masks the same translate_error behind a now-slow path)
+  analyze_error    — translated but analysis raised (e.g. FixpointError)
+  analyze_timeout  — analysis exceeded the per-file budget (analysis perf)
+  analyzed         — full success; `bottom_rows` are the flags
 
 Input manifest JSON : [{"key": "<proj:id>",
                         "files": [{"repo_path": "pkg/x.py", "local_path": "/abs/x.py"}]}]
@@ -95,13 +97,20 @@ def process_file(src: str) -> dict:
         return {"status": "parse_error", "bottom_rows": [], "n_bindings": 0,
                 "n_bottom": 0, "error": f"SyntaxError: {str(e)[:200]}"}
     # (b) translate
+    # NOTE: the per-file alarm (set in run()) is a SINGLE budget covering translate
+    # AND analyze. We label which phase was running when it fired, because the two are
+    # very different findings: a translate-stage timeout is a translator perf/non-term
+    # wall (often masking the same translate-error behind a now-slow path), whereas an
+    # analyze-stage timeout is an analysis-perf wall. Conflating them (the old code
+    # labeled both "analyze_timeout") hid translator-perf regressions.
     try:
         res = translate_module(src)
         if getattr(res, "morphism", None) is None:
             return {"status": "translate_empty", "bottom_rows": [], "n_bindings": 0,
                     "n_bottom": 0, "error": "no morphism"}
     except _Timeout:
-        raise
+        return {"status": "translate_timeout", "bottom_rows": [], "n_bindings": 0,
+                "n_bottom": 0, "error": "timeout during translate"}
     except BaseException as e:  # NotImplementedError/ValueError/... — engine gap
         return {"status": "translate_error", "bottom_rows": [], "n_bindings": 0,
                 "n_bottom": 0, "error": f"{type(e).__name__}: {str(e)[:200]}"}
@@ -109,7 +118,8 @@ def process_file(src: str) -> dict:
     try:
         body = analyze_json(src, "main")
     except _Timeout:
-        raise
+        return {"status": "analyze_timeout", "bottom_rows": [], "n_bindings": 0,
+                "n_bottom": 0, "error": "timeout during analyze"}
     except BaseException as e:  # FixpointError/... — engine gap
         return {"status": "analyze_error", "bottom_rows": [], "n_bindings": 0,
                 "n_bottom": 0, "error": f"{type(e).__name__}: {str(e)[:200]}"}
