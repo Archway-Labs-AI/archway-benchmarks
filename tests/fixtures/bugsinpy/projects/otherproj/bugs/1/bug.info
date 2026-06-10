@@ -1,0 +1,5 @@
+python_version="3.7.0"
+buggy_commit_id="eeee5555eeee5555eeee5555eeee5555eeee5555"
+fixed_commit_id="ffff6666ffff6666ffff6666ffff6666ffff6666"
+test_file="tests/test_a.py tests/test_b.py"
+test_list="tests/test_a.py::test_one"

@@ -1,0 +1,5 @@
+python_version="3.9.1"
+buggy_commit_id="cccc3333cccc3333cccc3333cccc3333cccc3333"
+fixed_commit_id="dddd4444dddd4444dddd4444dddd4444dddd4444"
+test_file="tests/test_util.py"
+test_list="tests/test_util.py::test_clamp"

@@ -1,3 +1,6 @@
 [submodule "extras/TypeEvalPy"]
 	path = extras/TypeEvalPy
 	url = git@github.com:Archway-Labs-AI/TypeEvalPy.git
+[submodule "extras/BugsInPy"]
+	path = extras/BugsInPy
+	url = git@github.com:Archway-Labs-AI/BugsInPy.git
