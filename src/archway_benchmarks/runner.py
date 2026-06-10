@@ -13,13 +13,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable
 
+from archway_benchmarks.benchmarks.base import AnalysisResultAdapter
 from archway_benchmarks.benchmarks.typeevalpy import (
     TypeEvalPyBenchmark,
     _location_to_record,
 )
 from archway_benchmarks.coverage import CoverageStatus, UnsupportedSourceError
 from archway_benchmarks.engines.base import AnalysisEngine, TranslationEngine
-from archway_benchmarks.benchmarks.base import AnalysisResultAdapter
 from archway_benchmarks.scoring.typeevalpy import (
     SnippetScores,
     _aggregate,
@@ -33,7 +33,6 @@ from archway_benchmarks.store import (
     record_snippet_scores,
 )
 from archway_benchmarks.types import Snippet
-
 
 CoverageProbe = Callable[[Snippet], CoverageStatus]
 
@@ -56,6 +55,7 @@ def run(
     stub_accuracy: float | None = None,
     seed: int | None = None,
     notes: str | None = None,
+    metadata: dict | None = None,
     db_path=None,
 ) -> RunResult:
     snippets = benchmark.load()
@@ -116,6 +116,7 @@ def run(
             stub_accuracy=stub_accuracy,
             seed=seed,
             notes=notes,
+            metadata=metadata,
         )
         for snip, status, err in snippet_meta:
             record_snippet(

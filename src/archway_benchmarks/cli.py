@@ -155,6 +155,27 @@ def main(argv: list[str] | None = None) -> int:
              "machine-local). Default: $ARCHWAY_BENCH_MACHINE or a slug of the hostname.",
     )
     p_iter.add_argument(
+        "--engine-pin", action="store_true",
+        help="Run against the verified engine pin (coordination/stable.json) instead of "
+             "--archway-dir's current checkout. Materializes a detached worktree at the "
+             "pinned SHA and records engine_sha + pin identity in the run's metadata.",
+    )
+    p_iter.add_argument(
+        "--pin-file", default=None,
+        help="Pin manifest path for --engine-pin (default: $ARCHWAY_PIN_FILE or the "
+             "agent-harness coordination/stable.json).",
+    )
+    p_iter.add_argument(
+        "--engine-root", default=None,
+        help="Engine repo the pinned worktree is created from (default: $ARCHWAY_ENGINE_ROOT "
+             "or ~/Technical_Projects/Archway).",
+    )
+    p_iter.add_argument(
+        "--pin-worktree", default=None,
+        help="Where to materialize the pinned engine worktree (default: "
+             "$ARCHWAY_BENCH_PIN_WORKTREE or ~/Technical_Projects/Archway-worktrees/bench-pin).",
+    )
+    p_iter.add_argument(
         "--report-dir", default=None,
         help="Directory for the run's detail + progress reports. Default: "
              "$ARCHWAY_REPORTS_DIR or ~/Technical_Projects/archway-context/benchmarks/reports "
@@ -351,6 +372,25 @@ def _cmd_iterate(args) -> int:
     Killing + restarting before each run is the simple, reliable answer.
     """
 
+    # Resolve the engine checkout: either --archway-dir as-is, or (with
+    # --engine-pin) a detached worktree materialized at the verified pin's SHA,
+    # with that SHA recorded as run provenance. A freshly-created pin worktree
+    # may need to build its hatch env on first server start, so allow longer.
+    archway_dir = args.archway_dir
+    run_metadata: dict | None = None
+    health_iters = 150  # ~30s
+    if getattr(args, "engine_pin", False):
+        from archway_benchmarks import engine_pin as _pin
+        pin = _pin.read_pin(args.pin_file or _pin.default_pin_file())
+        engine_root = args.engine_root or _pin.default_engine_root()
+        worktree = args.pin_worktree or _pin.default_pin_worktree()
+        print(f"[iterate] engine pin {pin.sha[:9]} ({pin.tag or 'untagged'}) <- {pin.source}",
+              flush=True)
+        print(f"[iterate] materializing pinned worktree at {worktree}", flush=True)
+        archway_dir = str(_pin.ensure_pin_worktree(engine_root, worktree, pin.sha))
+        run_metadata = _pin.pin_metadata(pin)
+        health_iters = 900  # ~180s — cold worktree may build its hatch env first
+
     def _server_pid() -> int | None:
         try:
             out = subprocess.check_output(
@@ -388,13 +428,13 @@ def _cmd_iterate(args) -> int:
         log = open(args.server_log, "w")
         proc = subprocess.Popen(
             ["hatch", "run", "analyze", "--repo-root", args.repo_root, "--port", str(args.port)],
-            cwd=args.archway_dir,
+            cwd=archway_dir,
             stdout=log,
             stderr=log,
             start_new_session=True,
         )
         url = f"http://localhost:{args.port}/health"
-        for _ in range(150):  # ~30s
+        for _ in range(health_iters):  # ~30s (longer when building a cold pin worktree)
             try:
                 with urllib.request.urlopen(url, timeout=1) as r:
                     if r.status == 200:
@@ -408,11 +448,15 @@ def _cmd_iterate(args) -> int:
                 )
             time.sleep(0.2)
         proc.terminate()
-        raise RuntimeError(f"analyze server didn't become healthy in 30s; see {args.server_log}")
+        raise RuntimeError(
+            f"analyze server didn't become healthy in ~{health_iters * 0.2:.0f}s; "
+            f"see {args.server_log}"
+        )
 
     print(f"[iterate] stopping any server on :{args.port}", flush=True)
     _kill_server()
-    print(f"[iterate] starting fresh server (repo-root: {args.repo_root})", flush=True)
+    print(f"[iterate] starting fresh server (cwd: {archway_dir}, repo-root: {args.repo_root})",
+          flush=True)
     _start_server()
 
     rc = 0
@@ -428,6 +472,7 @@ def _cmd_iterate(args) -> int:
             stub_accuracy=0.0,
             seed=None,
             notes=args.notes,
+            metadata=run_metadata,
             db_path=Path(args.db),
         )
         a = result.all_scores
