@@ -141,9 +141,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_iter.add_argument("--archway-dir", default=os.environ.get("ARCHWAY_DIR", os.path.expanduser("~/Projects/Archway")),
                         help="Archway repo (default: $ARCHWAY_DIR or ~/Projects/Archway).")
-    p_iter.add_argument("--repo-root",
-                        default=os.environ.get("ARCHWAY_ANALYZE_REPO_ROOT", "/Users/benoconnor/Projects/archRepos/TypeEvalPy/micro-benchmark"),
-                        help="Benchmark repo root the analysis server resolves modules under.")
+    p_iter.add_argument(
+        "--repo-root",
+        default=os.environ.get(
+            "ARCHWAY_ANALYZE_REPO_ROOT",
+            str(Path(__file__).resolve().parents[2] / "extras" / "TypeEvalPy" / "micro-benchmark"),
+        ),
+        help="Benchmark repo root the analysis server resolves modules under "
+             "(default: $ARCHWAY_ANALYZE_REPO_ROOT or extras/TypeEvalPy/micro-benchmark).",
+    )
     p_iter.add_argument("--port", type=int, default=int(os.environ.get("ARCHWAY_ANALYZE_PORT", "8788")))
     p_iter.add_argument("--server-log", default="/tmp/archway_analyze.log")
     p_iter.add_argument("--benchmark", default="typeevalpy", choices=list(BENCHMARKS))
