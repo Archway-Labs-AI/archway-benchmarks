@@ -3,7 +3,7 @@
 **Not claim-grade.** This derives a coarse bug CLASS from what the fix PATCH does,
 cheaply, to *direct* attention (which classes detection catches; which bugs need
 a human look). It classifies NOTHING definitively, runs nothing, publishes
-nothing — every output is labelled DIRECTIONAL pending Ben's validation pass.
+nothing — every output is labelled DIRECTIONAL pending manual validation.
 
 Design points the machinery guarantees:
   - Buckets are a property of the BUG (its patch), not of a benchmark run, so
@@ -41,7 +41,7 @@ BUCKET_CLASSES = (
 )
 
 DIRECTIONAL_NOTE = ("DIRECTIONAL/DIAGNOSTIC — patch-evidenced heuristic, NOT claim-grade; "
-                    "pending Ben's manual validation.")
+                    "pending manual validation.")
 
 
 @dataclass(frozen=True)

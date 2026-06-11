@@ -12,7 +12,7 @@ If this test passes you can trust that:
     snippets the translation engine attempted).
   - The covered subset's size is queryable from the store.
 
-Failure here means Ben's first real plug-in produces uninterpretable numbers.
+Failure here means the first real engine plug-in produces uninterpretable numbers.
 """
 from __future__ import annotations
 

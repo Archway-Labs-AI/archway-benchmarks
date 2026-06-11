@@ -86,7 +86,7 @@ class BugsInPyBenchmark:
 
         Filters by project and/or explicit `project:bug_id` keys. Records WHICH
         bugs are in the subset so a run can report 'subset AND full'. This does
-        NOT classify by tractability — that is Ben's separate manual pass.
+        NOT classify by tractability — that is a separate manual pass.
         """
         bugs = self.load()
         if projects is not None:

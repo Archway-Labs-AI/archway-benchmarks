@@ -1,4 +1,4 @@
-# Functor integration seam — what Ben will see on first plug-in
+# Functor integration seam — what the engine integrator will see on first plug-in
 
 > **Adapter contract — col_offset is 1-indexed.**
 > TypeEvalPy's GT files index `col_offset` starting at 1 (the first character of the
@@ -21,7 +21,7 @@
 > dashboard's inspector will show the first time the real analysis engine
 > emits results.
 
-When Ben swaps the stub engines for the real translation/analysis pair, every
+When the stub engines are swapped for the real translation/analysis pair, every
 annotation in the dashboard's inspector falls into one of four buckets — and
 the colour and column already disambiguate **plumbing bugs** (a wrong
 file/line/col/name landed at the right type-set: `LOCATION_MISS`) from
@@ -29,8 +29,8 @@ file/line/col/name landed at the right type-set: `LOCATION_MISS`) from
 mis-counts columns by one — the single most likely first failure — the
 dashboard will show a `LOCATION_MISS` row whose `Expected` and `Predicted`
 type cells are *identical*, which reads as "we got the type right but the
-coordinate plumbing missed." That one display detail is what lets Ben fix
-the right thing within minutes.
+coordinate plumbing missed." That one display detail is what lets the
+integrator fix the right thing within minutes.
 
 ## What the inspector renders, by bucket
 

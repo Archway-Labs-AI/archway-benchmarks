@@ -66,7 +66,7 @@ git clone git@github.com:Archway-Labs-AI/archway-benchmarks.git
 cd archway-benchmarks
 git submodule update --init --recursive
 
-# Install the harness (Python 3.11+; 3.9+ works for the CLI without the dashboard)
+# Install the harness (Python 3.11+)
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 

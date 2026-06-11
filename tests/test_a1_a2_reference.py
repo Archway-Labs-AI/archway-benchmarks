@@ -4,10 +4,10 @@ Predicts every A1 (int/str) + A2 (callable) GT annotation correctly and
 leaves A3–A5 unpredicted. Drives the real adapter → real scorer (NOT the
 noise stub) so the pinned numbers reflect end-to-end harness behaviour.
 
-## How Ben uses this
+## How this reference is used
 
-Diff his real expression-typer's first pass against these numbers:
-  - **below the fixture**  -> the gap is his rule logic.
+Diff the real expression-typer's first pass against these numbers:
+  - **below the fixture**  -> the gap is the rule logic.
   - **at/above the fixture** -> the harness + coordinate plumbing are sound.
 
 ## Pinned actuals (current GT, commit ea13026d)

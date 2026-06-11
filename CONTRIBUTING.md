@@ -1,6 +1,6 @@
 # Contributing to Archway Benchmarks
 
-Thank you for your interest in contributing! This document covers development setup and how to add a new benchmark suite.
+Thank you for your interest in contributing! This document covers development setup and the high-level shape for adding a new benchmark.
 
 ## Table of Contents
 
@@ -8,14 +8,14 @@ Thank you for your interest in contributing! This document covers development se
 - [Development Setup](#development-setup)
 - [Running Tests](#running-tests)
 - [Code Style](#code-style)
-- [Adding a Benchmark Suite](#adding-a-benchmark-suite)
+- [Adding a Benchmark](#adding-a-benchmark)
 - [Pull Request Process](#pull-request-process)
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.11 or higher
 - Git
 - The static analysis tools you want to benchmark against (installed in their own envs)
 
@@ -24,6 +24,7 @@ Thank you for your interest in contributing! This document covers development se
 ```bash
 git clone git@github.com:Archway-Labs-AI/archway-benchmarks.git
 cd archway-benchmarks
+git submodule update --init --recursive
 ```
 
 ## Development Setup
@@ -47,7 +48,7 @@ This repo uses standard Python conventions consistent with the rest of Archway:
 - **Line length:** 100
 - **Linter:** ruff (`ruff check src/`)
 - **Type checker:** mypy
-- **Target:** Python 3.9+
+- **Target:** Python 3.11+
 
 Run the lint suite before pushing:
 
@@ -55,33 +56,25 @@ Run the lint suite before pushing:
 ruff check src/ --select E,F,W
 ```
 
-## Adding a Benchmark Suite
+## Adding a Benchmark
 
-Create a new directory under `suites/<short-name>/` with:
+Each integrated benchmark lives in two places:
 
-```
-suites/<name>/
-├── README.md              # overview, target version, bug class
-├── expected.json          # ground-truth Archway findings
-├── cached-results/        # gitignored — raw tool JSON
-│   ├── bandit.json
-│   ├── mypy.json
-│   └── pylint.json
-└── tools/                 # human-readable summaries
-    ├── bandit-results.md
-    ├── mypy-results.md
-    └── pylint-results.md
-```
+- **The corpus and its official scorer** as a pinned git submodule under `extras/<name>/`. Vendoring keeps GT pinned to a known commit so scores are reproducible, and lets us re-run the official scorer rather than re-implementing it.
+- **The harness adapter** under `src/archway_benchmarks/benchmarks/<name>.py` and `src/archway_benchmarks/scoring/<name>.py`. The adapter loads snippets into the harness's `Snippet`/`Annotation` model and wires the benchmark's own scorer behind the `Benchmark.score` API.
 
-Document in the suite's `README.md`:
+`extras/TypeEvalPy/` is the worked example — both the loader (`benchmarks/typeevalpy.py`) and the scorer wrappers (`scoring/typeevalpy.py`, `scoring/typeevalpy_lenient.py`) demonstrate the pattern.
 
-1. **Target** — the OSS project and exact version/commit.
-2. **Bug class** — what kind of bug this suite tests for.
-3. **Tool commands** — exact invocations used to produce each `cached-results/*.json`.
-4. **What conventional tools miss** — one paragraph per tool explaining the gap.
+Document new benchmarks in `docs/` with:
+
+1. **Target** — what the benchmark measures and where it came from.
+2. **Vendoring choice** — which upstream commit/fork the submodule pins to and why.
+3. **Scoring** — which of the benchmark's scoring modes are wired in and how to invoke them via `archway-bench`.
+
+`docs/BUGSINPY.md` is the worked example for those notes.
 
 ## Pull Request Process
 
-1. Branch from `main` with a descriptive name (e.g. `suite/django-orm-leaks`).
-2. Commit suite content + tool result summaries; do not commit `cached-results/*.json`.
-3. Open a PR against `main` with the suite's README excerpt as the PR description.
+1. Branch from `main` with a descriptive name (e.g. `feat/pycg-loader`).
+2. Open a PR against `main` with a clear summary and test plan.
+3. CI runs tests + ruff + gitleaks; all must pass.

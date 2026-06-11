@@ -4,7 +4,7 @@ Exposes, for every bug, the fix-shape facts a LATER pre-classification pass
 needs to subset by bug shape: project, files touched, lines changed, number of
 failing tests, python version, buggy/fixed commits. This module deliberately
 does NOT classify bugs, decide tractability, or run anything — it only surfaces
-metadata. Classification is Ben's separate manual-validation pass.
+metadata. Classification is a separate manual-validation pass.
 
 Regenerate with:  `archway-bench bugsinpy-manifest`
 (or `python -m archway_benchmarks.bugsinpy_manifest`).

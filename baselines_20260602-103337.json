@@ -207,7 +207,7 @@
         }
       ],
       "published_label": "Paper \u00b7 14 Jan 2024 \u00b7 stale GT",
-      "published_source": "vendor/TypeEvalPy/docs/webview/paper_tables/paper_table_1.csv (exact match) + paper_table_3.csv (sound/complete). EXPERIMENT_RUN_ON in analysis_leaderboard.py is hardcoded to 14 Jan 2024 \u2014 these numbers were scored against the GT snapshot that existed then. GT has been updated since (April 2026 fix in commit 3719de11); use the Regenerated column for like-for-like comparison."
+      "published_source": "extras/TypeEvalPy/docs/webview/paper_tables/paper_table_1.csv (exact match) + paper_table_3.csv (sound/complete). EXPERIMENT_RUN_ON in analysis_leaderboard.py is hardcoded to 14 Jan 2024 \u2014 these numbers were scored against the GT snapshot that existed then. GT has been updated since (April 2026 fix in commit 3719de11); use the Regenerated column for like-for-like comparison."
     },
     "typeevalpy_autogen": {
       "tools": [
@@ -394,7 +394,7 @@
         }
       ],
       "published_label": "Published 30 Aug 2024 (stale GT + different generation)",
-      "published_source": "vendor/TypeEvalPy/README.md (table generated 30 Aug 2024 against a 78,373-annotation Autogen run; our regenerated Autogen has 76,844 annotations \u2014 denominators don't even match)"
+      "published_source": "extras/TypeEvalPy/README.md (table generated 30 Aug 2024 against a 78,373-annotation Autogen run; our regenerated Autogen has 76,844 annotations \u2014 denominators don't even match)"
     }
   }
 }

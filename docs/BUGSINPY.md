@@ -63,7 +63,7 @@ on-disk layout).
 tests, `files_touched`, `n_files_touched`, `lines_changed`, and the
 patch-derived `bug_locations` (the detection ground truth). It makes **no
 tractability judgment** — `archway-bench bugsinpy-manifest` dumps this metadata
-so Ben's separate manual-validation pass can subset by bug shape.
+so a separate manual-validation pass can subset by bug shape.
 
 ## Provenance + subsets (the honesty discipline)
 Every run records, in `runs.metadata`: `mode`, `engine_sha`, `corpus_commit`,
@@ -101,7 +101,7 @@ archway-bench bugsinpy-manifest -o bugsinpy_manifest.json
 `bugsinpy_bucketer.py` derives a coarse bug **class** from what the fix PATCH
 does — `none_or_null` · `type_check` · `missing_branch` · `exception_handling` ·
 `api_misuse_lib` · `other` — to *direct* attention, not to make a claim. Every
-output is labelled **DIRECTIONAL/DIAGNOSTIC pending Ben's validation**.
+output is labelled **DIRECTIONAL/DIAGNOSTIC pending manual validation**.
 
 - **Patch-evidenced**: e.g. a fix that adds `is None` → `none_or_null`; adds
   `except` → `exception_handling`; adds `isinstance(` → `type_check`. A merely
@@ -123,10 +123,11 @@ archway-bench bugsinpy-adjudicate --version v1      # the needs-adjudication que
 archway-bench bugsinpy-bucket-report --run <N> --version v1   # detection rate × class
 ```
 
-It classifies **nothing definitively**. Tractability decisions remain Ben's
+It classifies **nothing definitively**. Tractability decisions remain a
 separate manual pass.
 
 ## Explicitly out of scope (not in this layer)
 Running the benchmark / producing any number; classifying bugs definitively into
-tractable classes (Ben's manual pass — the bucketer is directional input to it,
-not a substitute); the IR-vs-no-IR repair experiment; committing any result.
+tractable classes (a separate manual pass — the bucketer is directional input
+to it, not a substitute); the IR-vs-no-IR repair experiment; committing any
+result.

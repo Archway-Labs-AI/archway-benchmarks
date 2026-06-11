@@ -239,7 +239,7 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
             tools_with_buckets = [t for t in payload["tools"] if t.get("bucket_kind")]
             if tools_with_buckets:
                 lines.append(
-                    "\n### Rule buckets · A1–A5 × kind (lenient) — Ben's build-time triage view\n"
+                    "\n### Rule buckets · A1–A5 × kind (lenient) — build-time triage view\n"
                 )
                 lines.append(
                     "Cell: caught / GT-total. Buckets follow the expression-typer build order. "
@@ -297,8 +297,8 @@ def write_markdown(report: dict[str, Any], md_path: Path) -> None:
     lines.append("\n## Honest summary\n")
     lines.append(_summary_paragraph(report))
 
-    # Pointer block for Ben — what to read first, what to beat.
-    lines.append("\n## For Ben — starting points\n")
+    # Pointer block for engine integrators — what to read first, what to beat.
+    lines.append("\n## Starting points\n")
     lines.append(
         "- **Live rule-bucket scoreboard** is on every run's dashboard page "
         "(`/runs/<id>`), section *Rule buckets · A1–A5 × kind* — read this "

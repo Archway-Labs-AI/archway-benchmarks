@@ -17,7 +17,7 @@ defects** planted across all three TypeEvalPy kinds:
 After the seam runs, the inspector (driven off the store) must classify
 each annotation into exactly the right bucket. If a planted plumbing
 defect surfaces as TYPE_MISS, the seam test fails — the inspector would
-be telling Ben the wrong story about his first real plug-in.
+be telling the integrator the wrong story about their first real plug-in.
 """
 from __future__ import annotations
 
