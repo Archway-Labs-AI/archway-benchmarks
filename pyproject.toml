@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "archway-benchmarks"
 version = "0.1.0"
-description = "Static analysis benchmark suites for Archway's categorical IR"
+description = "Benchmark harness for Archway and competitor static-analysis tools — score, reproduce, compare."
 readme = "README.md"
 license = {text = "Apache-2.0"}
 requires-python = ">=3.11"

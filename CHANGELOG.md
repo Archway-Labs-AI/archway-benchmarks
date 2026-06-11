@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+- Team-internal benchmark workflow extracted to the private `Archway-Labs-AI/archway-bench-internal` package: `iterate` / `progress` / `report` subcommands, `engine_pin.py` (verified-pin worktree machinery), `reports.py` (per-run detail markdown writer), `test_engine_pin.py`, and the nine `scripts/bugsinpy_*.py` investigation probes. The public CLI now focuses on its actual purpose: score benchmarks, reproduce baselines, browse runs. Internal users install the sibling package: `pip install -e ../archway-bench-internal` → `archway-bench-i iterate ...`.
+
+### Changed
+- Public CLI surface is now: `run` / `score` / `runs` / `export` / `serve` / `manifest` / `regenerate-baselines` / `baselines-report` / `bugsinpy-*` (manifest|detect|repair|progress|bucket|adjudicate|bucket-report|flagger).
+- Submodule renamed from `vendor/TypeEvalPy/` to `extras/TypeEvalPy/` and retargeted to the `Archway-Labs-AI/TypeEvalPy` fork (our own modifications live on feature branches there; `main` tracks upstream).
+- CONTRIBUTING.md rewritten to describe the actual benchmark layout (`extras/<name>/` + adapter under `benchmarks/<name>.py`); the unused `suites/` scaffold removed.
+- Python version baseline tightened to 3.11+ across pyproject, README, CONTRIBUTING, and CI.
+- License declaration in pyproject corrected from MIT to Apache-2.0 to match LICENSE / NOTICE / README.
+
 ### Added
 - BugsInPy benchmark machinery (parallel to TypeEvalPy; **machinery only — nothing run, classified, or scored**): submodule declaration at `extras/BugsInPy/`, a per-bug loader (`benchmarks/bugsinpy.py`) exposing project / commits / patch-derived bug locations / failing tests / fix-shape metadata, a **both-modes scorer** (`scoring/bugsinpy.py` — detection vs. known location, repair via test-suite-passes), a repair-runner engine seam (`engines/bugsinpy.py`), `store.py` `bugsinpy_*` tables sharing `runs` with provenance (mode/engine_sha/corpus_commit/subset), a progress report (`bugsinpy_report.py`), a metadata-only manifest (`bugsinpy_manifest.py`), and CLI `bugsinpy-manifest|detect|repair|progress`. See `docs/BUGSINPY.md`.
 - BugsInPy **DIRECTIONAL bucketer** (`bugsinpy_bucketer.py`; diagnostic, **not claim-grade**): patch-evidenced bug class (`none_or_null` / `type_check` / `missing_branch` / `exception_handling` / `api_misuse_lib` / `other`) with per-bug `confidence` (high/low) + `BUCKETER_VERSION`; stored re-computably keyed by `(bug_key, version)` in `bugsinpy_buckets` so re-running re-buckets stored detection results WITHOUT a benchmark re-run; detection rate reportable × class; low-confidence + `api_misuse_lib` surfaced as a needs-adjudication queue. CLI `bugsinpy-bucket|adjudicate|bucket-report`.
