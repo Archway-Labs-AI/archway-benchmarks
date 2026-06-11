@@ -1,20 +1,13 @@
-"""Top-level CLI: `archway-bench run | score | export | serve | manifest`.
+"""Top-level CLI: `archway-bench run | score | runs | export | serve | manifest | regenerate-baselines | baselines-report` (plus `bugsinpy-*`).
 
-Engines and benchmarks are pluggable by name. Today the only benchmark is
-TypeEvalPy and the only engine is the stub pair (real engines slot in via
-the registries below).
+Engines and benchmarks are pluggable by name. The harness ships a stub backend
+that exercises the full pipeline without requiring a real analysis engine.
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
-import signal
-import subprocess
 import sys
-import time
-import urllib.error
-import urllib.request
 from pathlib import Path
 from typing import Callable
 
@@ -26,34 +19,6 @@ from archway_benchmarks.engines.stubs import make_stub_pair
 from archway_benchmarks.outcome import Outcome
 from archway_benchmarks.runner import run as run_pipeline
 from archway_benchmarks.store import connect, get_scores, list_annotations, list_runs
-
-
-def _machine_slug() -> str:
-    """Filename-safe machine label for per-machine report names.
-
-    Run numbers are machine-local (the run DBs aren't merged across machines),
-    so reports are tagged with the machine to avoid cross-machine collisions.
-    Honours ``$ARCHWAY_BENCH_MACHINE``; otherwise derives a slug from the short
-    hostname (e.g. ``Bens-Mac-mini.local`` -> ``bens-mac-mini``).
-    """
-    import re
-    import socket
-
-    label = os.environ.get("ARCHWAY_BENCH_MACHINE") or socket.gethostname().split(".", 1)[0]
-    slug = re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-").lower()
-    return slug or "local"
-
-
-def _default_reports_dir() -> str:
-    """Directory run reports / progress are written to.
-
-    Reports are machine-local working artifacts; the default lives outside
-    the repo so they don't accumulate in source control. Override with
-    ``$ARCHWAY_REPORTS_DIR`` to route elsewhere (e.g. on CI or another machine).
-    """
-    return os.environ.get("ARCHWAY_REPORTS_DIR") or os.path.expanduser(
-        "~/.archway-benchmarks/reports"
-    )
 
 
 BENCHMARKS: dict[str, Callable[[], Benchmark]] = {
@@ -71,8 +36,7 @@ def _build_stub_engines(benchmark: Benchmark, accuracy: float, seed: int | None)
 def _build_archway_engines(benchmark: Benchmark, accuracy: float, seed: int | None):
     """Construct the Archway engine triple. ``accuracy``/``seed`` are unused
     (kept for signature parity with the stub factory). Assumes the analysis
-    dev server is running locally on its default port (``hatch run analyze``
-    in ``~/Projects/Archway``)."""
+    dev server is running locally on its default port."""
     from archway_benchmarks.benchmarks.archway_adapter import ArchwayAnalysisResultAdapter
     from archway_benchmarks.engines.archway import ArchwayAnalysisEngine, ArchwayTranslationEngine
 
@@ -134,85 +98,6 @@ def main(argv: list[str] | None = None) -> int:
     p_manifest = sub.add_parser("manifest", help="Regenerate the corpus manifest")
     p_manifest.add_argument("--output", "-o", default="corpus_manifest.json")
 
-    p_iter = sub.add_parser(
-        "iterate",
-        help="One-shot: restart the Archway analysis server, run the harness, update the progress report, stop the server. The lifecycle wrap ensures every run uses freshly loaded analysis code — no staleness from the long-running server holding pre-edit modules.",
-    )
-    p_iter.add_argument("--archway-dir", default=os.environ.get("ARCHWAY_DIR", os.path.expanduser("~/Projects/Archway")),
-                        help="Archway repo (default: $ARCHWAY_DIR or ~/Projects/Archway).")
-    p_iter.add_argument(
-        "--repo-root",
-        default=os.environ.get(
-            "ARCHWAY_ANALYZE_REPO_ROOT",
-            str(Path(__file__).resolve().parents[2] / "extras" / "TypeEvalPy" / "micro-benchmark"),
-        ),
-        help="Benchmark repo root the analysis server resolves modules under "
-             "(default: $ARCHWAY_ANALYZE_REPO_ROOT or extras/TypeEvalPy/micro-benchmark).",
-    )
-    p_iter.add_argument("--port", type=int, default=int(os.environ.get("ARCHWAY_ANALYZE_PORT", "8788")))
-    p_iter.add_argument("--server-log", default="/tmp/archway_analyze.log")
-    p_iter.add_argument("--benchmark", default="typeevalpy", choices=list(BENCHMARKS))
-    p_iter.add_argument("--db", default="runs.db")
-    p_iter.add_argument("--notes", default=None)
-    p_iter.add_argument(
-        "--machine", default=_machine_slug(),
-        help="Machine label for the detail-report filename (run numbers are "
-             "machine-local). Default: $ARCHWAY_BENCH_MACHINE or a slug of the hostname.",
-    )
-    p_iter.add_argument(
-        "--engine-pin", action="store_true",
-        help="Run against a pinned engine SHA (read from --pin-file) instead of "
-             "--archway-dir's current checkout. Materializes a detached worktree at the "
-             "pinned SHA and records engine_sha + pin identity in the run's metadata.",
-    )
-    p_iter.add_argument(
-        "--pin-file", default=None,
-        help="JSON pin file for --engine-pin (default: $ARCHWAY_PIN_FILE).",
-    )
-    p_iter.add_argument(
-        "--engine-root", default=None,
-        help="Engine repo the pinned worktree is created from (default: $ARCHWAY_ENGINE_ROOT).",
-    )
-    p_iter.add_argument(
-        "--pin-worktree", default=None,
-        help="Where to materialize the pinned engine worktree (default: $ARCHWAY_BENCH_PIN_WORKTREE).",
-    )
-    p_iter.add_argument(
-        "--report-dir", default=None,
-        help="Directory for the run's detail + progress reports. Default: "
-             "$ARCHWAY_REPORTS_DIR or ~/.archway-benchmarks/reports.",
-    )
-    p_iter.add_argument(
-        "--out-md", default=None,
-        help="Progress-report path. Default: <report-dir>/archway_progress_<machine>.md. "
-             "Pass an empty string to skip.",
-    )
-    p_iter.add_argument(
-        "--detail", action="store_true",
-        help="Also write a per-run detail report (outcomes, categories, TYPE_MISS patterns, translation errors) to <report-dir>/archway_report_<machine>_run<N>.md.",
-    )
-    p_iter.add_argument(
-        "--detail-full", action="store_true",
-        help="With --detail, include the full per-annotation non-EXACT listing.",
-    )
-
-    p_progress = sub.add_parser(
-        "progress",
-        help="Show recent runs with score deltas — for tracking iterative improvements.",
-    )
-    p_progress.add_argument(
-        "--engine",
-        default="archway",
-        help="Engine prefix to filter on (default: archway). Pass empty string for all runs.",
-    )
-    p_progress.add_argument("--limit", type=int, default=5, help="Number of recent runs to show on stdout (the markdown report always includes the full history).")
-    p_progress.add_argument("--db", default="runs.db")
-    p_progress.add_argument(
-        "--out-md",
-        default=None,
-        help="If set, also write a Markdown progress report (full history) to this path.",
-    )
-
     # BugsInPy (parallel benchmark): bugsinpy-manifest|detect|repair|progress.
     bugsinpy_cli.register(sub)
 
@@ -245,24 +130,6 @@ def main(argv: list[str] | None = None) -> int:
     p_report.add_argument("--out-md", default=None)
     p_report.add_argument("--out-json", default=None)
 
-    p_run_report = sub.add_parser(
-        "report",
-        help="Write a per-run detail report (outcomes, categories, TYPE_MISS patterns, translation errors).",
-    )
-    p_run_report.add_argument(
-        "run_id", type=int, nargs="?",
-        help="Run id to report on. Defaults to the most recent run in the store.",
-    )
-    p_run_report.add_argument("--db", default="runs.db")
-    p_run_report.add_argument(
-        "--out-md", default=None,
-        help="Output path (default: archway_report_run<N>.md in cwd).",
-    )
-    p_run_report.add_argument(
-        "--full", action="store_true",
-        help="Include the full per-annotation non-EXACT listing (can be long).",
-    )
-
     args = parser.parse_args(argv)
 
     if args.cmd is None:
@@ -280,10 +147,6 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_serve(args)
     if args.cmd == "manifest":
         return _cmd_manifest(args)
-    if args.cmd == "iterate":
-        return _cmd_iterate(args)
-    if args.cmd == "progress":
-        return _cmd_progress(args)
     bugsinpy_rv = bugsinpy_cli.dispatch(args)
     if bugsinpy_rv is not None:
         return bugsinpy_rv
@@ -291,8 +154,6 @@ def main(argv: list[str] | None = None) -> int:
         return _cmd_regenerate(args)
     if args.cmd == "baselines-report":
         return _cmd_report(args)
-    if args.cmd == "report":
-        return _cmd_run_report(args)
     parser.print_help()
     return 1
 
@@ -361,294 +222,6 @@ def _cmd_runs(args) -> int:
                 f"stub={r.stub_accuracy}  seed={r.seed}"
             )
     return 0
-
-
-def _cmd_iterate(args) -> int:
-    """One-shot: restart the analysis server, run, write progress, stop the server.
-
-    The point of the lifecycle wrap is to guarantee every run uses freshly
-    loaded analysis code. A long-running server holds Python module state
-    in memory, so source edits made after server start aren't reflected in
-    its responses — that's the staleness we've already been bitten by.
-    Killing + restarting before each run is the simple, reliable answer.
-    """
-
-    # Resolve the engine checkout: either --archway-dir as-is, or (with
-    # --engine-pin) a detached worktree materialized at the verified pin's SHA,
-    # with that SHA recorded as run provenance. A freshly-created pin worktree
-    # may need to build its hatch env on first server start, so allow longer.
-    archway_dir = args.archway_dir
-    run_metadata: dict | None = None
-    health_iters = 150  # ~30s
-    if getattr(args, "engine_pin", False):
-        from archway_benchmarks import engine_pin as _pin
-        pin = _pin.read_pin(args.pin_file or _pin.default_pin_file())
-        engine_root = args.engine_root or _pin.default_engine_root()
-        worktree = args.pin_worktree or _pin.default_pin_worktree()
-        print(f"[iterate] engine pin {pin.sha[:9]} ({pin.tag or 'untagged'}) <- {pin.source}",
-              flush=True)
-        print(f"[iterate] materializing pinned worktree at {worktree}", flush=True)
-        archway_dir = str(_pin.ensure_pin_worktree(engine_root, worktree, pin.sha))
-        run_metadata = _pin.pin_metadata(pin)
-        health_iters = 900  # ~180s — cold worktree may build its hatch env first
-
-    def _server_pid() -> int | None:
-        try:
-            out = subprocess.check_output(
-                ["lsof", "-ti", f":{args.port}"], stderr=subprocess.DEVNULL
-            )
-        except subprocess.CalledProcessError:
-            return None
-        for line in out.decode().splitlines():
-            line = line.strip()
-            if line:
-                try:
-                    return int(line.split()[0])
-                except ValueError:
-                    pass
-        return None
-
-    def _kill_server() -> None:
-        pid = _server_pid()
-        if pid is None:
-            return
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            return
-        for _ in range(50):  # ~5s
-            if _server_pid() is None:
-                return
-            time.sleep(0.1)
-        try:
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-
-    def _start_server() -> subprocess.Popen:
-        log = open(args.server_log, "w")
-        proc = subprocess.Popen(
-            ["hatch", "run", "analyze", "--repo-root", args.repo_root, "--port", str(args.port)],
-            cwd=archway_dir,
-            stdout=log,
-            stderr=log,
-            start_new_session=True,
-        )
-        url = f"http://localhost:{args.port}/health"
-        for _ in range(health_iters):  # ~30s (longer when building a cold pin worktree)
-            try:
-                with urllib.request.urlopen(url, timeout=1) as r:
-                    if r.status == 200:
-                        return proc
-            except (urllib.error.URLError, TimeoutError, OSError):
-                pass
-            if proc.poll() is not None:
-                raise RuntimeError(
-                    f"analyze server exited before becoming ready (rc={proc.returncode}); "
-                    f"see {args.server_log}"
-                )
-            time.sleep(0.2)
-        proc.terminate()
-        raise RuntimeError(
-            f"analyze server didn't become healthy in ~{health_iters * 0.2:.0f}s; "
-            f"see {args.server_log}"
-        )
-
-    print(f"[iterate] stopping any server on :{args.port}", flush=True)
-    _kill_server()
-    print(f"[iterate] starting fresh server (cwd: {archway_dir}, repo-root: {args.repo_root})",
-          flush=True)
-    _start_server()
-
-    rc = 0
-    try:
-        bench = BENCHMARKS[args.benchmark]()
-        translator, analyzer, adapter = ENGINES["archway"](bench, 0.0, None)
-        print(f"[iterate] running {args.benchmark} / archway", flush=True)
-        result = run_pipeline(
-            benchmark=bench,
-            translator=translator,
-            analyzer=analyzer,
-            adapter=adapter,
-            stub_accuracy=0.0,
-            seed=None,
-            notes=args.notes,
-            metadata=run_metadata,
-            db_path=Path(args.db),
-        )
-        a = result.all_scores
-        print(
-            f"[iterate] run #{result.run_id}  "
-            f"exact {a.exact_total}/{a.total_annotations} "
-            f"({a.exact_total / a.total_annotations:.1%})  "
-            f"processed {a.files_processed}/{a.total_snippets}  "
-            f"sound {a.files_sound}/{a.total_snippets}  "
-            f"complete {a.files_complete}/{a.total_snippets}",
-            flush=True,
-        )
-
-        report_dir = args.report_dir or _default_reports_dir()
-        os.makedirs(report_dir, exist_ok=True)
-
-        # --out-md default (None) -> machine-tagged progress in the report dir;
-        # explicit "" skips it.
-        out_md = args.out_md
-        if out_md is None:
-            out_md = os.path.join(report_dir, f"archway_progress_{args.machine}.md")
-        if out_md:
-            print(f"[iterate] writing progress to {out_md}", flush=True)
-            progress_args = argparse.Namespace(
-                engine="archway", limit=5, db=args.db, out_md=out_md,
-            )
-            _cmd_progress(progress_args)
-
-        if args.detail:
-            from archway_benchmarks.reports import write_report
-            detail_path = os.path.join(
-                report_dir, f"archway_report_{args.machine}_run{result.run_id}.md"
-            )
-            print(f"[iterate] writing detail report to {detail_path}", flush=True)
-            write_report(args.db, result.run_id, detail_path, include_miss_listing=args.detail_full)
-    except Exception as e:
-        print(f"[iterate] failed: {type(e).__name__}: {e}", file=sys.stderr)
-        rc = 1
-    finally:
-        print(f"[iterate] stopping server", flush=True)
-        _kill_server()
-
-    return rc
-
-
-def _cmd_progress(args) -> int:
-    """List recent runs (newest first) with score deltas vs the previous run.
-
-    Defaults to the ``archway`` engine. Stdout shows the most recent
-    ``--limit`` runs (one line each) for terminal use; ``--out-md`` writes
-    a committable Markdown report containing the full history.
-    """
-    with connect(Path(args.db)) as conn:
-        runs = list_runs(conn)
-        prefix = args.engine.lower().strip()
-        if prefix:
-            runs = [r for r in runs if r.engine.lower().startswith(prefix)]
-        if not runs:
-            label = f"engine prefix {args.engine!r}" if prefix else "any engine"
-            print(f"(no runs found for {label} in {args.db})")
-            return 0
-        scores_by_run = {r.id: get_scores(conn, r.id) for r in runs}
-
-    deltas = _compute_progress_deltas(runs, scores_by_run)
-
-    # stdout: most recent --limit runs, one line each
-    for r in runs[: args.limit]:
-        print(_progress_line(r, scores_by_run, deltas))
-
-    if args.out_md:
-        out_path = Path(args.out_md)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(_progress_markdown(runs, scores_by_run, deltas, args.engine))
-        print(f"\nwrote {out_path}")
-    return 0
-
-
-def _compute_progress_deltas(runs, scores_by_run):
-    """For each run id, deltas (exact, files_processed) vs the next-older run."""
-    chronological = list(reversed(runs))  # oldest -> newest
-    prev_exact = prev_proc = None
-    deltas: dict[int, tuple[int | None, int | None]] = {}
-    for r in chronological:
-        sc = scores_by_run.get(r.id, {}).get("all")
-        ex = sc["exact_total"] if sc else None
-        fp = sc.get("files_processed") if sc else None
-        dx = (ex - prev_exact) if (ex is not None and prev_exact is not None) else None
-        dp = (fp - prev_proc) if (fp is not None and prev_proc is not None) else None
-        deltas[r.id] = (dx, dp)
-        if ex is not None:
-            prev_exact = ex
-        if fp is not None:
-            prev_proc = fp
-    return deltas
-
-
-def _progress_line(r, scores_by_run, deltas) -> str:
-    sc = scores_by_run.get(r.id, {}).get("all")
-    if not sc:
-        return f"#{r.id:<3}  {r.created_at[:19]}  (no scores stored)"
-    dx, dp = deltas.get(r.id, (None, None))
-    dx_s = f" ({dx:+d})" if dx is not None else ""
-    dp_s = f" ({dp:+d})" if dp is not None else ""
-    note = f'  "{r.notes}"' if r.notes else ""
-    fp = sc.get("files_processed")
-    proc_s = f"  processed {fp}/{sc['total_snippets']}{dp_s}" if fp is not None else ""
-    return (
-        f"#{r.id:<3}  {r.created_at[:19]}  "
-        f"exact {sc['exact_total']}/{sc['total_annotations']}{dx_s}{proc_s}  "
-        f"sound {sc['files_sound']}/{sc['total_snippets']}  "
-        f"complete {sc['files_complete']}/{sc['total_snippets']}{note}"
-    )
-
-
-def _progress_markdown(runs, scores_by_run, deltas, engine_filter: str) -> str:
-    """Render the progress report as Markdown. Full history, newest-first."""
-    from datetime import datetime, timezone
-
-    lines: list[str] = ["# Archway on TypeEvalPy — Progress", ""]
-    # Headline: most recent run with scores
-    latest = next((r for r in runs if scores_by_run.get(r.id, {}).get("all")), None)
-    if latest is not None:
-        sc = scores_by_run[latest.id]["all"]
-        pct = sc["exact_total"] / sc["total_annotations"] * 100 if sc["total_annotations"] else 0.0
-        fp = sc.get("files_processed")
-        proc_part = f" · {fp} / {sc['total_snippets']} files processed" if fp is not None else ""
-        lines.append(
-            f"**Current:** {sc['exact_total']} / {sc['total_annotations']} exact ({pct:.1f}%)"
-            f"{proc_part}"
-            f" · {sc['files_sound']} / {sc['total_snippets']} sound"
-            f" · {sc['files_complete']} / {sc['total_snippets']} complete"
-            f" · run #{latest.id} ({latest.created_at[:19]})"
-        )
-        lines.append("")
-    label = engine_filter if engine_filter.strip() else "(all engines)"
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    lines.append(f"_Engine filter: `{label}` · Last updated {now}_")
-    lines.append("")
-    lines.append("## History")
-    lines.append("")
-    lines.append(
-        "_Columns: **Exact** = annotations matching GT type set; "
-        "**Processed** = files where the analysis emitted predictions (didn't error); "
-        "**Sound** = files where every GT entry was answered correctly (full coverage); "
-        "**Complete** = files where every prediction was correct (no wrong types). "
-        "Note: Complete is inflated by errored files producing zero predictions, which "
-        "vacuously satisfy the metric._"
-    )
-    lines.append("")
-    lines.append("| # | Created | Exact | Δ | Processed | Δ | Sound | Complete | Notes |")
-    lines.append("|---:|---|---:|---:|---:|---:|---:|---:|---|")
-    escape_pipe = "\\|"
-    for r in runs:
-        sc = scores_by_run.get(r.id, {}).get("all")
-        notes_raw = r.notes or ("_(no scores stored)_" if not sc else "_(no notes)_")
-        note = notes_raw.replace("|", escape_pipe)
-        if not sc:
-            lines.append(
-                f"| {r.id} | {r.created_at[:19]} | — | — | — | — | — | — | {note} |"
-            )
-            continue
-        dx, dp = deltas.get(r.id, (None, None))
-        dx_s = f"{dx:+d}" if dx is not None else "—"
-        dp_s = f"{dp:+d}" if dp is not None else "—"
-        fp = sc.get("files_processed")
-        proc_s = f"{fp}/{sc['total_snippets']}" if fp is not None else "—"
-        lines.append(
-            f"| {r.id} | {r.created_at[:19]} | "
-            f"{sc['exact_total']}/{sc['total_annotations']} | {dx_s} | "
-            f"{proc_s} | {dp_s} | "
-            f"{sc['files_sound']}/{sc['total_snippets']} | "
-            f"{sc['files_complete']}/{sc['total_snippets']} | {note} |"
-        )
-    lines.append("")
-    return "\n".join(lines) + "\n"
 
 
 def _cmd_export(args) -> int:
@@ -743,27 +316,6 @@ def _cmd_regenerate(args) -> int:
 
     script = Path(__file__).resolve().parents[2] / "scripts" / "regenerate_baselines.py"
     return subprocess.call([sys.executable, str(script), *cmd_argv])
-
-
-def _cmd_run_report(args) -> int:
-    from archway_benchmarks.reports import write_report
-    from archway_benchmarks.store import connect
-
-    run_id = args.run_id
-    if run_id is None:
-        with connect(Path(args.db)) as conn:
-            row = conn.execute("SELECT id FROM runs ORDER BY id DESC LIMIT 1").fetchone()
-            if row is None:
-                print("no runs in store", file=sys.stderr)
-                return 1
-            run_id = row[0]
-    out_md = args.out_md or os.path.join(
-        _default_reports_dir(), f"archway_report_run{run_id}.md"
-    )
-    os.makedirs(os.path.dirname(out_md) or ".", exist_ok=True)
-    out = write_report(args.db, run_id, out_md, include_miss_listing=args.full)
-    print(f"wrote {out}")
-    return 0
 
 
 def _cmd_report(args) -> int:
