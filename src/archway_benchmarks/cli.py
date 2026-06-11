@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_report = sub.add_parser(
         "baselines-report",
-        help="Write baselines_<date>.md and .json summarising the regenerated runs.",
+        help="Write leaderboard/baselines.{md,json} summarising the regenerated runs.",
     )
     p_report.add_argument("--db", default="runs.db")
     p_report.add_argument("--out-md", default=None)
