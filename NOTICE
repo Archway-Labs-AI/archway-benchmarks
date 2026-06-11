@@ -12,8 +12,10 @@ respective authors.
 
 TypeEvalPy
   Source : https://github.com/secure-software-engineering/TypeEvalPy
+  Fork   : https://github.com/Archway-Labs-AI/TypeEvalPy (vendored via our
+           fork; main tracks upstream commit-for-commit)
   License: Apache License, Version 2.0
-  Used as: vendored git submodule under vendor/TypeEvalPy. We invoke the
+  Used as: vendored git submodule under `extras/TypeEvalPy/`. We invoke the
            project's runner classes (`src/runner_class.py`) and reuse its
            scoring primitives without modification —
            `src/result_analyzer/analysis_utils.py` (strict scorer,
@@ -22,6 +24,22 @@ TypeEvalPy
            `check_match` with the column/line predicate commented out).
            The harness's `archway_benchmarks.scoring` modules wrap these;
            we do not re-implement the metrics.
+
+BugsInPy (reproduction)
+  Source : https://github.com/reproducing-research-projects/BugsInPy
+           (a reproduction-fix of the original `soarsmu/BugsInPy` from the
+           UIUC "Reproducing and Improving BugsInPy" study)
+  Fork   : https://github.com/Archway-Labs-AI/BugsInPy
+  License: No declared license on upstream. BugsInPy is a research
+           benchmark corpus; we use it strictly as reference data for
+           reproducing detection / repair experiments, consistent with
+           the corpus's stated academic-research purpose.
+  Used as: vendored git submodule under `extras/BugsInPy/`. We read the
+           per-bug metadata layout (`projects/<p>/bugs/<id>/{bug.info,
+           bug_patch.txt, run_test.sh}`) directly from disk; no upstream
+           Python code is invoked. Our `benchmarks/bugsinpy.py` loader and
+           `scoring/bugsinpy.py` scorer wrap the corpus into the harness's
+           native `Snippet`/`Annotation` types.
 
 ----------------------------------------------------------------------
 

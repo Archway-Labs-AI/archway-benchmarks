@@ -364,24 +364,29 @@ def write_json(report: dict[str, Any], json_path: Path) -> None:
 def _cli(argv: list[str] | None = None) -> int:
     import argparse
 
+    repo_root = Path(__file__).resolve().parents[2]
+    default_md = repo_root / "leaderboard" / "baselines.md"
+    default_json = repo_root / "leaderboard" / "baselines.json"
+
     parser = argparse.ArgumentParser(prog="archway-bench-report")
     parser.add_argument("--db", default="runs.db")
     parser.add_argument(
         "--out-md",
         default=None,
-        help="Markdown path (default: baselines_<date>.md)",
+        help=f"Markdown path (default: {default_md.relative_to(repo_root)})",
     )
     parser.add_argument(
         "--out-json",
         default=None,
-        help="JSON path (default: baselines_<date>.json)",
+        help=f"JSON path (default: {default_json.relative_to(repo_root)})",
     )
     args = parser.parse_args(argv)
 
     report = collect(Path(args.db))
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    md_path = Path(args.out_md or f"baselines_{stamp}.md")
-    json_path = Path(args.out_json or f"baselines_{stamp}.json")
+    md_path = Path(args.out_md) if args.out_md else default_md
+    json_path = Path(args.out_json) if args.out_json else default_json
+    md_path.parent.mkdir(parents=True, exist_ok=True)
+    json_path.parent.mkdir(parents=True, exist_ok=True)
     write_markdown(report, md_path)
     write_json(report, json_path)
     print(f"wrote {md_path}")
