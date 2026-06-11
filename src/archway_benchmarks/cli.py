@@ -47,13 +47,12 @@ def _machine_slug() -> str:
 def _default_reports_dir() -> str:
     """Directory run reports / progress are written to.
 
-    Reports are machine-local working artifacts — and the analyses among them
-    are internal — so they belong in the private ``archway-context`` repo, not
-    this public one. Override with ``$ARCHWAY_REPORTS_DIR`` (e.g. on CI or
-    another machine).
+    Reports are machine-local working artifacts; the default lives outside
+    the repo so they don't accumulate in source control. Override with
+    ``$ARCHWAY_REPORTS_DIR`` to route elsewhere (e.g. on CI or another machine).
     """
     return os.environ.get("ARCHWAY_REPORTS_DIR") or os.path.expanduser(
-        "~/Technical_Projects/archway-context/benchmarks/reports"
+        "~/.archway-benchmarks/reports"
     )
 
 
@@ -162,30 +161,26 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_iter.add_argument(
         "--engine-pin", action="store_true",
-        help="Run against the verified engine pin (coordination/stable.json) instead of "
+        help="Run against a pinned engine SHA (read from --pin-file) instead of "
              "--archway-dir's current checkout. Materializes a detached worktree at the "
              "pinned SHA and records engine_sha + pin identity in the run's metadata.",
     )
     p_iter.add_argument(
         "--pin-file", default=None,
-        help="Pin manifest path for --engine-pin (default: $ARCHWAY_PIN_FILE or the "
-             "agent-harness coordination/stable.json).",
+        help="JSON pin file for --engine-pin (default: $ARCHWAY_PIN_FILE).",
     )
     p_iter.add_argument(
         "--engine-root", default=None,
-        help="Engine repo the pinned worktree is created from (default: $ARCHWAY_ENGINE_ROOT "
-             "or ~/Technical_Projects/Archway).",
+        help="Engine repo the pinned worktree is created from (default: $ARCHWAY_ENGINE_ROOT).",
     )
     p_iter.add_argument(
         "--pin-worktree", default=None,
-        help="Where to materialize the pinned engine worktree (default: "
-             "$ARCHWAY_BENCH_PIN_WORKTREE or ~/Technical_Projects/Archway-worktrees/bench-pin).",
+        help="Where to materialize the pinned engine worktree (default: $ARCHWAY_BENCH_PIN_WORKTREE).",
     )
     p_iter.add_argument(
         "--report-dir", default=None,
         help="Directory for the run's detail + progress reports. Default: "
-             "$ARCHWAY_REPORTS_DIR or ~/Technical_Projects/archway-context/benchmarks/reports "
-             "(kept out of this public repo).",
+             "$ARCHWAY_REPORTS_DIR or ~/.archway-benchmarks/reports.",
     )
     p_iter.add_argument(
         "--out-md", default=None,

@@ -184,9 +184,9 @@ def build_a1_a2_reference_fixture(snippet) -> ArchwayAnalysisResult:
     """A clean fixture that predicts every A1 (int/str) and A2 (callable) GT
     annotation in the snippet correctly, leaving A3/A4/A5 unpredicted.
 
-    Purpose: Ben diffs his real expression-typer's first pass against this
-    number. If his pass scores below the fixture, the gap is in his rule
-    logic; if at/above, the harness + coordinate plumbing are sound.
+    Purpose: an engine team diffs their real expression-typer's first pass
+    against this number. If the pass scores below the fixture, the gap is in
+    the rule logic; if at/above, the harness + coordinate plumbing are sound.
 
     This emits the real `AnalysisResult` shape and runs through the real
     adapter and scorer (not the noise stub).
@@ -197,7 +197,7 @@ def build_a1_a2_reference_fixture(snippet) -> ArchwayAnalysisResult:
     for ann in snippet.annotations:
         bucket = classify(ann.types)
         if bucket not in ("A1", "A2"):
-            continue  # leave unpredicted — Ben's later passes will handle these
+            continue  # leave unpredicted — later passes will handle these
 
         loc = ann.location
         if loc.kind == "return":

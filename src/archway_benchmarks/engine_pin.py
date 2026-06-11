@@ -1,28 +1,27 @@
 """Run the harness against a *pinned* engine commit.
 
-The autonomous agent loop (the ``archway-agent-harness`` repo) verifies engine
-builds and records the latest verified checkpoint to
-``coordination/stable.json``:
+A pin is a deterministic claim about a specific engine SHA ("this commit is
+verified, score against it") — useful as a stable benchmark target instead of
+the moving tip of a development branch. The pin file format is plain JSON:
 
-    {"sha": "...", "tag": "stable-overnight-...", "branch": "loop/nightly-...", ...}
+    {"sha": "...", "tag": "...", "branch": "...", "run_id": "..."}
 
-A pin is a deterministic claim ("this SHA is verified — no new failures vs the
-prior pin"), so it's the natural stable target to benchmark against rather than
-the moving, possibly-unstable tip of ``loop/main``.
+Where the file comes from is the caller's concern — a CI job, a verification
+loop, or a manual write are all fine. This module just consumes one.
 
-This module is the seam between that pin and the harness:
+The three pieces this module owns:
 
-  - ``read_pin`` parses ``stable.json`` into a ``Pin``;
+  - ``read_pin`` parses the pin JSON into a ``Pin``;
   - ``ensure_pin_worktree`` materializes (idempotently) a detached git worktree
     of the engine repo at the pinned SHA — the read-only checkout the analysis
     server is then launched from;
   - ``pin_metadata`` projects the pin into the ``runs.metadata`` provenance
-    shape (``engine_sha`` + pin identity), mirroring the BugsInPy convention so
-    every run is bound to the exact engine commit it scored.
+    shape (``engine_sha`` + pin identity) so every run is bound to the exact
+    engine commit it scored.
 
-Paths default to this machine's layout but are overridable by flag or env
-(``ARCHWAY_PIN_FILE`` / ``ARCHWAY_ENGINE_ROOT`` / ``ARCHWAY_BENCH_PIN_WORKTREE``)
-so the same flow works on another box or in CI.
+Paths come from flags or env vars (``ARCHWAY_PIN_FILE`` / ``ARCHWAY_ENGINE_ROOT``
+/ ``ARCHWAY_BENCH_PIN_WORKTREE``); the default-path constants are placeholders
+that public consumers will always override.
 """
 from __future__ import annotations
 
@@ -32,9 +31,12 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-_DEFAULT_PIN_FILE = "~/Technical_Projects/archway-agent-harness/coordination/stable.json"
-_DEFAULT_ENGINE_ROOT = "~/Technical_Projects/Archway"
-_DEFAULT_PIN_WORKTREE = "~/Technical_Projects/Archway-worktrees/bench-pin"
+# Local-only defaults. The pin feature is opt-in via --engine-pin; in practice
+# every meaningful invocation overrides these via flags or env vars (the
+# defaults can't be guessed for a public consumer).
+_DEFAULT_PIN_FILE = "~/.archway-benchmarks/pin/stable.json"
+_DEFAULT_ENGINE_ROOT = "~/.archway-benchmarks/pin/engine"
+_DEFAULT_PIN_WORKTREE = "~/.archway-benchmarks/pin/worktree"
 
 
 class PinError(RuntimeError):
@@ -68,7 +70,7 @@ def default_pin_worktree() -> str:
 # ----- pin reading -----
 
 def read_pin(pin_file: str | Path) -> Pin:
-    """Parse ``coordination/stable.json``. Raises ``PinError`` if absent or
+    """Parse the pin JSON. Raises ``PinError`` if absent or
     missing a usable ``sha``."""
     p = Path(pin_file).expanduser()
     if not p.exists():

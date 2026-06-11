@@ -15,7 +15,7 @@ Thank you for your interest in contributing! This document covers development se
 
 ### Prerequisites
 
-- Python 3.9 or higher
+- Python 3.11 or higher
 - Git
 - The static analysis tools you want to benchmark against (installed in their own envs)
 
@@ -48,7 +48,7 @@ This repo uses standard Python conventions consistent with the rest of Archway:
 - **Line length:** 100
 - **Linter:** ruff (`ruff check src/`)
 - **Type checker:** mypy
-- **Target:** Python 3.9+
+- **Target:** Python 3.11+
 
 Run the lint suite before pushing:
 
