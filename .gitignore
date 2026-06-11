@@ -23,9 +23,6 @@ build/
 # Python virtual environments
 venv/
 
-# Benchmark cached results (large JSON)
-suites/**/cached-results/*.json
-
 # Cloned target repos (large, generated)
 targets/
 
