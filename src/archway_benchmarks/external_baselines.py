@@ -90,6 +90,7 @@ RUNNER_REGISTRY: dict[str, str] = {
     "hityperdl": "HityperDLRunner",
     "sonar": "SonarRunner",
     "ty": "TyRunner",
+    "pyrefly": "PyreflyRunner",
 }
 
 
