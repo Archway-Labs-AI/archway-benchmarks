@@ -49,6 +49,10 @@ dashboard = [
     "uvicorn>=0.27",
     "jinja2>=3.1",
 ]
+# Auto-mirror completed runs to the shared archway-evals Supabase store (supabase_mirror.py).
+evals = [
+    "psycopg[binary]>=3.1",
+]
 
 [project.scripts]
 archway-bench = "archway_benchmarks.cli:main"

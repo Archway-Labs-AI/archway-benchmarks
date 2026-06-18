@@ -331,6 +331,9 @@ def ingest_baseline(
         lenient_scores = score_predictions_lenient(benchmark, predictions)
         record_scores(conn, run_id, scope="all_lenient", scores=lenient_scores)
 
+    from archway_benchmarks import supabase_mirror
+    supabase_mirror.mirror_safe(db_path, run_id)
+
     logger.info(
         "ingested %s on %s as run #%d (exact %d/%d, runtime %.1fs)",
         tool,
