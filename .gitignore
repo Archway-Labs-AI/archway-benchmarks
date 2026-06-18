@@ -43,3 +43,7 @@ baselines_*.log
 archway_report_*.md
 archway_progress*.md
 archway_micro_*_analysis*.md
+
+# large regenerable experiment artifacts (engine-output caches, score dumps)
+experiments/*/artifacts/engine_*.json
+experiments/*/artifacts/score_*.json
