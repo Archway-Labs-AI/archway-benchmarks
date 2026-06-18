@@ -1,0 +1,12 @@
+{
+  "flips_total": 200,
+  "flips_LOCATION_MISS_to_EXACT": 164,
+  "flips_TYPE_MISS_to_EXACT": 36,
+  "flips_to_non_EXACT_regressions": 0,
+  "flips_faithful_self_attr_at_pos": 200,
+  "flips_unfaithful": 0,
+  "unfaithful_examples": [],
+  "remaining_LOCATION_MISS": 96,
+  "remaining_LM_with_any_engine_binding_at_pos": 0,
+  "remaining_LM_all_class_variable_class_var": true
+}

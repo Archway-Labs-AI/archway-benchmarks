@@ -10,10 +10,11 @@ Diff the real expression-typer's first pass against these numbers:
   - **below the fixture**  -> the gap is the rule logic.
   - **at/above the fixture** -> the harness + coordinate plumbing are sound.
 
-## Pinned actuals (current GT, commit ea13026d)
+## Pinned actuals
 
-  micro   : 660 / 850 EXACT (77.6%)  · FR=197 FP=88 LV=375
-  autogen : 49,250 / 77,268 EXACT (63.7%)  · FR=6,121 FP=635 LV=42,494
+  micro   : 660 / 850 EXACT (77.6%)  · FR=197 FP=88 LV=375  (GT commit ea13026d)
+  autogen : 49,206 / 77,223 EXACT (63.7%)  · return=6,119 parameter=635 variable=42,452
+            (GT commit 9afcfc9b — autogen position re-derivation, run-31 corpus)
 
 Strict and lenient scorers produce identical numbers because the fixture
 inherits GT's 1-indexed col_offset — confirming the col_offset convention
@@ -78,16 +79,16 @@ def test_a1_a2_reference_micro_lenient():
 def test_a1_a2_reference_autogen_strict():
     bench = TypeEvalPyAutogenBenchmark()
     s = score_predictions(bench, _drive_fixture(bench))
-    assert s.exact_total == 49250, s.exact_total
-    assert s.total_annotations == 77268
-    assert s.exact_by_kind == {"return": 6121, "parameter": 635, "variable": 42494}
+    assert s.exact_total == 49206, s.exact_total
+    assert s.total_annotations == 77223
+    assert s.exact_by_kind == {"return": 6119, "parameter": 635, "variable": 42452}
 
 
 def test_a1_a2_reference_autogen_lenient():
     bench = TypeEvalPyAutogenBenchmark()
     s = score_predictions_lenient(bench, _drive_fixture(bench))
-    assert s.exact_total == 49250
-    assert s.exact_by_kind == {"return": 6121, "parameter": 635, "variable": 42494}
+    assert s.exact_total == 49206
+    assert s.exact_by_kind == {"return": 6119, "parameter": 635, "variable": 42452}
 
 
 def test_a1_a2_reference_only_predicts_buckets_a1_and_a2():

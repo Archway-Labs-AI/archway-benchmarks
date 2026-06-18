@@ -20,6 +20,11 @@ Post-processing applied:
   flat strings.
 - GT entries for subscript expressions (``a[0]``, ``d['key']``) resolve to the
   parent binding's value/element type.
+- GT entries for bare attribute reads (``self.x``, ``Class.attr``, ``A.B.a`` —
+  a ``.`` but no ``[``) resolve to the matched binding's OWN element type. The
+  engine stamps the instance-attribute store at the GT position but names it
+  ``self.attr`` while GT names it ``ClassName.attr``; position alone establishes
+  identity, so the attribute's own value is surfaced (not projected through it).
 - ``Top``/``Bottom`` map to ``"any"``.
 - ``Union`` produces a ``frozenset`` of all members' flattened forms; the
   scorer intersects with GT's type set.
@@ -30,6 +35,7 @@ Post-processing applied:
 """
 from __future__ import annotations
 
+import ast
 from typing import Any, Iterator
 
 from archway_benchmarks.benchmarks.base import AnalysisResultAdapter
@@ -81,22 +87,51 @@ def _lookup_predicted_types(
 
     _, is_indirect = _split_base(loc.name)
     if is_indirect:
-        # Two shapes reach here:
-        #  (a) the engine emits a FLAT binding whose name is the whole dotted
-        #      expression — instance-attribute stores like `self.smth` land as
-        #      a single `self.smth` binding carrying the value. The matched
-        #      element IS the value; flatten it directly.
-        #  (b) only the base container binding sits at this position
-        #      (`d['a']`, `a[0]`); project the value/element type out of it.
+        # Three shapes reach here, distinguished by the GT name's accessor:
+        #  (1) the engine emits a FLAT binding whose name is the whole dotted
+        #      expression — flatten its element directly (exact-name match).
+        #  (2) a bare attribute read (`Class.attr`, `A.B.a`; a `.` but no `[`):
+        #      the engine stamps the instance-attribute store at this position
+        #      but names it `self.attr`, so the exact-name match in (1) misses
+        #      (`self.attr` != `Class.attr`). Position already pins identity
+        #      (`_matches` is position-only), so surface the matched binding's
+        #      OWN element type.
+        #  (3) a subscript (`d['a']`, `a[0]`, `inst.attr[i]`): the matched
+        #      binding is the container; project its value/element type out.
         named = [b for b in matches if b.get("name") == loc.name]
         if named:
             out: set[str] = set()
             for b in named:
                 out |= _to_types(b["element"], result.functions)
             return frozenset(out) if out else None
+
+        if "[" not in loc.name:
+            # Bare attribute read — return the matched binding's own type. This
+            # recovers both scalar `self.X` stores (previously LOCATION_MISS:
+            # `_value_element(int)` is None) and container-valued ones
+            # (previously a false TYPE_MISS: `_value_element(list)` projected
+            # the element `int` instead of the attribute's own `list`).
+            out = set()
+            for b in matches:
+                out |= _to_types(b["element"], result.functions)
+            return frozenset(out) if out else None
+
+        # Subscript (`d['a']`, `a[0]`, `d['a']['b']`, `data[0]['name']`):
+        # project the container's value/element at the GT key. When the engine
+        # populated a keyed (dict) / positional (list/tuple) SLOT for that
+        # literal key, surface that slot — the per-key precision the engine
+        # genuinely computed (proven in ENGINE-dict-list-precision.md). The
+        # homogeneous `value`/`element` over-unions heterogeneous slots, so a
+        # bare `_value_element` projection turns every per-key read into a
+        # container-typed/over-union TYPE_MISS. Falls back to the homogeneous
+        # element per level when the slot is absent (engine left it empty / used
+        # `|`-merge / a param key) — that stays a faithful miss, an engine gap
+        # routed back, NOT papered over. A non-container base (a `union` /
+        # `bottom` element) projects to nothing → the GT stays its honest miss.
+        keys = _subscript_keys(loc.name)
         out = set()
         for elt in (b["element"] for b in matches):
-            inner = _value_element(elt)
+            inner = _project_slots(elt, keys) if keys is not None else _value_element(elt)
             if inner is not None:
                 out |= _to_types(inner, result.functions)
         return frozenset(out) if out else None
@@ -287,10 +322,103 @@ def _to_types(
 
 
 def _value_element(elt: dict[str, Any]) -> dict[str, Any] | None:
-    """Inner element for subscript/attribute lookups (`x[k]`, `x.field`)."""
+    """Inner element for subscript/attribute lookups (`x[k]`, `x.field`).
+
+    The homogeneous (key-agnostic) fallback: a dict's value join, a list/tuple's
+    element join. Used when the GT subscript name can't be parsed into a literal
+    key chain (`_subscript_keys` returns ``None``); the keyed/positional-precise
+    path is `_project_slots`.
+    """
     kind = elt.get("kind")
     if kind == "dict":
         return elt.get("value")
     if kind in ("list", "tuple"):
+        return elt.get("element")
+    return None
+
+
+_NO_KEY = object()
+
+
+def _subscript_keys(name: str) -> list[Any] | None:
+    """Parse the trailing ``[k][k2]...`` literal-key chain off a subscript GT
+    name, base-first (`d['a']['b']` → ``['a', 'b']``).
+
+    Returns ``None`` when the name has no subscript, fails to parse, or any
+    index is non-literal (a variable index / slice). The engine's slots are
+    keyed by literal value, so a non-literal index isn't slot-projectable and
+    the caller falls back to the homogeneous element. Each literal's Python type
+    is preserved, so an int index (`d[1]`) and a string key (`d['1']`) match
+    distinct engine slot keys.
+    """
+    try:
+        node = ast.parse(name, mode="eval").body
+    except SyntaxError:
+        return None
+    keys: list[Any] = []
+    while isinstance(node, ast.Subscript):
+        key = _literal_index(node.slice)
+        if key is _NO_KEY:
+            return None
+        keys.append(key)
+        node = node.value
+    if not keys:
+        return None
+    keys.reverse()
+    return keys
+
+
+def _literal_index(sl: ast.expr) -> Any:
+    """A subscript slice → its Python literal value, or ``_NO_KEY`` when it is
+    not a constant we can match against an engine slot. Handles a negative-int
+    literal (`a[-1]`), which the parser yields as ``USub`` over a constant."""
+    if isinstance(sl, ast.Constant):
+        return sl.value
+    if (
+        isinstance(sl, ast.UnaryOp)
+        and isinstance(sl.op, ast.USub)
+        and isinstance(sl.operand, ast.Constant)
+        and isinstance(sl.operand.value, int)
+    ):
+        return -sl.operand.value
+    return _NO_KEY
+
+
+def _project_slots(elt: dict[str, Any], keys: list[Any]) -> dict[str, Any] | None:
+    """Walk ``keys`` (base-first) through an element, preferring a populated
+    engine slot at each level and falling back to the homogeneous value/element
+    when the slot is absent. Returns the innermost element, or ``None`` if a
+    level isn't a projectable container (e.g. a ``union`` — the engine's
+    ambiguity, surfaced as a miss rather than an invented element)."""
+    cur: dict[str, Any] | None = elt
+    for key in keys:
+        cur = _index_one(cur, key)
+        if cur is None:
+            return None
+    return cur
+
+
+def _index_one(elt: dict[str, Any], key: Any) -> dict[str, Any] | None:
+    """Index one literal key/index into a single container element.
+
+    Dict: the keyed slot whose literal key matches exactly (same Python type
+    AND value, so int `1` ≠ str `'1'` ≠ bool `True`); else the homogeneous
+    value. List/tuple: the positional slot at an int index (negatives wrap);
+    else the homogeneous element. Anything else (union/scalar/bottom) → ``None``
+    (the engine carries no projectable container here)."""
+    kind = elt.get("kind")
+    if kind == "dict":
+        slots = elt.get("slots")
+        if slots is not None:
+            for k, v in slots:
+                if type(k) is type(key) and k == key:
+                    return v
+        return elt.get("value")
+    if kind in ("list", "tuple"):
+        slots = elt.get("slots")
+        if isinstance(key, int) and not isinstance(key, bool) and slots is not None:
+            idx = key if key >= 0 else len(slots) + key
+            if 0 <= idx < len(slots):
+                return slots[idx]
         return elt.get("element")
     return None
