@@ -1,0 +1,692 @@
+"""Emit TypyBench annotated-source predictions from a pinned Archway engine.
+
+This is intentionally a narrow bridge: TypyBench scores source trees, while the
+existing benchmark adapters mostly score location maps. The functions here run
+the pinned engine read-only in a subprocess, collect function/parameter/return
+types from the finalized analysis projection, and write syntactically valid
+Python predictions under ``predictions/<repo>/``.
+"""
+from __future__ import annotations
+
+import ast
+import json
+import os
+import signal
+import shutil
+import subprocess
+import tempfile
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Optional
+
+
+_NONE_TYPE_NAMES = {"builtins.NoneType", "NoneType"}
+_TRACE_ENV_VAR = "ARCHWAY_TYPYBENCH_TRACE_JSONL"
+
+
+@dataclass(frozen=True)
+class EmitStats:
+    repo_name: str
+    files_total: int
+    files_analyzed: int
+    files_failed: int
+    functions_seen: int
+    functions_annotated: int
+    params_annotated: int
+    returns_annotated: int
+    failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
+    engine_sha: str | None = None
+
+
+def emit_archway_predictions(
+    *,
+    repo_name: str,
+    untyped_root: Path,
+    predictions_root: Path,
+    engine_worktree: Path,
+    engine_sha: str | None = None,
+    overwrite: bool = True,
+    runner: tuple[str, ...] = ("hatch", "run", "python"),
+    timeout: int = 900,
+    per_file_timeout: int = 60,
+    trace_jsonl: Path | None = None,
+) -> EmitStats:
+    """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
+
+    Files that the engine cannot analyze are still copied, unannotated. That is
+    the honest TypyBench contract: unsupported locations remain missing instead
+    of being fabricated.
+    """
+
+    untyped_root = Path(untyped_root)
+    dest_root = Path(predictions_root) / repo_name
+    if overwrite and dest_root.exists():
+        shutil.rmtree(dest_root)
+    if not dest_root.exists():
+        dest_root.mkdir(parents=True)
+
+    files = sorted(p for p in untyped_root.rglob("*.py") if p.is_file())
+    for src in files:
+        dest = dest_root / src.relative_to(untyped_root)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dest)
+
+    trace_path = trace_jsonl or _trace_path_from_env()
+    trace = _TraceWriter(trace_path, repo_name) if trace_path else None
+
+    files_analyzed = 0
+    functions_seen = 0
+    functions_annotated = 0
+    params_annotated = 0
+    returns_annotated = 0
+    failures: list[dict[str, str]] = []
+
+    started = time.monotonic()
+    for src in files:
+        rel = src.relative_to(untyped_root)
+        dest = dest_root / rel
+        remaining = timeout - (time.monotonic() - started)
+        if remaining <= 0:
+            failures.append(
+                {
+                    "file": str(rel),
+                    "error": f"TimeoutExpired: repo analysis exceeded {timeout}s",
+                }
+            )
+            continue
+
+        record = _run_engine_probe_file(
+            engine_worktree=Path(engine_worktree),
+            source_path=src,
+            module_name=src.stem,
+            runner=runner,
+            timeout=max(1, min(per_file_timeout, int(remaining))),
+        )
+        if not record.get("ok"):
+            err = record.get("error", "no engine result")
+            failures.append({"file": str(rel), "error": str(err)[:300]})
+            continue
+
+        files_analyzed += 1
+        file_trace = trace.for_file(str(rel)) if trace else None
+        function_types = _function_types(record.get("analysis", {}), trace=file_trace)
+        functions_seen += len(function_types)
+        raw = src.read_text(encoding="utf-8")
+        try:
+            annotated, file_stats = _annotate_source(raw, function_types, trace=file_trace)
+        except SyntaxError as exc:
+            failures.append({"file": str(rel), "error": f"emit SyntaxError: {exc}"[:300]})
+            continue
+        functions_annotated += file_stats["functions"]
+        params_annotated += file_stats["params"]
+        returns_annotated += file_stats["returns"]
+        dest.write_text(annotated, encoding="utf-8")
+
+    if trace:
+        trace.close()
+
+    return EmitStats(
+        repo_name=repo_name,
+        files_total=len(files),
+        files_analyzed=files_analyzed,
+        files_failed=len(files) - files_analyzed,
+        functions_seen=functions_seen,
+        functions_annotated=functions_annotated,
+        params_annotated=params_annotated,
+        returns_annotated=returns_annotated,
+        failures=tuple(failures),
+        engine_sha=engine_sha,
+    )
+
+
+def _run_engine_probe(
+    *,
+    engine_worktree: Path,
+    source_root: Path,
+    runner: tuple[str, ...],
+    timeout: int,
+    per_file_timeout: int = 60,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {"files": {}}
+    started = time.monotonic()
+    for path in sorted(Path(source_root).rglob("*.py")):
+        rel = str(path.relative_to(source_root))
+        elapsed = time.monotonic() - started
+        remaining = timeout - elapsed
+        if remaining <= 0:
+            out["files"][rel] = {
+                "ok": False,
+                "error": f"TimeoutExpired: repo analysis exceeded {timeout}s",
+            }
+            continue
+        out["files"][rel] = _run_engine_probe_file(
+            engine_worktree=engine_worktree,
+            source_path=path,
+            module_name=path.stem,
+            runner=runner,
+            timeout=max(1, min(per_file_timeout, int(remaining))),
+        )
+    return out
+
+
+def _run_engine_probe_file(
+    *,
+    engine_worktree: Path,
+    source_path: Path,
+    module_name: str,
+    runner: tuple[str, ...],
+    timeout: int,
+) -> dict[str, Any]:
+    probe = r'''
+import json
+import sys
+import traceback
+from pathlib import Path
+
+from sd_core.analysis_server import analyze_source
+
+path = Path(sys.argv[1])
+module_name = sys.argv[2]
+try:
+    source = path.read_text(encoding="utf-8")
+    out = {
+        "ok": True,
+        "analysis": analyze_source(source, module_name),
+    }
+except Exception as exc:
+    out = {
+        "ok": False,
+        "error": f"{type(exc).__name__}: {exc}",
+        "trace_tail": traceback.format_exc()[-1200:],
+    }
+print(json.dumps(out, sort_keys=True))
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
+        f.write(probe)
+        f.flush()
+        cmd = [*runner, f.name, str(source_path.resolve()), module_name]
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=engine_worktree,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=_probe_env(engine_worktree),
+                start_new_session=True,
+            )
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = proc.communicate()
+            return {
+                "ok": False,
+                "error": f"TimeoutExpired: analysis exceeded {timeout}s",
+                "trace_tail": ((stderr or "")[-1200:] if isinstance(stderr, str) else ""),
+            }
+    if proc.returncode != 0:
+        return {
+            "ok": False,
+            "error": f"engine probe failed: exit={proc.returncode}",
+            "trace_tail": stderr[-1200:],
+        }
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            return json.loads(line)
+    return {
+        "ok": False,
+        "error": "engine probe produced no JSON",
+        "trace_tail": stderr[-1200:],
+    }
+
+
+def _probe_env(engine_worktree: Path) -> dict[str, str]:
+    env = os.environ.copy()
+    existing = env.get("PYTHONPATH")
+    paths = [str(engine_worktree)]
+    if existing:
+        paths.append(existing)
+    env["PYTHONPATH"] = os.pathsep.join(paths)
+    return env
+
+
+def _trace_path_from_env() -> Path | None:
+    value = os.environ.get(_TRACE_ENV_VAR)
+    return Path(value) if value else None
+
+
+class _TraceWriter:
+    def __init__(self, path: Path, repo_name: str) -> None:
+        self.path = Path(path)
+        self.repo_name = repo_name
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._handle = self.path.open("w", encoding="utf-8")
+
+    def for_file(self, file_name: str) -> "_TraceBuffer":
+        return _TraceBuffer(self, file_name)
+
+    def write(self, record: dict[str, Any]) -> None:
+        payload = {"repo": self.repo_name, **record}
+        self._handle.write(json.dumps(payload, sort_keys=True) + "\n")
+        self._handle.flush()
+
+    def close(self) -> None:
+        self._handle.close()
+
+
+class _TraceBuffer:
+    def __init__(self, writer: _TraceWriter, file_name: str) -> None:
+        self.writer = writer
+        self.file_name = file_name
+        self.records: dict[tuple[int, str, str], dict[str, Any]] = {}
+
+    def add_slot(
+        self,
+        *,
+        line: int,
+        function: str,
+        slot: str,
+        candidates: list[dict[str, Any]],
+        merged_annotation: str | None,
+    ) -> None:
+        fallback_reasons = sorted(
+            {
+                reason
+                for candidate in candidates
+                for reason in candidate.get("fallback_reasons", [])
+                if reason
+            }
+        )
+        if not merged_annotation and not fallback_reasons:
+            fallback_reasons = ["missing element"]
+        key = (line, function, slot)
+        self.records[key] = {
+            "file": self.file_name,
+            "function": function,
+            "line": line,
+            "slot": slot,
+            "raw_candidates": candidates,
+            "rendered_annotation": merged_annotation,
+            "merged_annotation": merged_annotation,
+            "final_annotation": None,
+            "insertion_happened": False,
+            "insertion_reason": "not visited by annotator",
+            "fallback_reason": "; ".join(fallback_reasons) if fallback_reasons else None,
+        }
+
+    def mark_insertion(
+        self,
+        *,
+        line: int,
+        function: str,
+        slot: str,
+        inserted: bool,
+        reason: str,
+        final_annotation: str | None,
+    ) -> None:
+        record = self.records.get((line, function, slot))
+        if not record:
+            return
+        record["insertion_happened"] = inserted
+        record["insertion_reason"] = reason
+        record["final_annotation"] = final_annotation
+
+    def flush(self) -> None:
+        for key in sorted(self.records):
+            self.writer.write(self.records[key])
+
+
+def _function_types(
+    analysis: dict[str, Any], trace: _TraceBuffer | None = None
+) -> dict[tuple[int, str], dict[str, Any]]:
+    out: dict[tuple[int, str], dict[str, Any]] = {}
+    functions = analysis.get("functions", []) or []
+    by_id = {f.get("fn_id"): f for f in functions}
+    for fn in functions:
+        pos = fn.get("source_position") or {}
+        row = pos.get("row")
+        name = fn.get("name")
+        if not row or not name:
+            continue
+        param_candidates: dict[str, list[str]] = {}
+        param_trace: dict[str, list[dict[str, Any]]] = {}
+        returns: list[str] = []
+        return_trace: list[dict[str, Any]] = []
+        for inst_index, inst in enumerate(fn.get("instantiations", []) or []):
+            for pname, events in (inst.get("params") or {}).items():
+                typ, candidate = _events_type(events, by_id, instantiation=inst_index)
+                param_trace.setdefault(pname, []).append(candidate)
+                if typ:
+                    param_candidates.setdefault(pname, []).append(typ)
+            ret = inst.get("ret") or {}
+            typ, reason = _render_element(ret.get("element"), by_id)
+            return_trace.append(
+                {
+                    "instantiation": inst_index,
+                    "raw_element": ret.get("element"),
+                    "rendered_annotation": typ,
+                    "fallback_reasons": [reason] if reason else [],
+                }
+            )
+            if typ:
+                returns.append(typ)
+        params = {
+            pname: typ
+            for pname, candidates in param_candidates.items()
+            if (typ := _merge_types(candidates))
+        }
+        ret_type = _merge_types(returns)
+        if trace:
+            line = int(row)
+            for pname, candidates in param_trace.items():
+                trace.add_slot(
+                    line=line,
+                    function=str(name),
+                    slot=f"param:{pname}",
+                    candidates=candidates,
+                    merged_annotation=params.get(pname),
+                )
+            if return_trace:
+                trace.add_slot(
+                    line=line,
+                    function=str(name),
+                    slot="return",
+                    candidates=return_trace,
+                    merged_annotation=ret_type,
+                )
+        out[(int(row), str(name))] = {"params": params, "return": ret_type}
+    return out
+
+
+def _events_type(
+    events: Any, by_id: dict[Any, dict[str, Any]], *, instantiation: int | None = None
+) -> tuple[Optional[str], dict[str, Any]]:
+    if not events:
+        return (
+            None,
+            {
+                "instantiation": instantiation,
+                "raw_elements": [],
+                "rendered_events": [],
+                "rendered_annotation": None,
+                "fallback_reasons": ["missing events"],
+            },
+        )
+    if isinstance(events, dict):
+        events = [events]
+    rendered_events: list[str] = []
+    raw_elements: list[Any] = []
+    reasons: list[str] = []
+    for event in events:
+        if not isinstance(event, dict):
+            reasons.append("unknown event")
+            continue
+        raw_elements.append(event.get("element"))
+        typ, reason = _render_element(event.get("element"), by_id)
+        if typ:
+            rendered_events.append(typ)
+        if reason:
+            reasons.append(reason)
+    typ = _merge_types(rendered_events)
+    return (
+        typ,
+        {
+            "instantiation": instantiation,
+            "raw_elements": raw_elements,
+            "rendered_events": rendered_events,
+            "rendered_annotation": typ,
+            "fallback_reasons": reasons,
+        },
+    )
+
+
+def _merge_types(types: list[str]) -> Optional[str]:
+    unique = sorted({t for t in types if t})
+    if not unique:
+        return None
+    if len(unique) == 1:
+        return unique[0]
+    return f"Union[{', '.join(unique)}]"
+
+
+def _element_type(elt: Any, by_id: dict[Any, dict[str, Any]]) -> Optional[str]:
+    return _render_element(elt, by_id)[0]
+
+
+def _render_element(elt: Any, by_id: dict[Any, dict[str, Any]]) -> tuple[Optional[str], str | None]:
+    if not isinstance(elt, dict):
+        return None, "missing element"
+    kind = elt.get("kind")
+    if kind == "pytype":
+        name = elt.get("name")
+        typ = _clean_type_name(str(name or "Any"))
+        if typ == "ellipsis":
+            return "Any", "ellipsis pytype"
+        return typ, None if name else "missing pytype name"
+    if kind in {"top", "bottom"}:
+        return "Any", str(kind)
+    if kind == "none":
+        return "None", None
+    if kind == "list":
+        inner, reason = _render_element(elt.get("element"), by_id)
+        return f"list[{inner or 'Any'}]", _nested_reason("list.element", reason, inner)
+    if kind == "set":
+        inner, reason = _render_element(elt.get("element"), by_id)
+        return f"set[{inner or 'Any'}]", _nested_reason("set.element", reason, inner)
+    if kind == "tuple":
+        slots = elt.get("slots") or []
+        if slots:
+            rendered = [_render_element(s, by_id) for s in slots]
+            inner = ", ".join(t or "Any" for t, _ in rendered)
+            reason = _join_reasons(
+                _nested_reason(f"tuple.slot[{i}]", reason, typ)
+                for i, (typ, reason) in enumerate(rendered)
+            )
+            return f"tuple[{inner}]", reason
+        inner, reason = _render_element(elt.get("element"), by_id)
+        return f"tuple[{inner or 'Any'}, ...]", _nested_reason("tuple.element", reason, inner)
+    if kind == "dict":
+        key, key_reason = _render_element(elt.get("key"), by_id)
+        val, val_reason = _render_element(elt.get("value"), by_id)
+        return f"dict[{key or 'Any'}, {val or 'Any'}]", _join_reasons(
+            [
+                _nested_reason("dict.key", key_reason, key),
+                _nested_reason("dict.value", val_reason, val),
+            ]
+        )
+    if kind == "union":
+        rendered = [_render_element(e, by_id) for e in elt.get("elements", [])]
+        return _merge_types([t for t, _ in rendered if t]), _join_reasons(
+            _nested_reason(f"union.element[{i}]", reason, typ)
+            for i, (typ, reason) in enumerate(rendered)
+        )
+    if kind == "instance":
+        cls = elt.get("cls") or {}
+        body = cls.get("body")
+        fn = by_id.get(body)
+        if fn and fn.get("name"):
+            return str(fn["name"]), None
+        return None, "missing instance class body"
+    if kind == "class":
+        return "type", None
+    if kind == "callable":
+        return "object", "callable->object"
+    return None, f"unknown kind: {kind}"
+
+
+def _nested_reason(prefix: str, reason: str | None, rendered: str | None) -> str | None:
+    if reason:
+        return f"{prefix}: {reason}"
+    if rendered is None:
+        return f"{prefix}: missing element"
+    return None
+
+
+def _join_reasons(reasons: Any) -> str | None:
+    values = [reason for reason in reasons if reason]
+    return "; ".join(values) if values else None
+
+
+def _clean_type_name(name: str) -> str:
+    if name in _NONE_TYPE_NAMES:
+        return "None"
+    if name.startswith("builtins."):
+        return name.removeprefix("builtins.")
+    return name
+
+
+class _Annotator(ast.NodeTransformer):
+    def __init__(
+        self,
+        function_types: dict[tuple[int, str], dict[str, Any]],
+        trace: _TraceBuffer | None = None,
+    ) -> None:
+        self.function_types = function_types
+        self.stats = {"functions": 0, "params": 0, "returns": 0}
+        self.needs_typing = False
+        self.trace = trace
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+        self.generic_visit(node)
+        self._annotate_function(node)
+        return node
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:
+        self.generic_visit(node)
+        self._annotate_function(node)
+        return node
+
+    def _annotate_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
+        info = self.function_types.get((node.lineno, node.name))
+        if not info:
+            return
+        changed = False
+        params = info.get("params") or {}
+        for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
+            if arg.arg not in params:
+                continue
+            slot = f"param:{arg.arg}"
+            if arg.annotation is None:
+                arg.annotation = _parse_annotation(params[arg.arg])
+                self.stats["params"] += 1
+                changed = True
+                self._mark_trace(node, slot, True, "inserted", params[arg.arg])
+            else:
+                self._mark_trace(
+                    node, slot, False, "existing annotation preserved", ast.unparse(arg.annotation)
+                )
+        for arg in (node.args.vararg, node.args.kwarg):
+            if not arg or arg.arg not in params:
+                continue
+            slot = f"param:{arg.arg}"
+            if arg.annotation is None:
+                arg.annotation = _parse_annotation(params[arg.arg])
+                self.stats["params"] += 1
+                changed = True
+                self._mark_trace(node, slot, True, "inserted", params[arg.arg])
+            else:
+                self._mark_trace(
+                    node, slot, False, "existing annotation preserved", ast.unparse(arg.annotation)
+                )
+        ret = info.get("return")
+        if ret and node.returns is None:
+            node.returns = _parse_annotation(ret)
+            self.stats["returns"] += 1
+            changed = True
+            self._mark_trace(node, "return", True, "inserted", ret)
+        elif ret and node.returns is not None:
+            self._mark_trace(
+                node, "return", False, "existing annotation preserved", ast.unparse(node.returns)
+            )
+        for pname in set(params) - {
+            arg.arg
+            for arg in [
+                *node.args.posonlyargs,
+                *node.args.args,
+                *node.args.kwonlyargs,
+                *([node.args.vararg] if node.args.vararg else []),
+                *([node.args.kwarg] if node.args.kwarg else []),
+            ]
+        }:
+            self._mark_trace(node, f"param:{pname}", False, "parameter not present in AST", None)
+        if changed:
+            self.stats["functions"] += 1
+            self.needs_typing = self.needs_typing or _needs_typing_import(info)
+
+    def _mark_trace(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        slot: str,
+        inserted: bool,
+        reason: str,
+        final_annotation: str | None,
+    ) -> None:
+        if self.trace:
+            self.trace.mark_insertion(
+                line=node.lineno,
+                function=node.name,
+                slot=slot,
+                inserted=inserted,
+                reason=reason,
+                final_annotation=final_annotation,
+            )
+
+
+def _needs_typing_import(info: dict[str, Any]) -> bool:
+    values = list((info.get("params") or {}).values())
+    if info.get("return"):
+        values.append(info["return"])
+    return any("Any" in v or "Union[" in v for v in values)
+
+
+def _parse_annotation(value: str) -> ast.expr:
+    return ast.parse(value, mode="eval").body
+
+
+def _annotate_source(
+    source: str,
+    function_types: dict[tuple[int, str], dict[str, Any]],
+    trace: _TraceBuffer | None = None,
+) -> tuple[str, dict[str, int]]:
+    tree = ast.parse(source)
+    annotator = _Annotator(function_types, trace=trace)
+    tree = annotator.visit(tree)
+    ast.fix_missing_locations(tree)
+    if annotator.needs_typing:
+        _ensure_typing_import(tree)
+    if trace:
+        trace.flush()
+    return ast.unparse(tree) + "\n", annotator.stats
+
+
+def _ensure_typing_import(tree: ast.AST) -> None:
+    assert isinstance(tree, ast.Module)
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module == "typing":
+            existing = {alias.name for alias in node.names}
+            for name in ("Any", "Union"):
+                if name not in existing:
+                    node.names.append(ast.alias(name=name))
+            return
+    insert_at = 0
+    if tree.body and isinstance(tree.body[0], ast.Expr):
+        insert_at = 1
+    while (
+        insert_at < len(tree.body)
+        and isinstance(tree.body[insert_at], ast.ImportFrom)
+        and tree.body[insert_at].module == "__future__"
+    ):
+        insert_at += 1
+    tree.body.insert(
+        insert_at,
+        ast.ImportFrom(
+            module="typing",
+            names=[ast.alias(name="Any"), ast.alias(name="Union")],
+            level=0,
+        ),
+    )
