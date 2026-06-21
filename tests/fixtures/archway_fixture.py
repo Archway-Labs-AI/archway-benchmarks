@@ -184,9 +184,9 @@ def build_a1_a2_reference_fixture(snippet) -> ArchwayAnalysisResult:
     """A clean fixture that predicts every A1 (int/str) and A2 (callable) GT
     annotation in the snippet correctly, leaving A3/A4/A5 unpredicted.
 
-    Purpose: an engine team diffs their real expression-typer's first pass
-    against this number. If the pass scores below the fixture, the gap is in
-    the rule logic; if at/above, the harness + coordinate plumbing are sound.
+    Purpose: compare a narrow scalar/callable reference against a real run.
+    If a run scores below the fixture, the gap is likely in the corresponding
+    inference logic; if at/above, the harness + coordinate plumbing are sound.
 
     This emits the real `AnalysisResult` shape and runs through the real
     adapter and scorer (not the noise stub).

@@ -131,13 +131,6 @@ def run(
         record_scores(conn, run_id, scope="all", scores=all_scores)
         record_scores(conn, run_id, scope="covered", scores=covered_scores)
 
-    # Best-effort: mirror this completed run to the shared archway-evals store. Runs AFTER
-    # the runs.db transaction commits, never raises — a failure just logs and leaves the
-    # local runs.db authoritative (ARCHWAY_EVALS_MIRROR=0 disables it).
-    from archway_benchmarks import supabase_mirror
-
-    supabase_mirror.mirror_safe(db_path, run_id)
-
     return RunResult(
         run_id=run_id,
         all_scores=all_scores,

@@ -155,8 +155,6 @@ def _cmd_detect(args) -> int:
         run_id = _record_common(conn, args, "detection", bench, subset_desc)
         record_bugsinpy_detection(conn, run_id, outcomes)
         record_bugsinpy_scores(conn, run_id, mode="detection", scope=scope, scores=scores)
-    from archway_benchmarks import supabase_mirror
-    supabase_mirror.mirror_safe(args.db, run_id)
     print(f"run #{run_id}: detection {scores.detected}/{scores.total_bugs} "
           f"({scores.detection_rate:.1%}) · scope {scope} · engine_sha {args.engine_sha}")
     return 0
@@ -189,8 +187,6 @@ def _cmd_repair(args) -> int:
         run_id = _record_common(conn, args, "repair", bench, subset_desc)
         record_bugsinpy_repair(conn, run_id, ordered)
         record_bugsinpy_scores(conn, run_id, mode="repair", scope=scope, scores=scores)
-    from archway_benchmarks import supabase_mirror
-    supabase_mirror.mirror_safe(args.db, run_id)
     print(f"run #{run_id}: repair {scores.repaired}/{scores.total_bugs} "
           f"({scores.repair_rate:.1%}) · scope {scope} · runner {args.runner}")
     return 0
