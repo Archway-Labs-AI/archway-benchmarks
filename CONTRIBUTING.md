@@ -41,6 +41,20 @@ pip install -e ".[dev]"
 pytest tests/ -v --tb=short
 ```
 
+### Generating the Autogen Corpus
+
+TypeEvalPy's Autogen dataset is generated, not vendored. Tests that pin Autogen
+numbers skip when it is absent. To enable them:
+
+```bash
+cd extras/TypeEvalPy/autogen
+python generate_typeevalpy_dataset.py
+cd ..
+ln -sfn autogen/data/autogen_typeevalpy_benchmark autogen_typeevalpy_benchmark
+```
+
+After that, `pytest tests/test_a1_a2_reference.py` runs the Autogen cases too.
+
 ## Code Style
 
 This repo uses standard Python conventions consistent with the rest of Archway:

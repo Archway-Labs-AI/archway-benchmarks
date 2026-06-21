@@ -14,11 +14,10 @@ discipline: surface ONLY a type the engine genuinely computed (a populated slot,
 or its homogeneous join); when the engine left the slot empty / produced a
 `union`/`bottom` base, project nothing and leave the GT its honest miss.
 
-Element shapes below mirror real engine output captured from the live analysis
-server (experiments/adapter-projection/artifacts/engine_dicts_lists.json):
-keyed dict slots are `[[literal_key, value_elt], ...]` (the key is JSON-native,
-so int `1` and str `'1'` are distinct slot keys); list/tuple slots are a
-positional `[value_elt, ...]` list.
+Element shapes below mirror representative engine output: keyed dict slots are
+`[[literal_key, value_elt], ...]` (the key is JSON-native, so int `1` and str
+`'1'` are distinct slot keys); list/tuple slots are a positional
+`[value_elt, ...]` list.
 """
 from __future__ import annotations
 

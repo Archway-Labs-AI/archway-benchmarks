@@ -210,8 +210,8 @@
 <section class="mb-10">
   <h2 class="text-xl font-medium mb-2">Rule buckets · A1–A5 × kind</h2>
   <p class="text-sm text-navy/60 mb-4 max-w-3xl">
-    Annotations bucketed by their <em>ground-truth</em> type, in the order Ben's expression-typer
-    lands rules: <strong>A1</strong> scalars (int/str), <strong>A2</strong> callable,
+    Annotations bucketed by their <em>ground-truth</em> type family:
+    <strong>A1</strong> scalars (int/str), <strong>A2</strong> callable,
     <strong>A3</strong> containers, <strong>A4</strong> float/bool/None, <strong>A5</strong>
     constructor→class. Each cell is <em>caught / GT total</em>.
     {% if scores.all_lenient and scores.all_lenient.exact_by_bucket_kind %}
@@ -252,8 +252,7 @@
     </tbody>
   </table>
   <p class="text-xs font-mono text-navy/40 mt-3">
-    A1+A2 together (Ben's first pass target): scalars + callable.
-    A3+A4+A5 covered by later rules.
+    A1+A2: scalars + callable. A3+A4+A5: containers, float/bool/None, constructor→class.
   </p>
 </section>
 {% endif %}

@@ -14,10 +14,9 @@ matched binding's OWN element type. Subscript GT names (a ``[``) still project
 the container's element — the decisive case is when both share a position
 (``inst.attr`` wants the container, ``inst.attr[0]`` wants its element).
 
-The binding shapes below mirror real engine output captured from the live
-analysis server (see experiments/adapter-projection/artifacts/engine_classes.json):
-``self.X`` stores live in a function instantiation's ``locals`` map as a list
-of ``{source_position, element}`` events, named ``self.X``.
+The binding shapes below mirror representative engine output: ``self.X`` stores
+live in a function instantiation's ``locals`` map as a list of
+``{source_position, element}`` events, named ``self.X``.
 """
 from __future__ import annotations
 

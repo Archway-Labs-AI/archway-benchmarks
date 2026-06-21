@@ -1,6 +1,6 @@
 """Rule-bucket classifier for TypeEvalPy annotations.
 
-Buckets follow the expression-typer build order:
+Buckets group ground-truth annotations by broad type family:
 
   A1 — scalars                : int, str
   A2 — function-reference     : callable
@@ -12,13 +12,11 @@ An annotation's bucket is determined by its **ground-truth** type set,
 not by what the engine predicted. Buckets are first-match in the order
 above; an annotation whose GT is `{"int", "callable"}` lands in A1.
 
-Why this exists: aggregate "covered EXACT %" is a single number that
-hides which inference rule is landing. Bucket × kind tells the engine team
-where the expression-typer is paying off and where it isn't — "callable 40%
-caught, int 85%, containers 0%" is the build-time triage view.
+Why this exists: aggregate "covered EXACT %" is a single number that hides
+which type families a tool handles well. Bucket × kind gives a compact
+coverage view such as "callable 40%, int 85%, containers 0%".
 
-Cross-tab axis: TypeEvalPy kinds (LV / FR / FP). LV + FR share the
-expression-typer and FP is the separate hard pass.
+Cross-tab axis: TypeEvalPy kinds (LV / FR / FP).
 """
 from __future__ import annotations
 

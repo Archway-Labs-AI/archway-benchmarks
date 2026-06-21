@@ -9,7 +9,7 @@ Headline numbers are the **regenerated-lenient** column — each tool re-run aga
 | **Regenerated · lenient** (headline) | Each tool's `*_result.json` files against current GT, scored with `extras/TypeEvalPy/src/result_analyzer/large_scale_analysis.check_match` (col_offset and line checks commented out, lines 46-51). This is the predicate that generated the published board. | Head-to-head comparisons. |
 | **Historical** | Published `paper_table_*.csv` from the vendored repo. Generated 14 Jan 2024 (micro) / 30 Aug 2024 (autogen) against an older GT snapshot. | As a reference. **Do not cross-compare against the regenerated columns directly** — different answer keys. |
 | **Δ vs Historical** | `lenient − historical`. | Headline finding. Sign + magnitude is GT drift only (and, for autogen, generation-composition drift). |
-| **Regenerated · strict** | Same outputs scored with `analysis_utils.is_same_element` (added Oct 2025, commit `2f7c6056`), which requires `col_offset` to match. None of the shipped tool runners emit `col_offset` — so 0 here is a runner-format artifact, **not** an inference result. Archway emits `col_offset` and is the one tool that meets this bar today. | Only as a transparency note. **Never cite a 0 in this column as a competitive result.** |
+| **Regenerated · strict** | Same outputs scored with `analysis_utils.is_same_element` (added Oct 2025, commit `2f7c6056`), which requires `col_offset` to match. Some historical tool runners do not emit `col_offset`, so strict misses can be a runner-format artifact rather than an inference result. | Transparency only; prefer the lenient column for like-for-like comparisons with published TypeEvalPy results. |
 
 
 ## typeevalpy
@@ -22,9 +22,9 @@ _Paper · 14 Jan 2024 · stale GT_ · extras/TypeEvalPy/docs/webview/paper_table
 | **jedi** | 119 | 0 | 357 | **476** | +61 | 415 | 476 | 40/153 | 41/153 | 10s |
 | **scalpel** | 140 | 33 | 10 | **183** | -14 | 197 | 180 | 0/153 | 83/153 | 16s |
 
-### Rule buckets · A1–A5 × kind (lenient) — build-time triage view
+### Rule buckets · A1–A5 × kind (lenient)
 
-Cell: caught / GT-total. Buckets follow the expression-typer build order. **A1+A2** is the first-pass target.
+Cell: caught / GT-total. Buckets group annotations by ground-truth type family.
 
 
 **headergen** (typeevalpy)
@@ -79,9 +79,9 @@ _Published 30 Aug 2024 (stale GT + different generation)_ · extras/TypeEvalPy/R
 | **jedi** | 12128 | 0 | 26198 | **38326** | +9763 | 28563 | 36505 | 589/5453 | 3011/5453 | 119s |
 | **scalpel** | 15428 | 174 | 22 | **15624** | +52 | 15572 | 15478 | 0/5453 | 3928/5453 | 345s |
 
-### Rule buckets · A1–A5 × kind (lenient) — build-time triage view
+### Rule buckets · A1–A5 × kind (lenient)
 
-Cell: caught / GT-total. Buckets follow the expression-typer build order. **A1+A2** is the first-pass target.
+Cell: caught / GT-total. Buckets group annotations by ground-truth type family.
 
 
 **headergen** (typeevalpy_autogen)
@@ -133,11 +133,9 @@ Solid: HeaderGen, Jedi, Scalpel — close-to-published numbers under the lenient
 
 Shaky / not run: Pyright (LSP stuck >40 min on micro; needs a longer budget or a non-LSP runner); HiTyper (vendor Dockerfile expects a `requirements.txt` that's missing from `extras/TypeEvalPy/src/target_tools/hityper/` — upstream bug); Type4Py / HiTyper-DL (require a model server we are not running). For now, **only the three solid tools should be cited** as regenerated-on-current-GT baselines.
 
-Under the **strict** scorer (`is_same_element`, commit `2f7c6056` Oct 2025, requires col_offset match), all three solid tools score 0/total — their runners don't emit col_offset. **This is a vendor scorer change, not a wiring bug** (verified by running the lenient scorer above against the same outputs and getting near-published numbers). Archway emits col_offset and is the one tool that meets the strict bar today.
+Under the **strict** scorer (`is_same_element`, commit `2f7c6056` Oct 2025, requires col_offset match), some historical runners lose matches because they do not emit col_offset. This is a runner-format/scorer-compatibility issue, not necessarily an inference failure.
 
-## Starting points
+## Reference fixtures
 
-- **Live rule-bucket scoreboard** is on every run's dashboard page (`/runs/<id>`), section *Rule buckets · A1–A5 × kind* — read this while you iterate the expression-typer to see which rule is landing.
-- **Clean A1+A2 reference fixture** (`tests/test_a1_a2_reference.py`): pinned at **660 / 850 micro** (77.6%) and **48,880 / 76,844 autogen** (63.6%). Diff your first pass against this: below = rule logic; at/above = harness is sound, push on A3–A5.
-- **Bar to beat** (lenient, current GT): **HeaderGen 591/850 micro · 54,459/76,844 autogen.** Jedi 414 micro · 27,003 autogen. Scalpel 183 micro · 15,393 autogen.
-
+- **Live rule-bucket scoreboard** is on every run's dashboard page (`/runs/<id>`), section *Rule buckets · A1–A5 × kind* — read this to see which type families a run covers.
+- **Clean A1+A2 reference fixture** (`tests/test_a1_a2_reference.py`): pinned at **660 / 850 micro** (77.6%) and **49,176 / 77,223 autogen** (63.7%). This fixture is a harness sanity check for scalar/callable coverage, not a public benchmark result.

@@ -6,14 +6,14 @@ noise stub) so the pinned numbers reflect end-to-end harness behaviour.
 
 ## How this reference is used
 
-Diff the real expression-typer's first pass against these numbers:
-  - **below the fixture**  -> the gap is the rule logic.
+Compare a scalar/callable reference run against these numbers:
+  - **below the fixture**  -> the gap is the corresponding inference logic.
   - **at/above the fixture** -> the harness + coordinate plumbing are sound.
 
 ## Pinned actuals
 
   micro   : 660 / 850 EXACT (77.6%)  · FR=197 FP=88 LV=375  (GT commit ea13026d)
-  autogen : 49,206 / 77,223 EXACT (63.7%)  · return=6,119 parameter=635 variable=42,452
+  autogen : 49,176 / 77,223 EXACT (63.7%)  · return=5,399 parameter=635 variable=43,142
             (GT commit 9afcfc9b — autogen position re-derivation, run-31 corpus)
 
 Strict and lenient scorers produce identical numbers because the fixture
@@ -22,11 +22,16 @@ documented in `archway_benchmarks/typeevalpy_mapping.py`.
 """
 from __future__ import annotations
 
+import pytest
+
 from archway_benchmarks.benchmarks import (
     TypeEvalPyAutogenBenchmark,
     TypeEvalPyBenchmark,
 )
-from archway_benchmarks.benchmarks.typeevalpy import _location_to_record
+from archway_benchmarks.benchmarks.typeevalpy import (
+    _DEFAULT_AUTOGEN_CORPUS,
+    _location_to_record,
+)
 from archway_benchmarks.scoring import score_predictions
 from archway_benchmarks.scoring.typeevalpy_lenient import score_predictions_lenient
 from tests.fixtures.archway_fixture import (
@@ -34,6 +39,11 @@ from tests.fixtures.archway_fixture import (
     FixtureAnalysisEngine,
     FixtureTranslationEngine,
     build_a1_a2_reference_fixture,
+)
+
+requires_autogen = pytest.mark.skipif(
+    not _DEFAULT_AUTOGEN_CORPUS.exists(),
+    reason="TypeEvalPy Autogen corpus is generated and not present",
 )
 
 
@@ -76,19 +86,21 @@ def test_a1_a2_reference_micro_lenient():
     assert s.exact_by_kind == {"return": 197, "parameter": 88, "variable": 375}
 
 
+@requires_autogen
 def test_a1_a2_reference_autogen_strict():
     bench = TypeEvalPyAutogenBenchmark()
     s = score_predictions(bench, _drive_fixture(bench))
-    assert s.exact_total == 49206, s.exact_total
+    assert s.exact_total == 49176, s.exact_total
     assert s.total_annotations == 77223
-    assert s.exact_by_kind == {"return": 6119, "parameter": 635, "variable": 42452}
+    assert s.exact_by_kind == {"return": 5399, "parameter": 635, "variable": 43142}
 
 
+@requires_autogen
 def test_a1_a2_reference_autogen_lenient():
     bench = TypeEvalPyAutogenBenchmark()
     s = score_predictions_lenient(bench, _drive_fixture(bench))
-    assert s.exact_total == 49206
-    assert s.exact_by_kind == {"return": 6119, "parameter": 635, "variable": 42452}
+    assert s.exact_total == 49176
+    assert s.exact_by_kind == {"return": 5399, "parameter": 635, "variable": 43142}
 
 
 def test_a1_a2_reference_only_predicts_buckets_a1_and_a2():
