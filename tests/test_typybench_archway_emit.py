@@ -147,6 +147,42 @@ def test_builtins_nonetype_renders_as_parseable_none_annotations() -> None:
     assert stats == {"functions": 1, "params": 1, "returns": 1}
 
 
+def test_generator_element_renders_as_parseable_generator_annotation() -> None:
+    source = "def numbers():\n    yield 1\n"
+    analysis = {
+        "functions": [
+            {
+                "fn_id": 1,
+                "name": "numbers",
+                "source_position": {"row": 1},
+                "instantiations": [
+                    {
+                        "params": {},
+                        "ret": {
+                            "element": {
+                                "kind": "generator",
+                                "element": {"kind": "pytype", "name": "builtins.int"},
+                            }
+                        },
+                    }
+                ],
+            }
+        ]
+    }
+
+    function_types = _function_types(analysis)
+    annotated, stats = _annotate_source(source, function_types)
+
+    assert function_types == {
+        (1, "numbers"): {"params": {}, "return": "Generator[int, None, None]"}
+    }
+    ast.parse(annotated)
+    assert "unknown kind: generator" not in annotated
+    assert "from typing import Generator" in annotated
+    assert "def numbers() -> Generator[int, None, None]:" in annotated
+    assert stats == {"functions": 1, "params": 0, "returns": 1}
+
+
 def test_ellipsis_pytype_renders_as_any_fallback_instead_of_lowercase_name() -> None:
     analysis = {
         "functions": [

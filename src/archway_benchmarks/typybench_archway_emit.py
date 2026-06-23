@@ -499,6 +499,11 @@ def _render_element(elt: Any, by_id: dict[Any, dict[str, Any]]) -> tuple[Optiona
                 _nested_reason("dict.value", val_reason, val),
             ]
         )
+    if kind == "generator":
+        inner, reason = _render_element(elt.get("element"), by_id)
+        return f"Generator[{inner or 'Any'}, None, None]", _nested_reason(
+            "generator.element", reason, inner
+        )
     if kind == "union":
         rendered = [_render_element(e, by_id) for e in elt.get("elements", [])]
         return _merge_types([t for t, _ in rendered if t]), _join_reasons(
@@ -549,6 +554,7 @@ class _Annotator(ast.NodeTransformer):
         self.function_types = function_types
         self.stats = {"functions": 0, "params": 0, "returns": 0}
         self.needs_typing = False
+        self.typing_imports: set[str] = set()
         self.trace = trace
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
@@ -616,7 +622,9 @@ class _Annotator(ast.NodeTransformer):
             self._mark_trace(node, f"param:{pname}", False, "parameter not present in AST", None)
         if changed:
             self.stats["functions"] += 1
-            self.needs_typing = self.needs_typing or _needs_typing_import(info)
+            imports = _typing_import_names(info)
+            self.needs_typing = self.needs_typing or bool(imports)
+            self.typing_imports.update(imports)
 
     def _mark_trace(
         self,
@@ -638,10 +646,20 @@ class _Annotator(ast.NodeTransformer):
 
 
 def _needs_typing_import(info: dict[str, Any]) -> bool:
+    return bool(_typing_import_names(info))
+
+
+def _typing_import_names(info: dict[str, Any]) -> set[str]:
     values = list((info.get("params") or {}).values())
     if info.get("return"):
         values.append(info["return"])
-    return any("Any" in v or "Union[" in v for v in values)
+    imports: set[str] = set()
+    for value in values:
+        if "Any" in value or "Union[" in value:
+            imports.update({"Any", "Union"})
+        if "Generator" in value:
+            imports.add("Generator")
+    return imports
 
 
 def _parse_annotation(value: str) -> ast.expr:
@@ -658,18 +676,19 @@ def _annotate_source(
     tree = annotator.visit(tree)
     ast.fix_missing_locations(tree)
     if annotator.needs_typing:
-        _ensure_typing_import(tree)
+        _ensure_typing_import(tree, annotator.typing_imports)
     if trace:
         trace.flush()
     return ast.unparse(tree) + "\n", annotator.stats
 
 
-def _ensure_typing_import(tree: ast.AST) -> None:
+def _ensure_typing_import(tree: ast.AST, names: set[str]) -> None:
     assert isinstance(tree, ast.Module)
+    ordered_names = [name for name in ("Any", "Generator", "Union") if name in names]
     for node in tree.body:
         if isinstance(node, ast.ImportFrom) and node.module == "typing":
             existing = {alias.name for alias in node.names}
-            for name in ("Any", "Union"):
+            for name in ordered_names:
                 if name not in existing:
                     node.names.append(ast.alias(name=name))
             return
@@ -686,7 +705,7 @@ def _ensure_typing_import(tree: ast.AST) -> None:
         insert_at,
         ast.ImportFrom(
             module="typing",
-            names=[ast.alias(name="Any"), ast.alias(name="Union")],
+            names=[ast.alias(name=name) for name in ordered_names],
             level=0,
         ),
     )
