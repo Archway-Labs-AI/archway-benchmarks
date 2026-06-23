@@ -30,8 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-
-DEFAULT_SERVER_URL = "http://localhost:8788"
+from archway_benchmarks.archway_config import DEFAULT_SERVER_URL
 
 
 @dataclass(frozen=True)

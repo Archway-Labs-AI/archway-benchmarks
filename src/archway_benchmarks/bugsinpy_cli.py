@@ -73,6 +73,16 @@ def register(sub) -> None:
     pbr.add_argument("--db", default="runs.db")
     pbr.add_argument("--out-md", default="bugsinpy_buckets.md")
 
+    pc = sub.add_parser(
+        "bugsinpy-consume-findings",
+        help="Build strict flags + diagnostic FindingCandidates from bottom facts.",
+    )
+    pc.add_argument("--manifest", required=True)
+    pc.add_argument("--results", required=True, help="Existing BugsInPy driver/result JSON.")
+    pc.add_argument("--out-flags", default="flags.strict.json")
+    pc.add_argument("--out-candidates", default="candidates.diagnostic.json")
+    pc.add_argument("--out-status", default="consumer_status.json")
+
 
 def dispatch(args) -> int | None:
     cmd = getattr(args, "cmd", None)
@@ -90,6 +100,8 @@ def dispatch(args) -> int | None:
         return _cmd_adjudicate(args)
     if cmd == "bugsinpy-bucket-report":
         return _cmd_bucket_report(args)
+    if cmd == "bugsinpy-consume-findings":
+        return _cmd_consume_findings(args)
     return None
 
 
@@ -157,6 +169,26 @@ def _cmd_detect(args) -> int:
         record_bugsinpy_scores(conn, run_id, mode="detection", scope=scope, scores=scores)
     print(f"run #{run_id}: detection {scores.detected}/{scores.total_bugs} "
           f"({scores.detection_rate:.1%}) · scope {scope} · engine_sha {args.engine_sha}")
+    return 0
+
+
+def _cmd_consume_findings(args) -> int:
+    from archway_benchmarks.bugsinpy_consumer import consume_bottom_findings
+
+    manifest = json.loads(Path(args.manifest).read_text())
+    results = json.loads(Path(args.results).read_text())
+    out = consume_bottom_findings(manifest, results)
+    Path(args.out_flags).write_text(json.dumps(out.flags_strict, indent=2, sort_keys=True))
+    Path(args.out_candidates).write_text(
+        json.dumps(out.candidates_diagnostic, indent=2, sort_keys=True)
+    )
+    Path(args.out_status).write_text(json.dumps(out.status_report, indent=2, sort_keys=True))
+    summary = out.candidates_diagnostic["summary"]
+    print(
+        f"candidates: {summary['total_candidates']} total / "
+        f"{summary['strict_eligible_candidates']} strict-eligible"
+    )
+    print(f"wrote {args.out_flags}, {args.out_candidates}, {args.out_status}")
     return 0
 
 

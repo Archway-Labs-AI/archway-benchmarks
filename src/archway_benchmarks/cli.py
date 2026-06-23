@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Callable
 
 from archway_benchmarks import bugsinpy_cli
+from archway_benchmarks.archway_config import resolve_archway_server_config
 from archway_benchmarks.benchmarks import TypeEvalPyAutogenBenchmark, TypeEvalPyBenchmark
 from archway_benchmarks.benchmarks.base import Benchmark
 from archway_benchmarks.engines.base import AnalysisEngine, TranslationEngine
@@ -33,19 +34,30 @@ def _build_stub_engines(benchmark: Benchmark, accuracy: float, seed: int | None)
     return translator, analyzer, adapter
 
 
-def _build_archway_engines(benchmark: Benchmark, accuracy: float, seed: int | None):
+def _build_archway_engines(
+    benchmark: Benchmark,
+    accuracy: float,
+    seed: int | None,
+    *,
+    server_url: str | None = None,
+    timeout: float = 30.0,
+):
     """Construct the Archway engine triple. ``accuracy``/``seed`` are unused
-    (kept for signature parity with the stub factory). Assumes the analysis
-    dev server is running locally on its default port."""
+    (kept for signature parity with the stub factory)."""
     from archway_benchmarks.benchmarks.archway_adapter import ArchwayAnalysisResultAdapter
     from archway_benchmarks.engines.archway import ArchwayAnalysisEngine, ArchwayTranslationEngine
 
     # The analysis engine sends GET /types?module=main.py&root=<abs_snippet_dir>
     # — it resolves Snippet.file_path (suite-relative) against this corpus root.
     corpus_root = getattr(benchmark, "corpus_root", None)
+    resolved_server_url = server_url or resolve_archway_server_config().server_url
     return (
         ArchwayTranslationEngine(),
-        ArchwayAnalysisEngine(corpus_root=corpus_root),
+        ArchwayAnalysisEngine(
+            server_url=resolved_server_url,
+            timeout=timeout,
+            corpus_root=corpus_root,
+        ),
         ArchwayAnalysisResultAdapter(),
     )
 
@@ -70,6 +82,14 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--seed", type=int, default=None)
     p_run.add_argument("--db", default="runs.db", help="Path to SQLite store")
     p_run.add_argument("--notes", default=None)
+    p_run.add_argument("--archway-server-url", default=None, help="Archway analysis server URL.")
+    p_run.add_argument("--archway-config", default=None, help="Path to archway.toml.")
+    p_run.add_argument(
+        "--archway-timeout",
+        type=float,
+        default=30.0,
+        help="Per-snippet Archway request timeout.",
+    )
 
     p_score = sub.add_parser("score", help="Print stored scores for a run")
     p_score.add_argument("run_id", type=int)
@@ -160,9 +180,29 @@ def main(argv: list[str] | None = None) -> int:
 
 def _cmd_run(args) -> int:
     bench = BENCHMARKS[args.benchmark]()
-    translator, analyzer, adapter = ENGINES[args.engine](
-        bench, args.stub_accuracy, args.seed
-    )
+    metadata = None
+    if args.engine == "archway":
+        cfg = resolve_archway_server_config(
+            cli_server_url=args.archway_server_url,
+            config_path=args.archway_config,
+        )
+        translator, analyzer, adapter = _build_archway_engines(
+            bench,
+            args.stub_accuracy,
+            args.seed,
+            server_url=cfg.server_url,
+            timeout=args.archway_timeout,
+        )
+        metadata = {
+            "archway_server_url": cfg.server_url,
+            "archway_server_url_source": cfg.source,
+        }
+        if cfg.config_path:
+            metadata["archway_config_path"] = cfg.config_path
+    else:
+        translator, analyzer, adapter = ENGINES[args.engine](
+            bench, args.stub_accuracy, args.seed
+        )
     result = run_pipeline(
         benchmark=bench,
         translator=translator,
@@ -172,6 +212,7 @@ def _cmd_run(args) -> int:
         seed=args.seed,
         notes=args.notes,
         db_path=Path(args.db),
+        metadata=metadata,
     )
     a = result.all_scores
     c = result.covered_scores

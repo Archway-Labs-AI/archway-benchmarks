@@ -16,9 +16,17 @@ Keep this module dependency-free, exactly like `types.py`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import Any, Literal
 
 BugMode = Literal["detection", "repair"]
+FindingSignalKind = Literal["bottom"]
+SourcePositionBasis = Literal[
+    "direct-node",
+    "defining-expr",
+    "enclosing-function",
+    "rowless",
+    "unknown",
+]
 
 
 @dataclass(frozen=True)
@@ -34,6 +42,43 @@ class BugLocation:
     start: int  # first buggy-side line touched (1-indexed)
     end: int  # last buggy-side line touched (inclusive)
     lines: frozenset[int] = field(default_factory=frozenset)  # exact changed lines
+
+
+@dataclass(frozen=True)
+class FindingCandidate:
+    """Benchmark-side readout record for analysis facts that may localize a bug.
+
+    The initial BugsInPy consumer builds these records from existing bottom facts
+    only. Future consumers can add other signal kinds without changing the
+    detection scorer's strict flag shape.
+    """
+
+    bug_key: str
+    file: str | None
+    line: int | None
+    span: tuple[int, int] | None
+    signal_kind: FindingSignalKind
+    strict_score_eligible: bool
+    source_position_basis: SourcePositionBasis
+    provenance_classification: str
+    provenance: dict[str, Any] = field(default_factory=dict)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "bug_key": self.bug_key,
+            "file": self.file,
+            "line": self.line,
+            "span": (
+                {"start": self.span[0], "end": self.span[1]}
+                if self.span is not None
+                else None
+            ),
+            "signal_kind": self.signal_kind,
+            "strict_score_eligible": self.strict_score_eligible,
+            "source_position_basis": self.source_position_basis,
+            "provenance_classification": self.provenance_classification,
+            "provenance": self.provenance,
+        }
 
 
 @dataclass(frozen=True)

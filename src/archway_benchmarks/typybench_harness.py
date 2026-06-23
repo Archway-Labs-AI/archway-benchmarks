@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import csv
 import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence, Union
@@ -115,6 +116,73 @@ def score_command(
         pred_path=pred_path,
         build=False,
     )
+
+
+def available_repos(data_path: Path = DEFAULT_DATA_ROOT) -> list[str]:
+    """Return TypyBench repo names available under ``typybenchdata``."""
+
+    data_path = Path(data_path)
+    if not data_path.is_dir():
+        raise FileNotFoundError(f"TypyBench data path does not exist: {data_path}")
+    return sorted(
+        path.name
+        for path in data_path.iterdir()
+        if path.is_dir() and not path.name.startswith(".")
+    )
+
+
+def docker_image_name(repo_name: str) -> str:
+    """Return TypyBench's native Docker image tag for ``repo_name``."""
+
+    return f"typybench-{repo_name.lower()}"
+
+
+def local_docker_images(
+    *,
+    docker_cmd: Sequence[str] = ("docker",),
+    prefix: str = "typybench-",
+) -> set[str]:
+    """Return locally available Docker image repositories for TypyBench.
+
+    This is a read-only preflight helper. It deliberately reports repository
+    names without tags because TypyBench's ``run.py`` invokes images by bare
+    repository name, relying on Docker's default ``latest`` tag.
+    """
+
+    proc = subprocess.run(
+        [
+            *docker_cmd,
+            "images",
+            "--format",
+            "{{.Repository}}",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "docker images failed")
+    return {
+        line.strip()
+        for line in proc.stdout.splitlines()
+        if line.strip().startswith(prefix)
+    }
+
+
+def missing_docker_images(
+    *,
+    data_path: Path = DEFAULT_DATA_ROOT,
+    local_images: set[str] | None = None,
+    docker_cmd: Sequence[str] = ("docker",),
+) -> list[str]:
+    """Return repo names whose native TypyBench image is missing locally."""
+
+    repos = available_repos(data_path)
+    images = local_images if local_images is not None else local_docker_images(
+        docker_cmd=docker_cmd
+    )
+    return [repo for repo in repos if docker_image_name(repo) not in images]
 
 
 def materialize_source_prediction(

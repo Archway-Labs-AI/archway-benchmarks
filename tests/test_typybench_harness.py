@@ -4,7 +4,10 @@ import pytest
 
 from archway_benchmarks.typybench_harness import (
     REQUIRED_RESULT_COLUMNS,
+    available_repos,
     build_command,
+    docker_image_name,
+    missing_docker_images,
     materialize_source_prediction,
     parse_result_csv,
     score_command,
@@ -126,3 +129,18 @@ def test_commands_match_upstream_run_py_shape(tmp_path: Path) -> None:
         "--repo",
         "agents",
     ]
+
+
+def test_available_repos_and_missing_docker_images(tmp_path: Path) -> None:
+    data = tmp_path / "typybenchdata"
+    (data / "AutoGPT").mkdir(parents=True)
+    (data / "paper-qa").mkdir()
+    (data / ".cache").mkdir()
+    (data / "split.json").write_text("{}")
+
+    assert available_repos(data) == ["AutoGPT", "paper-qa"]
+    assert docker_image_name("AutoGPT") == "typybench-autogpt"
+    assert missing_docker_images(
+        data_path=data,
+        local_images={"typybench-paper-qa"},
+    ) == ["AutoGPT"]

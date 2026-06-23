@@ -240,49 +240,12 @@ def build_flags(manifest: list[dict], results: dict) -> tuple[dict, dict]:
     status_report: per-bug per-file analyze status + corpus-wide aggregates,
                    which is the coverage-weakness picture the report leans on.
     """
-    flagged: dict[str, list[dict]] = {}
-    per_bug: dict[str, dict] = {}
-    status_counter: Counter = Counter()
-    bugs_analyzed_any = 0   # >=1 touched file analyzed
-    bugs_flagged_any = 0    # >=1 bottom flag somewhere
+    from archway_benchmarks.bugsinpy_consumer import consume_bottom_findings
 
-    for bug in manifest:
-        key = bug["key"]
-        res = results.get(key, {})
-        locs: list[dict] = []
-        file_status: dict[str, dict] = {}
-        analyzed_any = False
-        for f in bug["files"]:
-            rp = f["repo_path"]
-            r = res.get(rp, {"status": f.get("fetch_status", "missing"),
-                             "bottom_rows": [], "n_bindings": 0, "n_bottom": 0})
-            st = r.get("status", "missing")
-            status_counter[st] += 1
-            if st == "analyzed":
-                analyzed_any = True
-                rows = r.get("bottom_rows") or []
-                if rows:
-                    locs.append({"file": rp, "lines": rows})
-            file_status[rp] = {
-                "status": st, "n_bindings": r.get("n_bindings", 0),
-                "n_bottom": r.get("n_bottom", 0), "error": r.get("error"),
-            }
-        if analyzed_any:
-            bugs_analyzed_any += 1
-        if locs:
-            bugs_flagged_any += 1
-            flagged[key] = locs
-        per_bug[key] = {"project": bug["project"], "files": file_status,
-                        "analyzed_any": analyzed_any, "flagged_any": bool(locs)}
-
-    status_report = {
-        "total_bugs": len(manifest),
-        "bugs_analyzed_any": bugs_analyzed_any,
-        "bugs_flagged_any": bugs_flagged_any,
-        "file_status_counts": dict(status_counter),
-        "per_bug": per_bug,
-    }
-    return flagged, status_report
+    out = consume_bottom_findings(manifest, results)
+    status = dict(out.status_report)
+    status["bugs_flagged_any"] = status.pop("bugs_strict_flagged_any", 0)
+    return out.flags_strict, status
 
 
 # ----- CLI -----
@@ -335,11 +298,39 @@ def main(argv=None) -> int:
     pb.add_argument("--out-flags", default="bugsinpy_flags.json")
     pb.add_argument("--out-status", default="bugsinpy_flag_status.json")
 
+    pc = sub.add_parser(
+        "consume-bottom",
+        help="Build strict flags + diagnostic candidates from bottom facts.",
+    )
+    pc.add_argument("--manifest", required=True)
+    pc.add_argument("--results", required=True, help="Driver output JSON.")
+    pc.add_argument("--out-flags", default="flags.strict.json")
+    pc.add_argument("--out-candidates", default="candidates.diagnostic.json")
+    pc.add_argument("--out-status", default="consumer_status.json")
+
     args = ap.parse_args(argv)
     if args.cmd == "fetch":
         return _cmd_fetch(args)
     if args.cmd == "build-flags":
         return _cmd_build_flags(args)
+    if args.cmd == "consume-bottom":
+        from archway_benchmarks.bugsinpy_consumer import consume_bottom_findings
+
+        manifest = json.loads(Path(args.manifest).read_text())
+        results = json.loads(Path(args.results).read_text())
+        out = consume_bottom_findings(manifest, results)
+        Path(args.out_flags).write_text(json.dumps(out.flags_strict, indent=2, sort_keys=True))
+        Path(args.out_candidates).write_text(
+            json.dumps(out.candidates_diagnostic, indent=2, sort_keys=True)
+        )
+        Path(args.out_status).write_text(json.dumps(out.status_report, indent=2, sort_keys=True))
+        summary = out.candidates_diagnostic["summary"]
+        print(
+            f"candidates: {summary['total_candidates']} total / "
+            f"{summary['strict_eligible_candidates']} strict-eligible"
+        )
+        print(f"  -> wrote {args.out_flags}, {args.out_candidates}, and {args.out_status}")
+        return 0
     return 1
 
 
