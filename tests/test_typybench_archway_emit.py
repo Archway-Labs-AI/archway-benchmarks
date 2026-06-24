@@ -7,6 +7,7 @@ from archway_benchmarks.typybench_archway_emit import (
     _element_type,
     _function_types,
     _run_engine_probe,
+    capture_translation_trace_file,
     emit_archway_predictions,
 )
 
@@ -472,3 +473,107 @@ def analyze_source(source, module_name):
     assert by_slot["return"]["rendered_annotation"] == "Any"
     assert by_slot["return"]["fallback_reason"] == "top"
     assert by_slot["return"]["final_annotation"] == "bool"
+
+
+def test_emit_predictions_profile_jsonl_records_per_file_timings(tmp_path) -> None:
+    engine = tmp_path / "engine"
+    sd_core = engine / "sd_core"
+    sd_core.mkdir(parents=True)
+    (sd_core / "__init__.py").write_text("", encoding="utf-8")
+    (sd_core / "analysis_server.py").write_text(
+        """
+def analyze_source(source, module_name):
+    if "boom" in source:
+        raise RuntimeError("synthetic")
+    return {
+        "functions": [
+            {
+                "fn_id": 1,
+                "name": "f",
+                "source_position": {"row": 1},
+                "instantiations": [
+                    {
+                        "params": {"x": [{"element": {"kind": "pytype", "name": "builtins.int"}}]},
+                        "ret": {"element": {"kind": "pytype", "name": "builtins.int"}},
+                    }
+                ],
+            }
+        ]
+    }
+""",
+        encoding="utf-8",
+    )
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "ok.py").write_text("def f(x):\n    return x\n", encoding="utf-8")
+    (source_root / "bad.py").write_text("boom = True\n", encoding="utf-8")
+    profile_jsonl = tmp_path / "profile" / "files.jsonl"
+
+    stats = emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=tmp_path / "predictions",
+        engine_worktree=engine,
+        runner=(sys.executable,),
+        timeout=30,
+        per_file_timeout=5,
+        profile_jsonl=profile_jsonl,
+    )
+
+    rows = [json.loads(line) for line in profile_jsonl.read_text(encoding="utf-8").splitlines()]
+    by_file = {row["file"]: row for row in rows}
+    assert stats.file_profiles
+    assert by_file["ok.py"]["status"] == "ok"
+    assert by_file["ok.py"]["seconds_engine_probe"] >= 0
+    assert by_file["ok.py"]["functions_seen"] == 1
+    assert by_file["bad.py"]["status"] == "engine_failed"
+    assert "RuntimeError: synthetic" in by_file["bad.py"]["error"]
+
+
+def test_capture_translation_trace_file_writes_summary_and_text(tmp_path) -> None:
+    engine = tmp_path / "engine"
+    sd_core = engine / "sd_core"
+    tooling = sd_core / "tooling"
+    tracing = sd_core / "translate" / "tracing"
+    tooling.mkdir(parents=True)
+    tracing.mkdir(parents=True)
+    (sd_core / "__init__.py").write_text("", encoding="utf-8")
+    (tooling / "__init__.py").write_text("", encoding="utf-8")
+    (sd_core / "translate" / "__init__.py").write_text("", encoding="utf-8")
+    (tracing / "__init__.py").write_text(
+        """
+def format_trace(trace):
+    return "TRACE:" + str(trace)
+""",
+        encoding="utf-8",
+    )
+    (tooling / "harness.py").write_text(
+        """
+class TranslationResult:
+    def __init__(self):
+        self.traces = ["root"]
+
+    @classmethod
+    def from_source(cls, source, trace=False, name=None):
+        return cls()
+""",
+        encoding="utf-8",
+    )
+    source = tmp_path / "demo.py"
+    source.write_text("x = 1\n", encoding="utf-8")
+
+    summary = capture_translation_trace_file(
+        engine_worktree=engine,
+        source_path=source,
+        module_name="demo",
+        trace_dir=tmp_path / "traces",
+        runner=(sys.executable,),
+        timeout=5,
+    )
+
+    assert summary["ok"] is True
+    assert summary["span_count"] == 0
+    assert "TRACE:root" in (tmp_path / "traces" / "demo.py.trace.txt").read_text(
+        encoding="utf-8"
+    )
+    assert (tmp_path / "traces" / "demo.py.trace-summary.json").exists()
