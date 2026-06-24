@@ -7,6 +7,7 @@ from archway_benchmarks.typybench_archway_emit import (
     _element_type,
     _function_types,
     _run_engine_probe,
+    capture_runtime_phase_profile_file,
     capture_translation_trace_file,
     emit_archway_predictions,
 )
@@ -577,3 +578,54 @@ class TranslationResult:
         encoding="utf-8"
     )
     assert (tmp_path / "traces" / "demo.py.trace-summary.json").exists()
+
+
+def test_capture_runtime_phase_profile_file_splits_translation_from_analysis(tmp_path) -> None:
+    engine = tmp_path / "engine"
+    sd_core = engine / "sd_core"
+    tooling = sd_core / "tooling"
+    tooling.mkdir(parents=True)
+    (sd_core / "__init__.py").write_text("", encoding="utf-8")
+    (tooling / "__init__.py").write_text("", encoding="utf-8")
+    (tooling / "harness.py").write_text(
+        """
+class TranslationResult:
+    def __init__(self, trace=False):
+        self.morphism = object()
+        self.traces = [type("Trace", (), {"spans": [1, 2, 3]})()] if trace else []
+
+    @classmethod
+    def from_source(cls, source, trace=False, name=None):
+        return cls(trace=trace)
+""",
+        encoding="utf-8",
+    )
+    (sd_core / "analysis_server.py").write_text(
+        """
+import time
+
+def analyze_source(source, module_name):
+    if "slow" in source:
+        time.sleep(5)
+    return {"functions": [{"name": "f"}]}
+""",
+        encoding="utf-8",
+    )
+    source = tmp_path / "demo.py"
+    source.write_text("slow = True\n", encoding="utf-8")
+
+    profile = capture_runtime_phase_profile_file(
+        engine_worktree=engine,
+        source_path=source,
+        module_name="demo",
+        runner=(sys.executable,),
+        timeout=1,
+    )
+
+    assert profile["file"] == str(source)
+    assert profile["import_only"]["ok"] is True
+    assert profile["translation_no_trace"]["ok"] is True
+    assert profile["translation_trace"]["ok"] is True
+    assert profile["translation_trace"]["span_count"] == 3
+    assert profile["analyze_source"]["ok"] is False
+    assert "TimeoutExpired" in profile["analyze_source"]["error"]
