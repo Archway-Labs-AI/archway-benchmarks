@@ -433,6 +433,152 @@ def capture_translation_trace_file(
     return record
 
 
+def capture_runtime_phase_profile_file(
+    *,
+    engine_worktree: Path,
+    source_path: Path,
+    module_name: str,
+    runner: tuple[str, ...] = ("hatch", "run", "python"),
+    timeout: int = 90,
+) -> dict[str, Any]:
+    """Measure import, translation, traced translation, and analysis separately.
+
+    Each phase runs in its own subprocess. This keeps a stuck analysis/fixpoint
+    from hiding whether translation or trace capture was fast.
+    """
+
+    source_path = Path(source_path)
+    out: dict[str, Any] = {"file": str(source_path), "module_name": module_name}
+    for phase in (
+        "import_only",
+        "translation_no_trace",
+        "translation_trace",
+        "analyze_source",
+    ):
+        out[phase] = _run_runtime_phase_probe_file(
+            engine_worktree=Path(engine_worktree),
+            source_path=source_path,
+            module_name=module_name,
+            runner=runner,
+            timeout=timeout,
+            phase=phase,
+        )
+    return out
+
+
+def _run_runtime_phase_probe_file(
+    *,
+    engine_worktree: Path,
+    source_path: Path,
+    module_name: str,
+    runner: tuple[str, ...],
+    timeout: int,
+    phase: str,
+) -> dict[str, Any]:
+    probe = r'''
+import json
+import sys
+import time
+import traceback
+from pathlib import Path
+
+phase = sys.argv[1]
+path = Path(sys.argv[2])
+module_name = sys.argv[3]
+started = time.monotonic()
+out = {"ok": False, "phase": phase}
+try:
+    from sd_core.tooling.harness import TranslationResult
+    from sd_core.analysis_server import analyze_source
+    if phase == "import_only":
+        out = {"ok": True, "phase": phase}
+    else:
+        source = path.read_text(encoding="utf-8")
+        if phase == "translation_no_trace":
+            result = TranslationResult.from_source(source, trace=False, name=module_name)
+            out = {
+                "ok": True,
+                "phase": phase,
+                "morphism_kind": type(result.morphism).__name__,
+            }
+        elif phase == "translation_trace":
+            result = TranslationResult.from_source(source, trace=True, name=module_name)
+            trace = result.traces[0] if result.traces else None
+            out = {
+                "ok": True,
+                "phase": phase,
+                "trace_count": len(result.traces),
+                "span_count": len(getattr(trace, "spans", [])) if trace is not None else 0,
+            }
+        elif phase == "analyze_source":
+            result = analyze_source(source, module_name)
+            out = {
+                "ok": True,
+                "phase": phase,
+                "function_count": len(result.get("functions", [])) if isinstance(result, dict) else None,
+            }
+        else:
+            raise RuntimeError(f"unknown runtime phase: {phase}")
+except Exception as exc:
+    out = {
+        "ok": False,
+        "phase": phase,
+        "error": f"{type(exc).__name__}: {exc}",
+        "trace_tail": traceback.format_exc()[-2000:],
+    }
+out["seconds"] = round(time.monotonic() - started, 6)
+print(json.dumps(out, sort_keys=True))
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
+        f.write(probe)
+        f.flush()
+        cmd = [*runner, f.name, phase, str(source_path.resolve()), module_name]
+        started = time.monotonic()
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=engine_worktree,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=_probe_env(engine_worktree),
+                start_new_session=True,
+            )
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = proc.communicate()
+            return {
+                "ok": False,
+                "phase": phase,
+                "seconds": round(time.monotonic() - started, 6),
+                "error": f"TimeoutExpired: {phase} exceeded {timeout}s",
+                "trace_tail": ((stderr or "")[-2000:] if isinstance(stderr, str) else ""),
+            }
+    if proc.returncode != 0:
+        return {
+            "ok": False,
+            "phase": phase,
+            "seconds": round(time.monotonic() - started, 6),
+            "error": f"runtime phase probe failed: exit={proc.returncode}",
+            "trace_tail": stderr[-2000:],
+        }
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            return json.loads(line)
+    return {
+        "ok": False,
+        "phase": phase,
+        "seconds": round(time.monotonic() - started, 6),
+        "error": "runtime phase probe produced no JSON",
+        "trace_tail": stderr[-2000:],
+    }
+
+
 def _run_translation_trace_probe_file(
     *,
     engine_worktree: Path,
