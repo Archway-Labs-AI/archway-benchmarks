@@ -17,11 +17,12 @@ from pathlib import Path
 from typing import Optional, Sequence, Union
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_TYPYBENCH_ROOT = _REPO_ROOT / "extras" / "TypyBench" / "typybench"
-DEFAULT_DATA_ROOT = _REPO_ROOT / "extras" / "TypyBench" / "typybenchdata"
-DEFAULT_PREDICTIONS_ROOT = _REPO_ROOT / "extras" / "TypyBench" / "predictions"
+_LOCAL_TYPYBENCH_ROOT = _REPO_ROOT / ".archway-benchmarks" / "typybench"
+DEFAULT_TYPYBENCH_ROOT = _REPO_ROOT / "extras" / "TypyBench"
+DEFAULT_DATA_ROOT = _LOCAL_TYPYBENCH_ROOT / "data" / "typybenchdata"
+DEFAULT_PREDICTIONS_ROOT = _LOCAL_TYPYBENCH_ROOT / "runs" / "predictions"
 DEFAULT_SINGLE_REPO_PREDICTIONS_ROOT = (
-    _REPO_ROOT / "extras" / "TypyBench" / "predictions-single-repo"
+    _LOCAL_TYPYBENCH_ROOT / "runs" / "predictions-single-repo"
 )
 
 REQUIRED_RESULT_COLUMNS = (

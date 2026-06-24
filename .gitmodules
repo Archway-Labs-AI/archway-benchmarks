@@ -4,3 +4,6 @@
 [submodule "extras/BugsInPy"]
 	path = extras/BugsInPy
 	url = git@github.com:Archway-Labs-AI/BugsInPy.git
+[submodule "extras/TypyBench"]
+	path = extras/TypyBench
+	url = git@github.com:Archway-Labs-AI/typybench.git
