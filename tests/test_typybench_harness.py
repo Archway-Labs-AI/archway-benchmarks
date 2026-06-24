@@ -129,6 +129,28 @@ def test_commands_match_upstream_run_py_shape(tmp_path: Path) -> None:
         "--repo",
         "agents",
     ]
+    assert score_command(
+        typybench_root=tool,
+        data_path=data,
+        pred_path=pred,
+        progress_jsonl=tmp_path / "progress.jsonl",
+        log_dir=tmp_path / "repo-logs",
+        skip_completed=True,
+    ) == [
+        "python3",
+        str(tool / "run.py"),
+        "--data-path",
+        str(data),
+        "--num-workers",
+        "1",
+        "--pred-path",
+        str(pred),
+        "--progress-jsonl",
+        str(tmp_path / "progress.jsonl"),
+        "--log-dir",
+        str(tmp_path / "repo-logs"),
+        "--skip-completed",
+    ]
 
 
 def test_available_repos_and_missing_docker_images(tmp_path: Path) -> None:

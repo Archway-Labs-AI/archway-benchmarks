@@ -105,6 +105,9 @@ def score_command(
     pred_path: Path = DEFAULT_PREDICTIONS_ROOT,
     num_workers: int = 1,
     repo: Optional[str] = None,
+    progress_jsonl: Optional[Path] = None,
+    log_dir: Optional[Path] = None,
+    skip_completed: bool = False,
 ) -> list[str]:
     """Return the official Docker-backed TypyBench scoring command."""
 
@@ -115,6 +118,9 @@ def score_command(
         repo=repo,
         pred_path=pred_path,
         build=False,
+        progress_jsonl=progress_jsonl,
+        log_dir=log_dir,
+        skip_completed=skip_completed,
     )
 
 
@@ -324,6 +330,9 @@ def _run_py_command(
     repo: Optional[str],
     pred_path: Optional[Path],
     build: bool,
+    progress_jsonl: Optional[Path] = None,
+    log_dir: Optional[Path] = None,
+    skip_completed: bool = False,
 ) -> list[str]:
     cmd = [
         "python3",
@@ -339,6 +348,12 @@ def _run_py_command(
         if pred_path is None:
             raise ValueError("pred_path is required for scoring")
         cmd.extend(["--pred-path", str(pred_path)])
+        if progress_jsonl is not None:
+            cmd.extend(["--progress-jsonl", str(progress_jsonl)])
+        if log_dir is not None:
+            cmd.extend(["--log-dir", str(log_dir)])
+        if skip_completed:
+            cmd.append("--skip-completed")
     if repo is not None:
         cmd.extend(["--repo", repo])
     return cmd
