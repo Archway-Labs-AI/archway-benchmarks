@@ -26,6 +26,40 @@ _TRACE_ENV_VAR = "ARCHWAY_TYPYBENCH_TRACE_JSONL"
 
 
 @dataclass(frozen=True)
+class FileProfile:
+    repo_name: str
+    file: str
+    status: str
+    seconds_total: float
+    seconds_engine_probe: float
+    seconds_render: float = 0.0
+    seconds_annotate: float = 0.0
+    functions_seen: int = 0
+    functions_annotated: int = 0
+    params_annotated: int = 0
+    returns_annotated: int = 0
+    error: str | None = None
+    trace_tail: str | None = None
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "repo": self.repo_name,
+            "file": self.file,
+            "status": self.status,
+            "seconds_total": self.seconds_total,
+            "seconds_engine_probe": self.seconds_engine_probe,
+            "seconds_render": self.seconds_render,
+            "seconds_annotate": self.seconds_annotate,
+            "functions_seen": self.functions_seen,
+            "functions_annotated": self.functions_annotated,
+            "params_annotated": self.params_annotated,
+            "returns_annotated": self.returns_annotated,
+            "error": self.error,
+            "trace_tail": self.trace_tail,
+        }
+
+
+@dataclass(frozen=True)
 class EmitStats:
     repo_name: str
     files_total: int
@@ -36,6 +70,7 @@ class EmitStats:
     params_annotated: int
     returns_annotated: int
     failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
+    file_profiles: tuple[FileProfile, ...] = field(default_factory=tuple)
     engine_sha: str | None = None
 
 
@@ -51,6 +86,7 @@ def emit_archway_predictions(
     timeout: int = 900,
     per_file_timeout: int = 60,
     trace_jsonl: Path | None = None,
+    profile_jsonl: Path | None = None,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -74,6 +110,7 @@ def emit_archway_predictions(
 
     trace_path = trace_jsonl or _trace_path_from_env()
     trace = _TraceWriter(trace_path, repo_name) if trace_path else None
+    profile_writer = _ProfileWriter(profile_jsonl) if profile_jsonl else None
 
     files_analyzed = 0
     functions_seen = 0
@@ -81,47 +118,110 @@ def emit_archway_predictions(
     params_annotated = 0
     returns_annotated = 0
     failures: list[dict[str, str]] = []
+    file_profiles: list[FileProfile] = []
 
-    started = time.monotonic()
-    for src in files:
-        rel = src.relative_to(untyped_root)
-        dest = dest_root / rel
-        remaining = timeout - (time.monotonic() - started)
-        if remaining <= 0:
-            failures.append(
-                {
-                    "file": str(rel),
-                    "error": f"TimeoutExpired: repo analysis exceeded {timeout}s",
-                }
+    try:
+        started = time.monotonic()
+        for src in files:
+            file_started = time.monotonic()
+            rel = src.relative_to(untyped_root)
+            rel_s = str(rel)
+            dest = dest_root / rel
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0:
+                error = f"TimeoutExpired: repo analysis exceeded {timeout}s"
+                failures.append({"file": rel_s, "error": error})
+                profile = FileProfile(
+                    repo_name=repo_name,
+                    file=rel_s,
+                    status="repo_timeout",
+                    seconds_total=round(time.monotonic() - file_started, 6),
+                    seconds_engine_probe=0.0,
+                    error=error,
+                )
+                file_profiles.append(profile)
+                if profile_writer:
+                    profile_writer.write(profile)
+                continue
+
+            probe_started = time.monotonic()
+            record = _run_engine_probe_file(
+                engine_worktree=Path(engine_worktree),
+                source_path=src,
+                module_name=src.stem,
+                runner=runner,
+                timeout=max(1, min(per_file_timeout, int(remaining))),
             )
-            continue
+            seconds_probe = time.monotonic() - probe_started
+            if not record.get("ok"):
+                err = str(record.get("error", "no engine result"))[:300]
+                failures.append({"file": rel_s, "error": err})
+                profile = FileProfile(
+                    repo_name=repo_name,
+                    file=rel_s,
+                    status="engine_failed",
+                    seconds_total=round(time.monotonic() - file_started, 6),
+                    seconds_engine_probe=round(seconds_probe, 6),
+                    error=err,
+                    trace_tail=record.get("trace_tail"),
+                )
+                file_profiles.append(profile)
+                if profile_writer:
+                    profile_writer.write(profile)
+                continue
 
-        record = _run_engine_probe_file(
-            engine_worktree=Path(engine_worktree),
-            source_path=src,
-            module_name=src.stem,
-            runner=runner,
-            timeout=max(1, min(per_file_timeout, int(remaining))),
-        )
-        if not record.get("ok"):
-            err = record.get("error", "no engine result")
-            failures.append({"file": str(rel), "error": str(err)[:300]})
-            continue
-
-        files_analyzed += 1
-        file_trace = trace.for_file(str(rel)) if trace else None
-        function_types = _function_types(record.get("analysis", {}), trace=file_trace)
-        functions_seen += len(function_types)
-        raw = src.read_text(encoding="utf-8")
-        try:
-            annotated, file_stats = _annotate_source(raw, function_types, trace=file_trace)
-        except SyntaxError as exc:
-            failures.append({"file": str(rel), "error": f"emit SyntaxError: {exc}"[:300]})
-            continue
-        functions_annotated += file_stats["functions"]
-        params_annotated += file_stats["params"]
-        returns_annotated += file_stats["returns"]
-        dest.write_text(annotated, encoding="utf-8")
+            files_analyzed += 1
+            file_trace = trace.for_file(rel_s) if trace else None
+            render_started = time.monotonic()
+            function_types = _function_types(record.get("analysis", {}), trace=file_trace)
+            seconds_render = time.monotonic() - render_started
+            functions_seen += len(function_types)
+            raw = src.read_text(encoding="utf-8")
+            annotate_started = time.monotonic()
+            try:
+                annotated, file_stats = _annotate_source(raw, function_types, trace=file_trace)
+            except SyntaxError as exc:
+                error = f"emit SyntaxError: {exc}"[:300]
+                failures.append({"file": rel_s, "error": error})
+                profile = FileProfile(
+                    repo_name=repo_name,
+                    file=rel_s,
+                    status="annotate_failed",
+                    seconds_total=round(time.monotonic() - file_started, 6),
+                    seconds_engine_probe=round(seconds_probe, 6),
+                    seconds_render=round(seconds_render, 6),
+                    seconds_annotate=round(time.monotonic() - annotate_started, 6),
+                    functions_seen=len(function_types),
+                    error=error,
+                )
+                file_profiles.append(profile)
+                if profile_writer:
+                    profile_writer.write(profile)
+                continue
+            seconds_annotate = time.monotonic() - annotate_started
+            functions_annotated += file_stats["functions"]
+            params_annotated += file_stats["params"]
+            returns_annotated += file_stats["returns"]
+            dest.write_text(annotated, encoding="utf-8")
+            profile = FileProfile(
+                repo_name=repo_name,
+                file=rel_s,
+                status="ok",
+                seconds_total=round(time.monotonic() - file_started, 6),
+                seconds_engine_probe=round(seconds_probe, 6),
+                seconds_render=round(seconds_render, 6),
+                seconds_annotate=round(seconds_annotate, 6),
+                functions_seen=len(function_types),
+                functions_annotated=file_stats["functions"],
+                params_annotated=file_stats["params"],
+                returns_annotated=file_stats["returns"],
+            )
+            file_profiles.append(profile)
+            if profile_writer:
+                profile_writer.write(profile)
+    finally:
+        if profile_writer:
+            profile_writer.close()
 
     if trace:
         trace.close()
@@ -136,6 +236,7 @@ def emit_archway_predictions(
         params_annotated=params_annotated,
         returns_annotated=returns_annotated,
         failures=tuple(failures),
+        file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
     )
 
@@ -277,6 +378,153 @@ class _TraceWriter:
 
     def close(self) -> None:
         self._handle.close()
+
+
+class _ProfileWriter:
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._handle = self.path.open("w", encoding="utf-8")
+
+    def write(self, profile: FileProfile) -> None:
+        self._handle.write(json.dumps(profile.to_json(), sort_keys=True) + "\n")
+        self._handle.flush()
+
+    def close(self) -> None:
+        self._handle.close()
+
+
+def capture_translation_trace_file(
+    *,
+    engine_worktree: Path,
+    source_path: Path,
+    module_name: str,
+    trace_dir: Path,
+    runner: tuple[str, ...] = ("hatch", "run", "python"),
+    timeout: int = 60,
+) -> dict[str, Any]:
+    """Capture a human-readable translation trace for one source file.
+
+    This is intentionally translation-only. It does not run analysis, so it can
+    be applied after a profiling pass to slow or failed files without changing
+    TypyBench scoring semantics.
+    """
+
+    source_path = Path(source_path)
+    trace_dir = Path(trace_dir)
+    rel_name = _safe_artifact_name(str(source_path.name))
+    trace_txt = trace_dir / f"{rel_name}.trace.txt"
+    summary_json = trace_dir / f"{rel_name}.trace-summary.json"
+    trace_dir.mkdir(parents=True, exist_ok=True)
+
+    record = _run_translation_trace_probe_file(
+        engine_worktree=Path(engine_worktree),
+        source_path=source_path,
+        module_name=module_name,
+        runner=runner,
+        timeout=timeout,
+    )
+    text = record.pop("trace_text", None)
+    if text is not None:
+        trace_txt.write_text(text, encoding="utf-8")
+        record["trace_text_path"] = str(trace_txt)
+    summary_json.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    record["summary_path"] = str(summary_json)
+    return record
+
+
+def _run_translation_trace_probe_file(
+    *,
+    engine_worktree: Path,
+    source_path: Path,
+    module_name: str,
+    runner: tuple[str, ...],
+    timeout: int,
+) -> dict[str, Any]:
+    probe = r'''
+import json
+import sys
+import traceback
+from pathlib import Path
+
+from sd_core.tooling.harness import TranslationResult
+from sd_core.translate.tracing import format_trace
+
+path = Path(sys.argv[1])
+module_name = sys.argv[2]
+try:
+    source = path.read_text(encoding="utf-8")
+    result = TranslationResult.from_source(source, trace=True, name=module_name)
+    trace = result.traces[0] if result.traces else None
+    spans = getattr(trace, "spans", []) if trace is not None else []
+    out = {
+        "ok": True,
+        "file": str(path),
+        "module_name": module_name,
+        "span_count": len(spans),
+        "trace_text": format_trace(trace) if trace is not None else "(empty trace)",
+    }
+except Exception as exc:
+    out = {
+        "ok": False,
+        "file": str(path),
+        "module_name": module_name,
+        "error": f"{type(exc).__name__}: {exc}",
+        "trace_tail": traceback.format_exc()[-2000:],
+    }
+print(json.dumps(out, sort_keys=True))
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
+        f.write(probe)
+        f.flush()
+        cmd = [*runner, f.name, str(source_path.resolve()), module_name]
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=engine_worktree,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=_probe_env(engine_worktree),
+                start_new_session=True,
+            )
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = proc.communicate()
+            return {
+                "ok": False,
+                "file": str(source_path),
+                "module_name": module_name,
+                "error": f"TimeoutExpired: translation trace exceeded {timeout}s",
+                "trace_tail": ((stderr or "")[-2000:] if isinstance(stderr, str) else ""),
+            }
+    if proc.returncode != 0:
+        return {
+            "ok": False,
+            "file": str(source_path),
+            "module_name": module_name,
+            "error": f"translation trace probe failed: exit={proc.returncode}",
+            "trace_tail": stderr[-2000:],
+        }
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            return json.loads(line)
+    return {
+        "ok": False,
+        "file": str(source_path),
+        "module_name": module_name,
+        "error": "translation trace probe produced no JSON",
+        "trace_tail": stderr[-2000:],
+    }
+
+
+def _safe_artifact_name(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in "._-" else "__" for ch in value)
 
 
 class _TraceBuffer:
