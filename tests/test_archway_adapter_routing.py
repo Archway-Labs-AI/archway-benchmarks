@@ -120,6 +120,21 @@ def test_dotted_method_return_resolves():
     assert preds == {"MyClass.func1": frozenset({"str"})}
 
 
+def test_dotted_method_return_resolves_string_body_ids():
+    result = _build_result()
+    result.functions[0]["fn_id"] = "sid:v1:body:func1"
+    result.functions[1]["instantiations"][0]["locals"]["self.smth"][0]["element"] = _callable(
+        "sid:v1:body:func1"
+    )
+    snippet = _snippet([_gt("return", "MyClass.func1", 8, 9, {"str"})])
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "MyClass.func1": frozenset({"str"})
+    }
+
+
 def test_self_attribute_read_resolves_directly():
     # Flat `self.smth` binding at L6C9 — was LOCATION_MISS, must now be callable.
     preds = _predict([_gt("variable", "self.smth", 6, 9, {"callable"}, function="A.__init__")])

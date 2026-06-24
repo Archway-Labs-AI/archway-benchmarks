@@ -215,6 +215,15 @@ def test_element_type_maps_supported_shapes() -> None:
     assert _element_type({"kind": "instance", "cls": {"body": 7}}, by_id) == "Factory"
 
 
+def test_element_type_resolves_string_body_ids() -> None:
+    by_id = {"sid:v1:body:factory": {"name": "Factory"}}
+
+    assert (
+        _element_type({"kind": "instance", "cls": {"body": "sid:v1:body:factory"}}, by_id)
+        == "Factory"
+    )
+
+
 def test_renderer_keeps_container_elements_and_parseable_union_spelling() -> None:
     source = "def f(items, lookup, pair):\n    return pair\n"
     analysis = {

@@ -29,8 +29,8 @@ Post-processing applied:
 - ``Union`` produces a ``frozenset`` of all members' flattened forms; the
   scorer intersects with GT's type set.
 - For ``return`` GT entries, the binding at the def-identifier position carries
-  a callable element; we resolve its body id in ``functions[]`` and union the
-  observed ``inst.ret.element`` types. Builtin callable bodies (``body`` is a
+  a callable element; we resolve its opaque body id in ``functions[]`` and union
+  the observed ``inst.ret.element`` types. Builtin callable bodies (``body`` is a
   dict per ADR-045) carry no instantiation log and are skipped.
 """
 from __future__ import annotations
@@ -232,10 +232,10 @@ def _callable_returns_for(
     """Union observed return types across all user-function callable body ids
     in ``elements``. Returns ``None`` if no element carries a resolvable
     user-function identity (so the caller falls back to element flattening)."""
-    by_fn_id: dict[int, dict[str, Any]] = {
+    by_fn_id: dict[Any, dict[str, Any]] = {
         fn["fn_id"]: fn for fn in functions_list if "fn_id" in fn
     }
-    ids: list[int] = []
+    ids: list[Any] = []
     for elt in elements:
         _collect_callable_bodies(elt, ids)
     if not ids:
@@ -256,17 +256,18 @@ def _callable_returns_for(
     return frozenset(out) if saw_any else None
 
 
-def _collect_callable_bodies(elt: dict[str, Any], out: list[int]) -> None:
+def _collect_callable_bodies(elt: dict[str, Any], out: list[Any]) -> None:
     """Walk an element tree and append every user-function callable body id.
 
     Per ADR-045, builtin callables encode ``body`` as a dict
     (``{"kind": "builtin", "name": ...}``) and aren't tracked in ``functions[]``
-    — skip them. User-function bodies are ints (fn_id).
+    — skip them. User-function bodies are opaque semantic IDs, historically
+    ints and now stable strings. Treat them only as equality keys.
     """
     kind = elt.get("kind")
     if kind == "callable":
         body = elt.get("body")
-        if isinstance(body, int):
+        if body is not None and not isinstance(body, dict):
             out.append(body)
         # Builtin bodies (dicts) intentionally skipped.
     elif kind == "union":

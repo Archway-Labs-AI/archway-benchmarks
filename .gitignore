@@ -38,6 +38,9 @@ baselines_*.log
 # DreamTeam tracking
 .dreamteam/
 
+# Local benchmark data, predictions, and logs
+.archway-benchmarks/
+
 # Run reports & analyses — generated, machine-local, and (analyses) internal.
 # These live in the private archway-context repo, never here. See cli.py _default_reports_dir().
 archway_report_*.md
