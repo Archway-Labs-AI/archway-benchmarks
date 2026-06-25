@@ -42,6 +42,7 @@ class FileProfile:
     returns_annotated: int = 0
     error: str | None = None
     trace_tail: str | None = None
+    analysis_summary: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -58,6 +59,7 @@ class FileProfile:
             "returns_annotated": self.returns_annotated,
             "error": self.error,
             "trace_tail": self.trace_tail,
+            "analysis_summary": self.analysis_summary,
         }
 
 
@@ -89,6 +91,7 @@ def emit_archway_predictions(
     per_file_timeout: int = 60,
     trace_jsonl: Path | None = None,
     profile_jsonl: Path | None = None,
+    body_summary_consumption: str = "off",
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -157,6 +160,7 @@ def emit_archway_predictions(
                 module_name=src.stem,
                 runner=runner,
                 timeout=max(1, min(per_file_timeout, int(remaining))),
+                body_summary_consumption=body_summary_consumption,
             )
             seconds_probe = time.monotonic() - probe_started
             if not record.get("ok"):
@@ -170,6 +174,7 @@ def emit_archway_predictions(
                     seconds_engine_probe=round(seconds_probe, 6),
                     error=err,
                     trace_tail=record.get("trace_tail"),
+                    analysis_summary=record.get("analysis_summary"),
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -199,6 +204,7 @@ def emit_archway_predictions(
                     seconds_annotate=round(time.monotonic() - annotate_started, 6),
                     functions_seen=len(function_types),
                     error=error,
+                    analysis_summary=record.get("analysis_summary"),
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -221,6 +227,7 @@ def emit_archway_predictions(
                 functions_annotated=file_stats["functions"],
                 params_annotated=file_stats["params"],
                 returns_annotated=file_stats["returns"],
+                analysis_summary=record.get("analysis_summary"),
             )
             file_profiles.append(profile)
             if profile_writer:
@@ -254,6 +261,7 @@ def _run_engine_probe(
     runner: tuple[str, ...],
     timeout: int,
     per_file_timeout: int = 60,
+    body_summary_consumption: str | None = None,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"files": {}}
     started = time.monotonic()
@@ -273,6 +281,7 @@ def _run_engine_probe(
             module_name=path.stem,
             runner=runner,
             timeout=max(1, min(per_file_timeout, int(remaining))),
+            body_summary_consumption=body_summary_consumption,
         )
     return out
 
@@ -284,22 +293,60 @@ def _run_engine_probe_file(
     module_name: str,
     runner: tuple[str, ...],
     timeout: int,
+    body_summary_consumption: str | None = None,
 ) -> dict[str, Any]:
     probe = r'''
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
 
-from sd_core.analysis_server import analyze_source
+try:
+    from sd_core.analysis_server import _encode_finalized, analyze_source
+    from sd_core.runners.analysis_observability import AnalysisObservationConfig
+    from sd_core.runners.file_results import FileAnalysisFailure, analyze_source_file_result
+except Exception:  # pragma: no cover - compatibility with older engine pins
+    AnalysisObservationConfig = None
+    FileAnalysisFailure = None
+    _encode_finalized = None
+    analyze_source_file_result = None
+    from sd_core.analysis_server import analyze_source
 
 path = Path(sys.argv[1])
 module_name = sys.argv[2]
 try:
     source = path.read_text(encoding="utf-8")
+    analysis_summary = None
+    if (
+        analyze_source_file_result is not None
+        and AnalysisObservationConfig is not None
+        and _encode_finalized is not None
+    ):
+        kwargs = {
+            "module": module_name,
+            "repo_path": str(path),
+            "observation_config": AnalysisObservationConfig.summary(),
+        }
+        body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
+        if body_summary_consumption != "off":
+            kwargs["body_summary_consumption"] = body_summary_consumption
+        file_result = analyze_source_file_result(source, **kwargs)
+        analysis_summary = file_result.to_jsonable().get("analysis_summary")
+        if file_result.status != "analyzed" or file_result.run is None:
+            if FileAnalysisFailure is not None:
+                raise FileAnalysisFailure(file_result)
+            raise RuntimeError(f"file analysis failed: {file_result.status}")
+        analysis = _encode_finalized(file_result.run.finalized)
+        analysis["module_name"] = module_name
+        analysis["status"] = file_result.status
+        analysis["file_result"] = file_result.to_jsonable()
+    else:
+        analysis = analyze_source(source, module_name)
     out = {
         "ok": True,
-        "analysis": analyze_source(source, module_name),
+        "analysis": analysis,
+        "analysis_summary": analysis_summary,
     }
 except Exception as exc:
     out = {
@@ -327,7 +374,10 @@ print(json.dumps(out, sort_keys=True))
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=_probe_env(engine_worktree),
+                env=_probe_env(
+                    engine_worktree,
+                    body_summary_consumption=body_summary_consumption,
+                ),
                 start_new_session=True,
             )
             stdout, stderr = proc.communicate(timeout=timeout)
@@ -359,8 +409,14 @@ print(json.dumps(out, sort_keys=True))
     }
 
 
-def _probe_env(engine_worktree: Path) -> dict[str, str]:
+def _probe_env(
+    engine_worktree: Path,
+    *,
+    body_summary_consumption: str | None = None,
+) -> dict[str, str]:
     env = os.environ.copy()
+    if body_summary_consumption:
+        env["ARCHWAY_BODY_SUMMARY_CONSUMPTION"] = body_summary_consumption
     existing = env.get("PYTHONPATH")
     paths = [str(engine_worktree)]
     if existing:
