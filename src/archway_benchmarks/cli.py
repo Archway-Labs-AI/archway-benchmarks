@@ -41,6 +41,7 @@ def _build_archway_engines(
     *,
     server_url: str | None = None,
     timeout: float = 30.0,
+    body_summary_consumption: str = "off",
 ):
     """Construct the Archway engine triple. ``accuracy``/``seed`` are unused
     (kept for signature parity with the stub factory)."""
@@ -57,6 +58,7 @@ def _build_archway_engines(
             server_url=resolved_server_url,
             timeout=timeout,
             corpus_root=corpus_root,
+            body_summary_consumption=body_summary_consumption,
         ),
         ArchwayAnalysisResultAdapter(),
     )
@@ -89,6 +91,12 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=30.0,
         help="Per-snippet Archway request timeout.",
+    )
+    p_run.add_argument(
+        "--archway-body-summary-consumption",
+        choices=["off", "safe"],
+        default="off",
+        help="Archway body-summary consumption mode passed to the analysis server.",
     )
 
     p_score = sub.add_parser("score", help="Print stored scores for a run")
@@ -192,10 +200,12 @@ def _cmd_run(args) -> int:
             args.seed,
             server_url=cfg.server_url,
             timeout=args.archway_timeout,
+            body_summary_consumption=args.archway_body_summary_consumption,
         )
         metadata = {
             "archway_server_url": cfg.server_url,
             "archway_server_url_source": cfg.source,
+            "archway_body_summary_consumption": args.archway_body_summary_consumption,
         }
         if cfg.config_path:
             metadata["archway_config_path"] = cfg.config_path

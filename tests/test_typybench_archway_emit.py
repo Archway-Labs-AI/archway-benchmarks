@@ -479,13 +479,64 @@ def analyze_source(source, module_name):
 def test_emit_predictions_profile_jsonl_records_per_file_timings(tmp_path) -> None:
     engine = tmp_path / "engine"
     sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
+    runners = sd_core / "runners"
+    runners.mkdir(parents=True)
     (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
+    (runners / "__init__.py").write_text("", encoding="utf-8")
+    (runners / "analysis_observability.py").write_text(
         """
-def analyze_source(source, module_name):
+class AnalysisObservationConfig:
+    @classmethod
+    def summary(cls):
+        return cls()
+""",
+        encoding="utf-8",
+    )
+    (runners / "file_results.py").write_text(
+        """
+class _Run:
+    finalized = object()
+
+class _Result:
+    status = "analyzed"
+    run = _Run()
+
+    def to_jsonable(self):
+        return {
+            "analysis_summary": {
+                "schema": "archway.analysis_run_summary.v1",
+                "phases": [
+                    {"name": "types.evaluate", "wall_seconds": 0.125, "status": "ok"}
+                ],
+                "type_functor": {
+                    "body_execution_hotspots": [
+                        {"body_name": "f", "execution_count": 1, "wall_seconds": 0.1}
+                    ]
+                },
+            }
+        }
+
+class FileAnalysisFailure(Exception):
+    pass
+
+def analyze_source_file_result(
+    source,
+    module,
+    repo_path=None,
+    observation_config=None,
+    body_summary_consumption="off",
+):
+    if body_summary_consumption != "safe":
+        raise RuntimeError(f"policy was {body_summary_consumption}")
     if "boom" in source:
         raise RuntimeError("synthetic")
+    return _Result()
+""",
+        encoding="utf-8",
+    )
+    (sd_core / "analysis_server.py").write_text(
+        """
+def _analysis():
     return {
         "functions": [
             {
@@ -501,6 +552,14 @@ def analyze_source(source, module_name):
             }
         ]
     }
+
+def _encode_finalized(finalized):
+    return _analysis()
+
+def analyze_source(source, module_name):
+    if "boom" in source:
+        raise RuntimeError("synthetic")
+    return _analysis()
 """,
         encoding="utf-8",
     )
@@ -519,6 +578,7 @@ def analyze_source(source, module_name):
         timeout=30,
         per_file_timeout=5,
         profile_jsonl=profile_jsonl,
+        body_summary_consumption="safe",
     )
 
     rows = [json.loads(line) for line in profile_jsonl.read_text(encoding="utf-8").splitlines()]
@@ -527,6 +587,12 @@ def analyze_source(source, module_name):
     assert by_file["ok.py"]["status"] == "ok"
     assert by_file["ok.py"]["seconds_engine_probe"] >= 0
     assert by_file["ok.py"]["functions_seen"] == 1
+    assert by_file["ok.py"]["analysis_summary"]["schema"] == (
+        "archway.analysis_run_summary.v1"
+    )
+    assert by_file["ok.py"]["analysis_summary"]["type_functor"][
+        "body_execution_hotspots"
+    ][0]["body_name"] == "f"
     assert by_file["bad.py"]["status"] == "engine_failed"
     assert "RuntimeError: synthetic" in by_file["bad.py"]["error"]
 
