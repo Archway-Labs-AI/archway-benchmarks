@@ -92,6 +92,7 @@ def emit_archway_predictions(
     trace_jsonl: Path | None = None,
     profile_jsonl: Path | None = None,
     body_summary_consumption: str = "off",
+    analysis_observation_mode: str = "summary",
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -161,6 +162,7 @@ def emit_archway_predictions(
                 runner=runner,
                 timeout=max(1, min(per_file_timeout, int(remaining))),
                 body_summary_consumption=body_summary_consumption,
+                analysis_observation_mode=analysis_observation_mode,
             )
             seconds_probe = time.monotonic() - probe_started
             if not record.get("ok"):
@@ -262,6 +264,7 @@ def _run_engine_probe(
     timeout: int,
     per_file_timeout: int = 60,
     body_summary_consumption: str | None = None,
+    analysis_observation_mode: str = "summary",
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"files": {}}
     started = time.monotonic()
@@ -282,6 +285,7 @@ def _run_engine_probe(
             runner=runner,
             timeout=max(1, min(per_file_timeout, int(remaining))),
             body_summary_consumption=body_summary_consumption,
+            analysis_observation_mode=analysis_observation_mode,
         )
     return out
 
@@ -294,6 +298,7 @@ def _run_engine_probe_file(
     runner: tuple[str, ...],
     timeout: int,
     body_summary_consumption: str | None = None,
+    analysis_observation_mode: str = "summary",
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -323,10 +328,17 @@ try:
         and AnalysisObservationConfig is not None
         and _encode_finalized is not None
     ):
+        observation_mode = os.environ.get("ARCHWAY_ANALYSIS_OBSERVATION", "summary")
+        if observation_mode == "diagnostic":
+            observation_config = AnalysisObservationConfig.diagnostic()
+        elif observation_mode == "off":
+            observation_config = AnalysisObservationConfig.off()
+        else:
+            observation_config = AnalysisObservationConfig.summary()
         kwargs = {
             "module": module_name,
             "repo_path": str(path),
-            "observation_config": AnalysisObservationConfig.summary(),
+            "observation_config": observation_config,
         }
         body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
         if body_summary_consumption != "off":
@@ -377,6 +389,7 @@ print(json.dumps(out, sort_keys=True))
                 env=_probe_env(
                     engine_worktree,
                     body_summary_consumption=body_summary_consumption,
+                    analysis_observation_mode=analysis_observation_mode,
                 ),
                 start_new_session=True,
             )
@@ -413,10 +426,12 @@ def _probe_env(
     engine_worktree: Path,
     *,
     body_summary_consumption: str | None = None,
+    analysis_observation_mode: str = "summary",
 ) -> dict[str, str]:
     env = os.environ.copy()
     if body_summary_consumption:
         env["ARCHWAY_BODY_SUMMARY_CONSUMPTION"] = body_summary_consumption
+    env["ARCHWAY_ANALYSIS_OBSERVATION"] = analysis_observation_mode
     existing = env.get("PYTHONPATH")
     paths = [str(engine_worktree)]
     if existing:
