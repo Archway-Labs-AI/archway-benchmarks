@@ -486,9 +486,20 @@ def test_emit_predictions_profile_jsonl_records_per_file_timings(tmp_path) -> No
     (runners / "analysis_observability.py").write_text(
         """
 class AnalysisObservationConfig:
+    def __init__(self, mode="summary"):
+        self.mode = mode
+
     @classmethod
     def summary(cls):
-        return cls()
+        return cls("summary")
+
+    @classmethod
+    def diagnostic(cls):
+        return cls("diagnostic")
+
+    @classmethod
+    def off(cls):
+        return cls("off")
 """,
         encoding="utf-8",
     )
@@ -528,6 +539,8 @@ def analyze_source_file_result(
 ):
     if body_summary_consumption != "safe":
         raise RuntimeError(f"policy was {body_summary_consumption}")
+    if getattr(observation_config, "mode", None) != "diagnostic":
+        raise RuntimeError(f"observation was {getattr(observation_config, 'mode', None)}")
     if "boom" in source:
         raise RuntimeError("synthetic")
     return _Result()
@@ -579,6 +592,7 @@ def analyze_source(source, module_name):
         per_file_timeout=5,
         profile_jsonl=profile_jsonl,
         body_summary_consumption="safe",
+        analysis_observation_mode="diagnostic",
     )
 
     rows = [json.loads(line) for line in profile_jsonl.read_text(encoding="utf-8").splitlines()]
