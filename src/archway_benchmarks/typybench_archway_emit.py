@@ -90,6 +90,7 @@ def emit_archway_predictions(
     trace_jsonl: Path | None = None,
     profile_jsonl: Path | None = None,
     body_summary_consumption: str = "off",
+    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
@@ -156,6 +157,7 @@ def emit_archway_predictions(
                 runner=runner,
                 timeout=max(1, min(per_file_timeout, int(remaining))),
                 body_summary_consumption=body_summary_consumption,
+                analysis_product=analysis_product,
                 analysis_observation_mode=analysis_observation_mode,
             )
             seconds_probe = time.monotonic() - probe_started
@@ -258,6 +260,7 @@ def _run_engine_probe(
     timeout: int,
     per_file_timeout: int = 60,
     body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"files": {}}
@@ -279,6 +282,7 @@ def _run_engine_probe(
             runner=runner,
             timeout=max(1, min(per_file_timeout, int(remaining))),
             body_summary_consumption=body_summary_consumption,
+            analysis_product=analysis_product,
             analysis_observation_mode=analysis_observation_mode,
         )
     return out
@@ -292,6 +296,7 @@ def _run_engine_probe_file(
     runner: tuple[str, ...],
     timeout: int,
     body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
 ) -> dict[str, Any]:
     probe = r'''
@@ -337,6 +342,9 @@ try:
         body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
         if body_summary_consumption != "off":
             kwargs["body_summary_consumption"] = body_summary_consumption
+        analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
+        if analysis_product != "standalone":
+            kwargs["analysis_product"] = analysis_product
         file_result = analyze_source_file_result(source, **kwargs)
         analysis_summary = file_result.to_jsonable().get("analysis_summary")
         if file_result.status != "analyzed" or file_result.run is None:
@@ -376,6 +384,7 @@ print(json.dumps(out, sort_keys=True))
                 env=_probe_env(
                     engine_worktree,
                     body_summary_consumption=body_summary_consumption,
+                    analysis_product=analysis_product,
                     analysis_observation_mode=analysis_observation_mode,
                 ),
                 start_new_session=True,
@@ -413,11 +422,13 @@ def _probe_env(
     engine_worktree: Path,
     *,
     body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
 ) -> dict[str, str]:
     env = os.environ.copy()
     if body_summary_consumption:
         env["ARCHWAY_BODY_SUMMARY_CONSUMPTION"] = body_summary_consumption
+    env["ARCHWAY_ANALYSIS_PRODUCT"] = analysis_product
     env["ARCHWAY_ANALYSIS_OBSERVATION"] = analysis_observation_mode
     existing = env.get("PYTHONPATH")
     paths = [str(engine_worktree)]
@@ -511,6 +522,8 @@ def capture_runtime_phase_profile_file(
     module_name: str,
     runner: tuple[str, ...] = ("hatch", "run", "python"),
     timeout: int = 90,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
 ) -> dict[str, Any]:
     """Measure import, translation, traced translation, and analysis separately.
 
@@ -533,6 +546,8 @@ def capture_runtime_phase_profile_file(
             runner=runner,
             timeout=timeout,
             phase=phase,
+            body_summary_consumption=body_summary_consumption,
+            analysis_product=analysis_product,
         )
     return out
 
@@ -545,9 +560,12 @@ def _run_runtime_phase_probe_file(
     runner: tuple[str, ...],
     timeout: int,
     phase: str,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
 ) -> dict[str, Any]:
     probe = r'''
 import json
+import os
 import sys
 import time
 import traceback
@@ -582,7 +600,14 @@ try:
                 "span_count": len(getattr(trace, "spans", [])) if trace is not None else 0,
             }
         elif phase == "analyze_source":
-            result = analyze_source(source, module_name)
+            kwargs = {}
+            body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
+            if body_summary_consumption != "off":
+                kwargs["body_summary_consumption"] = body_summary_consumption
+            analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
+            if analysis_product != "standalone":
+                kwargs["analysis_product"] = analysis_product
+            result = analyze_source(source, module_name, **kwargs)
             out = {
                 "ok": True,
                 "phase": phase,
@@ -612,7 +637,11 @@ print(json.dumps(out, sort_keys=True))
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=_probe_env(engine_worktree),
+                env=_probe_env(
+                    engine_worktree,
+                    body_summary_consumption=body_summary_consumption,
+                    analysis_product=analysis_product,
+                ),
                 start_new_session=True,
             )
             stdout, stderr = proc.communicate(timeout=timeout)
