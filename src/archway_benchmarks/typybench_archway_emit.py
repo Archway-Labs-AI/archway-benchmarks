@@ -92,6 +92,7 @@ def emit_archway_predictions(
     body_summary_consumption: str = "off",
     analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -159,6 +160,7 @@ def emit_archway_predictions(
                 body_summary_consumption=body_summary_consumption,
                 analysis_product=analysis_product,
                 analysis_observation_mode=analysis_observation_mode,
+                type_requirements_assume_closed=type_requirements_assume_closed,
             )
             seconds_probe = time.monotonic() - probe_started
             if not record.get("ok"):
@@ -262,6 +264,7 @@ def _run_engine_probe(
     body_summary_consumption: str | None = None,
     analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"files": {}}
     started = time.monotonic()
@@ -284,6 +287,7 @@ def _run_engine_probe(
             body_summary_consumption=body_summary_consumption,
             analysis_product=analysis_product,
             analysis_observation_mode=analysis_observation_mode,
+            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -298,6 +302,7 @@ def _run_engine_probe_file(
     body_summary_consumption: str | None = None,
     analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -345,6 +350,10 @@ try:
         analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
         if analysis_product != "standalone":
             kwargs["analysis_product"] = analysis_product
+        if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
+            "1", "true", "yes", "on",
+        }:
+            kwargs["type_requirements_assume_closed"] = True
         file_result = analyze_source_file_result(source, **kwargs)
         analysis_summary = file_result.to_jsonable().get("analysis_summary")
         if file_result.status != "analyzed" or file_result.run is None:
@@ -386,6 +395,7 @@ print(json.dumps(out, sort_keys=True))
                     body_summary_consumption=body_summary_consumption,
                     analysis_product=analysis_product,
                     analysis_observation_mode=analysis_observation_mode,
+                    type_requirements_assume_closed=type_requirements_assume_closed,
                 ),
                 start_new_session=True,
             )
@@ -424,12 +434,17 @@ def _probe_env(
     body_summary_consumption: str | None = None,
     analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, str]:
     env = os.environ.copy()
     if body_summary_consumption:
         env["ARCHWAY_BODY_SUMMARY_CONSUMPTION"] = body_summary_consumption
     env["ARCHWAY_ANALYSIS_PRODUCT"] = analysis_product
     env["ARCHWAY_ANALYSIS_OBSERVATION"] = analysis_observation_mode
+    if type_requirements_assume_closed:
+        env["ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED"] = "1"
+    else:
+        env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
     existing = env.get("PYTHONPATH")
     paths = [str(engine_worktree)]
     if existing:
@@ -524,6 +539,7 @@ def capture_runtime_phase_profile_file(
     timeout: int = 90,
     body_summary_consumption: str | None = None,
     analysis_product: str = "standalone",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     """Measure import, translation, traced translation, and analysis separately.
 
@@ -548,6 +564,7 @@ def capture_runtime_phase_profile_file(
             phase=phase,
             body_summary_consumption=body_summary_consumption,
             analysis_product=analysis_product,
+            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -562,6 +579,7 @@ def _run_runtime_phase_probe_file(
     phase: str,
     body_summary_consumption: str | None = None,
     analysis_product: str = "standalone",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -607,6 +625,10 @@ try:
             analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
             if analysis_product != "standalone":
                 kwargs["analysis_product"] = analysis_product
+            if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
+                "1", "true", "yes", "on",
+            }:
+                kwargs["type_requirements_assume_closed"] = True
             result = analyze_source(source, module_name, **kwargs)
             out = {
                 "ok": True,
@@ -641,6 +663,7 @@ print(json.dumps(out, sort_keys=True))
                     engine_worktree,
                     body_summary_consumption=body_summary_consumption,
                     analysis_product=analysis_product,
+                    type_requirements_assume_closed=type_requirements_assume_closed,
                 ),
                 start_new_session=True,
             )
