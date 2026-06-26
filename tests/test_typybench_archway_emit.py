@@ -598,9 +598,12 @@ def analyze_source_file_result(
     repo_path=None,
     observation_config=None,
     body_summary_consumption="off",
+    analysis_product="standalone",
 ):
     if body_summary_consumption != "safe":
         raise RuntimeError(f"policy was {body_summary_consumption}")
+    if analysis_product != "type_body_summary_product":
+        raise RuntimeError(f"product was {analysis_product}")
     if getattr(observation_config, "mode", None) != "diagnostic":
         raise RuntimeError(f"observation was {getattr(observation_config, 'mode', None)}")
     if "boom" in source:
@@ -654,6 +657,7 @@ def analyze_source(source, module_name):
         per_file_timeout=5,
         profile_jsonl=profile_jsonl,
         body_summary_consumption="safe",
+        analysis_product="type_body_summary_product",
         analysis_observation_mode="diagnostic",
     )
 
