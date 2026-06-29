@@ -10,6 +10,7 @@ from archway_benchmarks.typybench_harness import (
     missing_docker_images,
     materialize_source_prediction,
     parse_result_csv,
+    validate_repo_source_trees,
     score_command,
     stage_single_repo_prediction_root,
 )
@@ -77,6 +78,21 @@ def test_materialize_source_prediction_copies_only_python_sources(tmp_path: Path
     assert not (dest / "README.md").exists()
 
 
+def test_materialize_source_prediction_rejects_empty_source_tree(tmp_path: Path) -> None:
+    source = tmp_path / "repo" / "original_repo"
+    source.mkdir(parents=True)
+    (source / ".DS_Store").write_text("")
+
+    with pytest.raises(ValueError, match="contains no Python source files"):
+        materialize_source_prediction(
+            repo_name="demo",
+            source_root=source,
+            predictions_root=tmp_path / "predictions",
+        )
+
+    assert not (tmp_path / "predictions" / "demo").exists()
+
+
 def test_stage_single_repo_prediction_root_contains_only_requested_repo(tmp_path: Path) -> None:
     predictions = tmp_path / "predictions"
     (predictions / "agents").mkdir(parents=True)
@@ -93,6 +109,32 @@ def test_stage_single_repo_prediction_root_contains_only_requested_repo(tmp_path
     assert sorted(path.name for path in staging_root.iterdir()) == ["agents"]
     assert (staging_root / "agents").is_symlink()
     assert (staging_root / "agents" / "a.py").read_text() == "x = 1\n"
+
+
+def test_stage_single_repo_prediction_root_rejects_empty_prediction_tree(tmp_path: Path) -> None:
+    predictions = tmp_path / "predictions"
+    (predictions / "agents").mkdir(parents=True)
+    (predictions / "agents" / ".DS_Store").write_text("")
+
+    with pytest.raises(ValueError, match="prediction directory.*contains no Python source files"):
+        stage_single_repo_prediction_root(
+            repo_name="agents",
+            predictions_root=predictions,
+            staging_root=tmp_path / "single",
+        )
+
+    assert not (tmp_path / "single").exists()
+
+
+def test_validate_repo_source_trees_rejects_zero_source_fixture(tmp_path: Path) -> None:
+    data = tmp_path / "typybenchdata"
+    for tree_name in ("repo_without_types", "original_repo"):
+        tree = data / "pylint" / tree_name
+        tree.mkdir(parents=True)
+        (tree / ".DS_Store").write_text("")
+
+    with pytest.raises(ValueError, match="TypyBench repo 'pylint' repo_without_types"):
+        validate_repo_source_trees("pylint", data_path=data)
 
 
 def test_commands_match_upstream_run_py_shape(tmp_path: Path) -> None:
