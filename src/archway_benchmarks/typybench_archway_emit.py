@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from archway_benchmarks.typybench_harness import require_python_source_files
+
 
 _NONE_TYPE_NAMES = {"builtins.NoneType", "NoneType"}
 _TRACE_ENV_VAR = "ARCHWAY_TYPYBENCH_TRACE_JSONL"
@@ -96,13 +98,17 @@ def emit_archway_predictions(
     """
 
     untyped_root = Path(untyped_root)
+    files = require_python_source_files(
+        untyped_root,
+        label=f"TypyBench repo {repo_name!r} repo_without_types",
+        suffixes=(".py",),
+    )
     dest_root = Path(predictions_root) / repo_name
     if overwrite and dest_root.exists():
         shutil.rmtree(dest_root)
     if not dest_root.exists():
         dest_root.mkdir(parents=True)
 
-    files = sorted(p for p in untyped_root.rglob("*.py") if p.is_file())
     for src in files:
         dest = dest_root / src.relative_to(untyped_root)
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -306,7 +312,14 @@ print(json.dumps(out, sort_keys=True))
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
         f.write(probe)
         f.flush()
-        cmd = [*runner, f.name, str(source_path.resolve()), module_name]
+        source_path = Path(source_path)
+        if not source_path.is_file():
+            return {
+                "ok": False,
+                "error": f"FileNotFoundError: source file does not exist: {source_path}",
+            }
+        source_arg = source_path if source_path.is_absolute() else source_path.absolute()
+        cmd = [*runner, f.name, str(source_arg), module_name]
         try:
             proc = subprocess.Popen(
                 cmd,

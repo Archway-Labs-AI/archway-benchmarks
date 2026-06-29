@@ -192,6 +192,61 @@ def missing_docker_images(
     return [repo for repo in repos if docker_image_name(repo) not in images]
 
 
+def python_source_files(
+    source_root: Path,
+    *,
+    suffixes: Sequence[str] = (".py",),
+) -> list[Path]:
+    """Return Python source files under ``source_root`` in stable order."""
+
+    source_root = Path(source_root)
+    if not source_root.is_dir():
+        raise FileNotFoundError(f"source root does not exist: {source_root}")
+    suffix_set = set(suffixes)
+    return sorted(
+        path
+        for path in source_root.rglob("*")
+        if path.is_file() and path.suffix in suffix_set
+    )
+
+
+def require_python_source_files(
+    source_root: Path,
+    *,
+    label: str = "source root",
+    suffixes: Sequence[str] = (".py",),
+) -> list[Path]:
+    """Return source files, failing clearly when a benchmark fixture is empty."""
+
+    files = python_source_files(source_root, suffixes=suffixes)
+    if not files:
+        suffix_list = ", ".join(suffixes)
+        raise ValueError(
+            f"{label} contains no Python source files ({suffix_list}): {Path(source_root)}"
+        )
+    return files
+
+
+def validate_repo_source_trees(
+    repo_name: str,
+    *,
+    data_path: Path = DEFAULT_DATA_ROOT,
+    tree_names: Sequence[str] = ("repo_without_types", "original_repo"),
+) -> dict[str, int]:
+    """Validate that a TypyBench repo fixture has Python files in required trees."""
+
+    counts: dict[str, int] = {}
+    for tree_name in tree_names:
+        root = Path(data_path) / repo_name / tree_name
+        files = require_python_source_files(
+            root,
+            label=f"TypyBench repo {repo_name!r} {tree_name}",
+            suffixes=(".py",),
+        )
+        counts[tree_name] = len(files)
+    return counts
+
+
 def materialize_source_prediction(
     *,
     repo_name: str,
@@ -209,8 +264,11 @@ def materialize_source_prediction(
     """
 
     source_root = Path(source_root)
-    if not source_root.is_dir():
-        raise FileNotFoundError(f"source_root does not exist: {source_root}")
+    files = require_python_source_files(
+        source_root,
+        label="source_root",
+        suffixes=suffixes,
+    )
 
     dest_root = Path(predictions_root) / repo_name
     if dest_root.exists():
@@ -220,9 +278,7 @@ def materialize_source_prediction(
             )
         shutil.rmtree(dest_root)
 
-    for path in sorted(source_root.rglob("*")):
-        if not path.is_file() or path.suffix not in suffixes:
-            continue
+    for path in files:
         rel = path.relative_to(source_root)
         dest = dest_root / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -266,6 +322,11 @@ def stage_single_repo_prediction_root(
     source = Path(predictions_root) / repo_name
     if not source.is_dir():
         raise FileNotFoundError(f"prediction directory does not exist: {source}")
+    require_python_source_files(
+        source,
+        label=f"prediction directory for TypyBench repo {repo_name!r}",
+        suffixes=(".py", ".pyi"),
+    )
 
     staging_root = Path(staging_root)
     staged_repo = staging_root / repo_name
