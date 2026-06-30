@@ -281,6 +281,9 @@ def archway_call_edges(
         program,
         body_summary_consumption="safe",
         analysis_product=analysis_product,
+        external_from_import_fallback=(
+            analysis_product == "type_requirements_product"
+        ),
     )
     structural_runs = {
         module_name: analyze_morphism(
@@ -564,6 +567,8 @@ def _callee_display_name(
         if pycg_receiver is None:
             return f"<builtin-method>.{receiver}.{method}"
         return f"{pycg_receiver}.{method}"
+    if callee_id.startswith("sid:v1:external-dependency-call:"):
+        return callee_id.removeprefix("sid:v1:external-dependency-call:")
     return function_names.get(callee_id)
 
 
