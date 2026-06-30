@@ -182,6 +182,7 @@ def run_archway_pycg(
     engine_root: Path,
     limit: int | None = None,
     include_diagnostic_name_hints: bool = False,
+    analysis_product: str = "standalone",
 ) -> PyCGRunResult:
     cases = load_cases(corpus_root, limit=limit)
     started = time.perf_counter()
@@ -199,6 +200,7 @@ def run_archway_pycg(
                 case,
                 engine_root=engine_root,
                 include_diagnostic_name_hints=include_diagnostic_name_hints,
+                analysis_product=analysis_product,
             )
             status = "ok"
             error = None
@@ -248,6 +250,7 @@ def archway_call_edges(
     *,
     engine_root: Path,
     include_diagnostic_name_hints: bool = False,
+    analysis_product: str = "standalone",
 ) -> set[Edge]:
     """Project Archway call-relation facts to PyCG edge strings.
 
@@ -264,17 +267,17 @@ def archway_call_edges(
 
     from sd_core.analysis.callloops.call_relation import project_call_relation
     from sd_core.analysis.callloops.runner import analyze_morphism
-    from sd_core.analysis.types.runner import analyze_program_modules
     from sd_core.analysis.types.runner import load_package
+    from sd_core.runners.types import analyze_program_result
     from sd_core.tooling.harness import ProgramResult
 
     sources = load_package(case.root)
     program = ProgramResult.from_sources(sources)
     edges: set[Edge] = set()
-    program_run = analyze_program_modules(
-        {name: result.morphism for name, result in program.modules.items()},
-        sources,
+    program_run = analyze_program_result(
+        program,
         body_summary_consumption="safe",
+        analysis_product=analysis_product,
     )
     structural_runs = {
         module_name: analyze_morphism(
@@ -288,17 +291,9 @@ def archway_call_edges(
     function_names: dict[str, str] = {}
     for module_name, structural in structural_runs.items():
         type_run = program_run.modules[module_name]
-        lambda_index = 0
-        for function in structural.functions:
-            function_name = function.name
-            if function_name == "<lambda>":
-                lambda_index += 1
-                function_name = f"<lambda{lambda_index}>"
-            function_names[function.body_id] = _qualify_function_name(
-                module_name,
-                function_name,
-                owner_name=_method_owner_name(type_run.target, function.body_id),
-            )
+        function_names.update(
+            _function_display_names(module_name, structural.functions, type_run.target)
+        )
 
     for module_name, structural in sorted(structural_runs.items()):
         type_run = program_run.modules.get(module_name)
@@ -369,6 +364,66 @@ def _method_owner_name(target: object, body_id: str) -> str | None:
     return name if isinstance(name, str) and name else None
 
 
+def _function_display_names(
+    module_name: str,
+    functions: Iterable[object],
+    target: object,
+) -> dict[str, str]:
+    by_id = {
+        getattr(function, "body_id"): function
+        for function in functions
+        if isinstance(getattr(function, "body_id", None), str)
+    }
+    lambda_names: dict[str, str] = {}
+    lambda_index = 0
+    for function in functions:
+        body_id = getattr(function, "body_id", None)
+        if not isinstance(body_id, str):
+            continue
+        if getattr(function, "name", None) == "<lambda>":
+            lambda_index += 1
+            lambda_names[body_id] = f"<lambda{lambda_index}>"
+
+    resolved: dict[str, str] = {}
+    resolving: set[str] = set()
+
+    def resolve(body_id: str) -> str | None:
+        if body_id in resolved:
+            return resolved[body_id]
+        if body_id in resolving:
+            return None
+        function = by_id.get(body_id)
+        if function is None:
+            return None
+        resolving.add(body_id)
+        raw_name = getattr(function, "name", None)
+        if not isinstance(raw_name, str) or not raw_name:
+            resolving.remove(body_id)
+            return None
+        function_name = lambda_names.get(body_id, raw_name)
+        lexical_parent = getattr(function, "lexical_parent_body_id", None)
+        parent_name = (
+            resolve(lexical_parent)
+            if isinstance(lexical_parent, str)
+            else None
+        )
+        if parent_name is not None:
+            display = f"{parent_name}.{function_name}"
+        else:
+            display = _qualify_function_name(
+                module_name,
+                function_name,
+                owner_name=_method_owner_name(target, body_id),
+            )
+        resolving.remove(body_id)
+        resolved[body_id] = display
+        return display
+
+    for body_id in by_id:
+        resolve(body_id)
+    return resolved
+
+
 def _qualify_function_name(
     module_name: str,
     function_name: str,
@@ -392,6 +447,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--output", default=None)
     parser.add_argument(
+        "--analysis-product",
+        choices=("standalone", "type_requirements_product"),
+        default="standalone",
+        help=(
+            "Archway program analysis product mode. The default preserves the "
+            "legacy program-level type runner; type_requirements_product runs "
+            "the fuller reduced-product participant path."
+        ),
+    )
+    parser.add_argument(
         "--include-diagnostic-name-hints",
         action="store_true",
         help=(
@@ -406,6 +471,7 @@ def main(argv: list[str] | None = None) -> int:
         engine_root=Path(args.engine_root),
         limit=args.limit,
         include_diagnostic_name_hints=args.include_diagnostic_name_hints,
+        analysis_product=args.analysis_product,
     )
     payload = result.to_jsonable()
     text = json.dumps(payload, indent=2, sort_keys=True)
