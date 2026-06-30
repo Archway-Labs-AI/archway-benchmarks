@@ -5,6 +5,7 @@ from pathlib import Path
 
 from archway_benchmarks.pycg import (
     _callee_display_name,
+    _inline_synthetic_frame_edges,
     EdgeScore,
     expected_edges_from_callgraph,
     load_cases,
@@ -48,6 +49,28 @@ def test_callee_display_name_renders_external_dependency_call():
         )
         == "streamlit.write"
     )
+
+
+def test_inline_synthetic_frame_edges_projects_comprehension_calls():
+    assert _inline_synthetic_frame_edges(
+        {
+            ("main", "main.<listcomp>"),
+            ("main.<listcomp>", "main.func"),
+            ("main.<listcomp>", "<builtin>.iter"),
+            ("main.<listcomp>", "<builtin-method>.list.append"),
+        }
+    ) == {("main", "main.func")}
+
+
+def test_inline_synthetic_frame_edges_handles_nested_comprehensions():
+    assert _inline_synthetic_frame_edges(
+        {
+            ("main", "main.<listcomp>"),
+            ("main.<listcomp>", "main.<listcomp>.<listcomp>"),
+            ("main.<listcomp>", "main.func1"),
+            ("main.<listcomp>.<listcomp>", "main.func2"),
+        }
+    ) == {("main", "main.func1"), ("main", "main.func2")}
 
 
 def test_load_cases_reads_pycg_micro_layout(tmp_path: Path):

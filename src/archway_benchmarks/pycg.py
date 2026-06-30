@@ -335,7 +335,82 @@ def archway_call_edges(
                 callee = _callee_display_name(callee_id, function_names)
                 if callee is not None:
                     edges.add((caller, callee))
-    return edges
+    return _inline_synthetic_frame_edges(edges)
+
+
+_SYNTHETIC_FRAME_NAMES = frozenset(
+    {
+        "<listcomp>",
+        "<dictcomp>",
+        "<setcomp>",
+        "<genexpr>",
+    }
+)
+
+
+def _inline_synthetic_frame_edges(
+    edges: Iterable[tuple[str, str]],
+) -> set[tuple[str, str]]:
+    """Project compiler-generated expression frames onto source callers.
+
+    Archway's semantic call relation exposes implementation frames such as
+    ``main.<listcomp>`` because those frames exist in the translated IR. PyCG's
+    source-call graph format attributes calls inside comprehensions to the
+    enclosing source scope. This post-process is intentionally display-only: it
+    rewrites existing edges through synthetic frames and does not create targets
+    that were not present in the semantic readout.
+    """
+
+    edge_set = set(edges)
+    synthetic_parents: dict[str, set[str]] = {}
+    for caller, callee in edge_set:
+        if _is_synthetic_frame(callee):
+            synthetic_parents.setdefault(callee, set()).add(caller)
+
+    def source_parents(frame: str, seen: frozenset[str] = frozenset()) -> set[str]:
+        if frame in seen:
+            return set()
+        parents = synthetic_parents.get(frame, set())
+        if not parents:
+            return set()
+        resolved: set[str] = set()
+        for parent in parents:
+            if _is_synthetic_frame(parent):
+                resolved.update(source_parents(parent, seen | {frame}))
+            else:
+                resolved.add(parent)
+        return resolved
+
+    projected: set[tuple[str, str]] = set()
+    for caller, callee in edge_set:
+        caller_is_synthetic = _is_synthetic_frame(caller)
+        callee_is_synthetic = _is_synthetic_frame(callee)
+        if callee_is_synthetic:
+            continue
+        if caller_is_synthetic:
+            for parent in source_parents(caller):
+                if not _is_synthetic_implementation_target(callee):
+                    projected.add((parent, callee))
+            continue
+        projected.add((caller, callee))
+    return projected
+
+
+def _is_synthetic_frame(name: str) -> bool:
+    return _last_qualified_part(name) in _SYNTHETIC_FRAME_NAMES
+
+
+def _last_qualified_part(name: str) -> str:
+    return name.rsplit(".", 1)[-1]
+
+
+def _is_synthetic_implementation_target(name: str) -> bool:
+    return name in {
+        "<builtin>.iter",
+        "<builtin-method>.list.append",
+        "<builtin-method>.set.add",
+        "<builtin-method>.dict.__setitem__",
+    }
 
 
 def _callee_display_name(
