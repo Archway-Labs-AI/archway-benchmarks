@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from archway_benchmarks.pycg import (
+    _callee_display_name,
     EdgeScore,
     expected_edges_from_callgraph,
     load_cases,
@@ -37,6 +38,16 @@ def test_score_edges():
     assert score.precision == 0.5
     assert score.recall == 0.5
     assert score.f1 == 0.5
+
+
+def test_callee_display_name_renders_external_dependency_call():
+    assert (
+        _callee_display_name(
+            "sid:v1:external-dependency-call:streamlit.write",
+            {},
+        )
+        == "streamlit.write"
+    )
 
 
 def test_load_cases_reads_pycg_micro_layout(tmp_path: Path):

@@ -342,6 +342,8 @@ def _callee_display_name(
     callee_id: str,
     function_names: Mapping[str, str],
 ) -> str | None:
+    if callee_id.startswith("sid:v1:external-dependency-call:"):
+        return callee_id.removeprefix("sid:v1:external-dependency-call:")
     if callee_id.startswith("sid:v1:builtin:"):
         return f"<builtin>.{callee_id.removeprefix('sid:v1:builtin:')}"
     if callee_id.startswith("sid:v1:builtin-method:"):
