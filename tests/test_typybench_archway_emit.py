@@ -339,6 +339,68 @@ def analyze_source(source, module_name):
     assert "emit SyntaxError" in stats.failures[0]["error"]
 
 
+def test_emit_predictions_rejects_zero_source_repo_before_staging(tmp_path) -> None:
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    source_root = tmp_path / "repo_without_types"
+    source_root.mkdir()
+    (source_root / ".DS_Store").write_text("", encoding="utf-8")
+
+    try:
+        emit_archway_predictions(
+            repo_name="pylint",
+            untyped_root=source_root,
+            predictions_root=tmp_path / "predictions",
+            engine_worktree=engine,
+            runner=(sys.executable,),
+        )
+    except ValueError as exc:
+        assert "TypyBench repo 'pylint' repo_without_types contains no Python source files" in str(exc)
+    else:
+        raise AssertionError("expected zero-source fixture validation to fail")
+
+    assert not (tmp_path / "predictions" / "pylint").exists()
+
+
+def test_emit_predictions_preserves_cookiecutter_template_paths(tmp_path) -> None:
+    engine = tmp_path / "engine"
+    sd_core = engine / "sd_core"
+    sd_core.mkdir(parents=True)
+    (sd_core / "__init__.py").write_text("", encoding="utf-8")
+    (sd_core / "analysis_server.py").write_text(
+        """
+from pathlib import Path
+
+def analyze_source(source, module_name):
+    assert "{{cookiecutter.__root_folder}}" in source
+    assert Path(__import__("sys").argv[1]).is_file()
+    return {"functions": []}
+""",
+        encoding="utf-8",
+    )
+
+    source_root = tmp_path / "repo_without_types"
+    template_dir = source_root / "taipy" / "templates" / "default" / "{{cookiecutter.__root_folder}}"
+    template_dir.mkdir(parents=True)
+    source = template_dir / "{{cookiecutter.__main_file}}.py"
+    source.write_text('MARKER = "{{cookiecutter.__root_folder}}"\n', encoding="utf-8")
+
+    stats = emit_archway_predictions(
+        repo_name="taipy",
+        untyped_root=source_root,
+        predictions_root=tmp_path / "predictions",
+        engine_worktree=engine,
+        runner=(sys.executable,),
+        timeout=30,
+        per_file_timeout=5,
+    )
+
+    rel = "taipy/templates/default/{{cookiecutter.__root_folder}}/{{cookiecutter.__main_file}}.py"
+    assert stats.files_total == 1
+    assert stats.files_failed == 0
+    assert (tmp_path / "predictions" / "taipy" / rel).is_file()
+
+
 def test_run_engine_probe_records_per_file_failures(tmp_path) -> None:
     engine = tmp_path / "engine"
     sd_core = engine / "sd_core"

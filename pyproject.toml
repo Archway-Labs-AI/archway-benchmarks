@@ -43,6 +43,8 @@ dev = [
     "uvicorn>=0.27",
     "jinja2>=3.1",
     "httpx>=0.26",
+    "tqdm>=4.66",
+    "prettytable>=3.10",
 ]
 dashboard = [
     "fastapi>=0.110",
