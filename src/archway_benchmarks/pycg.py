@@ -267,6 +267,9 @@ def archway_call_edges(
 
     from sd_core.analysis.callloops.call_relation import project_call_relation
     from sd_core.analysis.callloops.runner import analyze_morphism
+    from sd_core.analysis.base import structural_child_boxes, core_access as ca
+    from sd_core.analysis.base.semantic_ids import abstract_body_id
+    from sd_core.core.tags import StructuralKind
     from sd_core.analysis.types.runner import load_package
     from sd_core.runners.types import analyze_program_result
     from sd_core.tooling.harness import ProgramResult
@@ -335,7 +338,137 @@ def archway_call_edges(
                 callee = _callee_display_name(callee_id, function_names)
                 if callee is not None:
                     edges.add((caller, callee))
+        translation = program.modules.get(module_name)
+        if translation is not None:
+            edges.update(
+                _external_import_projection_edges(
+                    translation.morphism,
+                    module_name=module_name,
+                    known_modules=frozenset(sources),
+                    function_names=function_names,
+                    ca=ca,
+                    structural_child_boxes=structural_child_boxes,
+                    abstract_body_id=abstract_body_id,
+                    structural_kind=StructuralKind,
+                )
+            )
     return _inline_synthetic_frame_edges(edges)
+
+
+def _external_import_projection_edges(
+    morphism: object,
+    *,
+    module_name: str,
+    known_modules: frozenset[str],
+    function_names: Mapping[str, str],
+    ca: object,
+    structural_child_boxes: object,
+    abstract_body_id: object,
+    structural_kind: object,
+) -> set[Edge]:
+    """Project calls to absent external imports from translated IR.
+
+    This is a source-call-graph display rule for benchmark corpora that omit
+    imported modules. It does not claim an analyzable body exists; it preserves
+    the source external identity only when the translated IR contains an actual
+    call of that imported value or an attribute reached from it.
+    """
+
+    edges: set[Edge] = set()
+
+    def process(box: object, caller: str, env: dict[str, str]) -> str | None:
+        pending: str | None = None
+
+        def visit(node: object, active_caller: str, active_env: dict[str, str]) -> None:
+            nonlocal pending
+            if ca.is_atomic_box(node):
+                tag = ca.box_tag(node)
+                kind = getattr(tag, "kind", None)
+                if kind == structural_kind.IMPORT:
+                    detail = getattr(tag, "detail", "")
+                    fromlist = tuple(getattr(tag, "fromlist", ()) or ())
+                    pending = (
+                        f"module:{detail}"
+                        if fromlist and not _module_is_available(detail, known_modules)
+                        else None
+                    )
+                    return
+                if type(tag).__name__ == "AttrTag":
+                    attr = getattr(tag, "attr_name", "")
+                    if pending and attr:
+                        pending = _external_attr_token(pending, attr)
+                    return
+                if kind == structural_kind.LOAD:
+                    pending = active_env.get(getattr(tag, "detail", ""))
+                    return
+                if kind == structural_kind.STORE:
+                    name = getattr(tag, "detail", "")
+                    if name and pending:
+                        active_env[name] = pending
+                    return
+                if kind == structural_kind.EVALUATE:
+                    detail = getattr(tag, "detail", "")
+                    callee = active_env.get(detail) if detail != "?" else pending
+                    if callee:
+                        external_name = _external_callable_name(callee)
+                        if external_name is not None:
+                            edges.add((active_caller, external_name))
+                            pending = f"instance:{external_name}"
+                    return
+                if kind == structural_kind.ABSTRACT:
+                    body = ca.abstract_box_body(node)
+                    if body is not None:
+                        body_id = abstract_body_id(node, body)
+                        body_caller = function_names.get(
+                            body_id,
+                            f"{active_caller}.{ca.box_name(body)}",
+                        )
+                        body_env = dict(active_env)
+                        visit(ca.nested_box_diagram(body), body_caller, body_env)
+                    return
+                if kind in {
+                    structural_kind.IDENTITY,
+                    structural_kind.GATHER_ARGS,
+                    structural_kind.COPY,
+                    structural_kind.RENAME,
+                }:
+                    return
+                pending = None
+                return
+
+            children = structural_child_boxes(node)
+            if children is None:
+                return
+            for child in children:
+                visit(child, active_caller, active_env)
+
+        visit(box, caller, env)
+        return pending
+
+    process(morphism, module_name, {})
+    return edges
+
+
+def _module_is_available(detail: str, known_modules: frozenset[str]) -> bool:
+    return detail in known_modules or any(
+        module_name.endswith(f".{detail}") for module_name in known_modules
+    )
+
+
+def _external_attr_token(token: str, attr: str) -> str:
+    if token.startswith("module:"):
+        return f"external:{token.removeprefix('module:')}.{attr}"
+    if token.startswith("external:"):
+        return f"external:{token.removeprefix('external:')}.{attr}"
+    if token.startswith("instance:"):
+        return f"external:{token.removeprefix('instance:')}.{attr}"
+    return token
+
+
+def _external_callable_name(token: str) -> str | None:
+    if token.startswith("external:"):
+        return token.removeprefix("external:")
+    return None
 
 
 _SYNTHETIC_FRAME_NAMES = frozenset(

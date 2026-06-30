@@ -6,6 +6,7 @@ from pathlib import Path
 from archway_benchmarks.pycg import (
     _callee_display_name,
     _inline_synthetic_frame_edges,
+    _module_is_available,
     EdgeScore,
     expected_edges_from_callgraph,
     load_cases,
@@ -71,6 +72,14 @@ def test_inline_synthetic_frame_edges_handles_nested_comprehensions():
             ("main.<listcomp>.<listcomp>", "main.func2"),
         }
     ) == {("main", "main.func1"), ("main", "main.func2")}
+
+
+def test_module_is_available_accepts_package_relative_match():
+    known = frozenset({"main", "pkg.relative", "from_module"})
+
+    assert _module_is_available("from_module", known)
+    assert _module_is_available("relative", known)
+    assert not _module_is_available("ext", known)
 
 
 def test_load_cases_reads_pycg_micro_layout(tmp_path: Path):
