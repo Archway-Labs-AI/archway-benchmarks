@@ -104,10 +104,17 @@ class ArchwayAnalysisEngine:
         server_url: str = DEFAULT_SERVER_URL,
         timeout: float = 30.0,
         corpus_root: Path | str | None = None,
+        body_summary_consumption: str = "off",
     ) -> None:
+        if body_summary_consumption not in {"off", "safe"}:
+            raise ValueError(
+                "body_summary_consumption must be 'off' or 'safe'; got "
+                f"{body_summary_consumption!r}"
+            )
         self.server_url = server_url.rstrip("/")
         self.timeout = timeout
         self.corpus_root: Path | None = Path(corpus_root) if corpus_root else None
+        self.body_summary_consumption = body_summary_consumption
 
     def analyze(self, translation: Any) -> ArchwayAnalysisResult:
         if not isinstance(translation, ArchwayTranslation):
@@ -119,9 +126,10 @@ class ArchwayAnalysisEngine:
         if not main_path.is_absolute() and self.corpus_root is not None:
             main_path = self.corpus_root / main_path
         snippet_dir = str(main_path.parent.resolve())
-        params = urllib.parse.urlencode(
-            {"module": main_path.name, "root": snippet_dir}
-        )
+        query = {"module": main_path.name, "root": snippet_dir}
+        if self.body_summary_consumption != "off":
+            query["body_summary_consumption"] = self.body_summary_consumption
+        params = urllib.parse.urlencode(query)
         url = f"{self.server_url}/types?{params}"
         req = urllib.request.Request(url, method="GET")
         try:
