@@ -42,6 +42,7 @@ class FileProfile:
     returns_annotated: int = 0
     error: str | None = None
     trace_tail: str | None = None
+    analysis_summary: dict[str, Any] | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -58,6 +59,7 @@ class FileProfile:
             "returns_annotated": self.returns_annotated,
             "error": self.error,
             "trace_tail": self.trace_tail,
+            "analysis_summary": self.analysis_summary,
         }
 
 
@@ -89,6 +91,10 @@ def emit_archway_predictions(
     per_file_timeout: int = 60,
     trace_jsonl: Path | None = None,
     profile_jsonl: Path | None = None,
+    body_summary_consumption: str = "off",
+    analysis_product: str = "standalone",
+    analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -157,6 +163,10 @@ def emit_archway_predictions(
                 module_name=src.stem,
                 runner=runner,
                 timeout=max(1, min(per_file_timeout, int(remaining))),
+                body_summary_consumption=body_summary_consumption,
+                analysis_product=analysis_product,
+                analysis_observation_mode=analysis_observation_mode,
+                type_requirements_assume_closed=type_requirements_assume_closed,
             )
             seconds_probe = time.monotonic() - probe_started
             if not record.get("ok"):
@@ -170,6 +180,7 @@ def emit_archway_predictions(
                     seconds_engine_probe=round(seconds_probe, 6),
                     error=err,
                     trace_tail=record.get("trace_tail"),
+                    analysis_summary=record.get("analysis_summary"),
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -199,6 +210,7 @@ def emit_archway_predictions(
                     seconds_annotate=round(time.monotonic() - annotate_started, 6),
                     functions_seen=len(function_types),
                     error=error,
+                    analysis_summary=record.get("analysis_summary"),
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -221,6 +233,7 @@ def emit_archway_predictions(
                 functions_annotated=file_stats["functions"],
                 params_annotated=file_stats["params"],
                 returns_annotated=file_stats["returns"],
+                analysis_summary=record.get("analysis_summary"),
             )
             file_profiles.append(profile)
             if profile_writer:
@@ -254,6 +267,10 @@ def _run_engine_probe(
     runner: tuple[str, ...],
     timeout: int,
     per_file_timeout: int = 60,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
+    analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"files": {}}
     started = time.monotonic()
@@ -273,6 +290,10 @@ def _run_engine_probe(
             module_name=path.stem,
             runner=runner,
             timeout=max(1, min(per_file_timeout, int(remaining))),
+            body_summary_consumption=body_summary_consumption,
+            analysis_product=analysis_product,
+            analysis_observation_mode=analysis_observation_mode,
+            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -284,22 +305,77 @@ def _run_engine_probe_file(
     module_name: str,
     runner: tuple[str, ...],
     timeout: int,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
+    analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
+import os
 import sys
 import traceback
 from pathlib import Path
 
-from sd_core.analysis_server import analyze_source
+try:
+    from sd_core.analysis_server import _encode_finalized, analyze_source
+    from sd_core.runners.analysis_observability import AnalysisObservationConfig
+    from sd_core.runners.file_results import FileAnalysisFailure, analyze_source_file_result
+except Exception:  # pragma: no cover - compatibility with older engine pins
+    AnalysisObservationConfig = None
+    FileAnalysisFailure = None
+    _encode_finalized = None
+    analyze_source_file_result = None
+    from sd_core.analysis_server import analyze_source
 
 path = Path(sys.argv[1])
 module_name = sys.argv[2]
 try:
     source = path.read_text(encoding="utf-8")
+    analysis_summary = None
+    if (
+        analyze_source_file_result is not None
+        and AnalysisObservationConfig is not None
+        and _encode_finalized is not None
+    ):
+        observation_mode = os.environ.get("ARCHWAY_ANALYSIS_OBSERVATION", "summary")
+        if observation_mode == "diagnostic":
+            observation_config = AnalysisObservationConfig.diagnostic()
+        elif observation_mode == "off":
+            observation_config = AnalysisObservationConfig.off()
+        else:
+            observation_config = AnalysisObservationConfig.summary()
+        kwargs = {
+            "module": module_name,
+            "repo_path": str(path),
+            "observation_config": observation_config,
+        }
+        body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
+        if body_summary_consumption != "off":
+            kwargs["body_summary_consumption"] = body_summary_consumption
+        analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
+        if analysis_product != "standalone":
+            kwargs["analysis_product"] = analysis_product
+        if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
+            "1", "true", "yes", "on",
+        }:
+            kwargs["type_requirements_assume_closed"] = True
+        file_result = analyze_source_file_result(source, **kwargs)
+        analysis_summary = file_result.to_jsonable().get("analysis_summary")
+        if file_result.status != "analyzed" or file_result.run is None:
+            if FileAnalysisFailure is not None:
+                raise FileAnalysisFailure(file_result)
+            raise RuntimeError(f"file analysis failed: {file_result.status}")
+        analysis = _encode_finalized(file_result.run.finalized)
+        analysis["module_name"] = module_name
+        analysis["status"] = file_result.status
+        analysis["file_result"] = file_result.to_jsonable()
+    else:
+        analysis = analyze_source(source, module_name)
     out = {
         "ok": True,
-        "analysis": analyze_source(source, module_name),
+        "analysis": analysis,
+        "analysis_summary": analysis_summary,
     }
 except Exception as exc:
     out = {
@@ -327,7 +403,13 @@ print(json.dumps(out, sort_keys=True))
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=_probe_env(engine_worktree),
+                env=_probe_env(
+                    engine_worktree,
+                    body_summary_consumption=body_summary_consumption,
+                    analysis_product=analysis_product,
+                    analysis_observation_mode=analysis_observation_mode,
+                    type_requirements_assume_closed=type_requirements_assume_closed,
+                ),
                 start_new_session=True,
             )
             stdout, stderr = proc.communicate(timeout=timeout)
@@ -359,8 +441,23 @@ print(json.dumps(out, sort_keys=True))
     }
 
 
-def _probe_env(engine_worktree: Path) -> dict[str, str]:
+def _probe_env(
+    engine_worktree: Path,
+    *,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
+    analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
+) -> dict[str, str]:
     env = os.environ.copy()
+    if body_summary_consumption:
+        env["ARCHWAY_BODY_SUMMARY_CONSUMPTION"] = body_summary_consumption
+    env["ARCHWAY_ANALYSIS_PRODUCT"] = analysis_product
+    env["ARCHWAY_ANALYSIS_OBSERVATION"] = analysis_observation_mode
+    if type_requirements_assume_closed:
+        env["ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED"] = "1"
+    else:
+        env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
     existing = env.get("PYTHONPATH")
     paths = [str(engine_worktree)]
     if existing:
@@ -444,6 +541,178 @@ def capture_translation_trace_file(
     summary_json.write_text(json.dumps(record, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     record["summary_path"] = str(summary_json)
     return record
+
+
+def capture_runtime_phase_profile_file(
+    *,
+    engine_worktree: Path,
+    source_path: Path,
+    module_name: str,
+    runner: tuple[str, ...] = ("hatch", "run", "python"),
+    timeout: int = 90,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
+    type_requirements_assume_closed: bool = False,
+) -> dict[str, Any]:
+    """Measure import, translation, traced translation, and analysis separately.
+
+    Each phase runs in its own subprocess. This keeps a stuck analysis/fixpoint
+    from hiding whether translation or trace capture was fast.
+    """
+
+    source_path = Path(source_path)
+    out: dict[str, Any] = {"file": str(source_path), "module_name": module_name}
+    for phase in (
+        "import_only",
+        "translation_no_trace",
+        "translation_trace",
+        "analyze_source",
+    ):
+        out[phase] = _run_runtime_phase_probe_file(
+            engine_worktree=Path(engine_worktree),
+            source_path=source_path,
+            module_name=module_name,
+            runner=runner,
+            timeout=timeout,
+            phase=phase,
+            body_summary_consumption=body_summary_consumption,
+            analysis_product=analysis_product,
+            type_requirements_assume_closed=type_requirements_assume_closed,
+        )
+    return out
+
+
+def _run_runtime_phase_probe_file(
+    *,
+    engine_worktree: Path,
+    source_path: Path,
+    module_name: str,
+    runner: tuple[str, ...],
+    timeout: int,
+    phase: str,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
+    type_requirements_assume_closed: bool = False,
+) -> dict[str, Any]:
+    probe = r'''
+import json
+import os
+import sys
+import time
+import traceback
+from pathlib import Path
+
+phase = sys.argv[1]
+path = Path(sys.argv[2])
+module_name = sys.argv[3]
+started = time.monotonic()
+out = {"ok": False, "phase": phase}
+try:
+    from sd_core.tooling.harness import TranslationResult
+    from sd_core.analysis_server import analyze_source
+    if phase == "import_only":
+        out = {"ok": True, "phase": phase}
+    else:
+        source = path.read_text(encoding="utf-8")
+        if phase == "translation_no_trace":
+            result = TranslationResult.from_source(source, trace=False, name=module_name)
+            out = {
+                "ok": True,
+                "phase": phase,
+                "morphism_kind": type(result.morphism).__name__,
+            }
+        elif phase == "translation_trace":
+            result = TranslationResult.from_source(source, trace=True, name=module_name)
+            trace = result.traces[0] if result.traces else None
+            out = {
+                "ok": True,
+                "phase": phase,
+                "trace_count": len(result.traces),
+                "span_count": len(getattr(trace, "spans", [])) if trace is not None else 0,
+            }
+        elif phase == "analyze_source":
+            kwargs = {}
+            body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
+            if body_summary_consumption != "off":
+                kwargs["body_summary_consumption"] = body_summary_consumption
+            analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
+            if analysis_product != "standalone":
+                kwargs["analysis_product"] = analysis_product
+            if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
+                "1", "true", "yes", "on",
+            }:
+                kwargs["type_requirements_assume_closed"] = True
+            result = analyze_source(source, module_name, **kwargs)
+            out = {
+                "ok": True,
+                "phase": phase,
+                "function_count": len(result.get("functions", [])) if isinstance(result, dict) else None,
+            }
+        else:
+            raise RuntimeError(f"unknown runtime phase: {phase}")
+except Exception as exc:
+    out = {
+        "ok": False,
+        "phase": phase,
+        "error": f"{type(exc).__name__}: {exc}",
+        "trace_tail": traceback.format_exc()[-2000:],
+    }
+out["seconds"] = round(time.monotonic() - started, 6)
+print(json.dumps(out, sort_keys=True))
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
+        f.write(probe)
+        f.flush()
+        cmd = [*runner, f.name, phase, str(source_path.resolve()), module_name]
+        started = time.monotonic()
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                cwd=engine_worktree,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=_probe_env(
+                    engine_worktree,
+                    body_summary_consumption=body_summary_consumption,
+                    analysis_product=analysis_product,
+                    type_requirements_assume_closed=type_requirements_assume_closed,
+                ),
+                start_new_session=True,
+            )
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            stdout, stderr = proc.communicate()
+            return {
+                "ok": False,
+                "phase": phase,
+                "seconds": round(time.monotonic() - started, 6),
+                "error": f"TimeoutExpired: {phase} exceeded {timeout}s",
+                "trace_tail": ((stderr or "")[-2000:] if isinstance(stderr, str) else ""),
+            }
+    if proc.returncode != 0:
+        return {
+            "ok": False,
+            "phase": phase,
+            "seconds": round(time.monotonic() - started, 6),
+            "error": f"runtime phase probe failed: exit={proc.returncode}",
+            "trace_tail": stderr[-2000:],
+        }
+    for line in reversed(stdout.splitlines()):
+        line = line.strip()
+        if line.startswith("{"):
+            return json.loads(line)
+    return {
+        "ok": False,
+        "phase": phase,
+        "seconds": round(time.monotonic() - started, 6),
+        "error": "runtime phase probe produced no JSON",
+        "trace_tail": stderr[-2000:],
+    }
 
 
 def _run_translation_trace_probe_file(

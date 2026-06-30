@@ -7,6 +7,7 @@ from archway_benchmarks.typybench_archway_emit import (
     _element_type,
     _function_types,
     _run_engine_probe,
+    capture_runtime_phase_profile_file,
     capture_translation_trace_file,
     emit_archway_predictions,
 )
@@ -540,13 +541,80 @@ def analyze_source(source, module_name):
 def test_emit_predictions_profile_jsonl_records_per_file_timings(tmp_path) -> None:
     engine = tmp_path / "engine"
     sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
+    runners = sd_core / "runners"
+    runners.mkdir(parents=True)
     (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
+    (runners / "__init__.py").write_text("", encoding="utf-8")
+    (runners / "analysis_observability.py").write_text(
         """
-def analyze_source(source, module_name):
+class AnalysisObservationConfig:
+    def __init__(self, mode="summary"):
+        self.mode = mode
+
+    @classmethod
+    def summary(cls):
+        return cls("summary")
+
+    @classmethod
+    def diagnostic(cls):
+        return cls("diagnostic")
+
+    @classmethod
+    def off(cls):
+        return cls("off")
+""",
+        encoding="utf-8",
+    )
+    (runners / "file_results.py").write_text(
+        """
+class _Run:
+    finalized = object()
+
+class _Result:
+    status = "analyzed"
+    run = _Run()
+
+    def to_jsonable(self):
+        return {
+            "analysis_summary": {
+                "schema": "archway.analysis_run_summary.v1",
+                "phases": [
+                    {"name": "types.evaluate", "wall_seconds": 0.125, "status": "ok"}
+                ],
+                "type_functor": {
+                    "body_execution_hotspots": [
+                        {"body_name": "f", "execution_count": 1, "wall_seconds": 0.1}
+                    ]
+                },
+            }
+        }
+
+class FileAnalysisFailure(Exception):
+    pass
+
+def analyze_source_file_result(
+    source,
+    module,
+    repo_path=None,
+    observation_config=None,
+    body_summary_consumption="off",
+    analysis_product="standalone",
+):
+    if body_summary_consumption != "safe":
+        raise RuntimeError(f"policy was {body_summary_consumption}")
+    if analysis_product != "type_body_summary_product":
+        raise RuntimeError(f"product was {analysis_product}")
+    if getattr(observation_config, "mode", None) != "diagnostic":
+        raise RuntimeError(f"observation was {getattr(observation_config, 'mode', None)}")
     if "boom" in source:
         raise RuntimeError("synthetic")
+    return _Result()
+""",
+        encoding="utf-8",
+    )
+    (sd_core / "analysis_server.py").write_text(
+        """
+def _analysis():
     return {
         "functions": [
             {
@@ -562,6 +630,14 @@ def analyze_source(source, module_name):
             }
         ]
     }
+
+def _encode_finalized(finalized):
+    return _analysis()
+
+def analyze_source(source, module_name):
+    if "boom" in source:
+        raise RuntimeError("synthetic")
+    return _analysis()
 """,
         encoding="utf-8",
     )
@@ -580,6 +656,9 @@ def analyze_source(source, module_name):
         timeout=30,
         per_file_timeout=5,
         profile_jsonl=profile_jsonl,
+        body_summary_consumption="safe",
+        analysis_product="type_body_summary_product",
+        analysis_observation_mode="diagnostic",
     )
 
     rows = [json.loads(line) for line in profile_jsonl.read_text(encoding="utf-8").splitlines()]
@@ -588,6 +667,12 @@ def analyze_source(source, module_name):
     assert by_file["ok.py"]["status"] == "ok"
     assert by_file["ok.py"]["seconds_engine_probe"] >= 0
     assert by_file["ok.py"]["functions_seen"] == 1
+    assert by_file["ok.py"]["analysis_summary"]["schema"] == (
+        "archway.analysis_run_summary.v1"
+    )
+    assert by_file["ok.py"]["analysis_summary"]["type_functor"][
+        "body_execution_hotspots"
+    ][0]["body_name"] == "f"
     assert by_file["bad.py"]["status"] == "engine_failed"
     assert "RuntimeError: synthetic" in by_file["bad.py"]["error"]
 
@@ -639,3 +724,54 @@ class TranslationResult:
         encoding="utf-8"
     )
     assert (tmp_path / "traces" / "demo.py.trace-summary.json").exists()
+
+
+def test_capture_runtime_phase_profile_file_splits_translation_from_analysis(tmp_path) -> None:
+    engine = tmp_path / "engine"
+    sd_core = engine / "sd_core"
+    tooling = sd_core / "tooling"
+    tooling.mkdir(parents=True)
+    (sd_core / "__init__.py").write_text("", encoding="utf-8")
+    (tooling / "__init__.py").write_text("", encoding="utf-8")
+    (tooling / "harness.py").write_text(
+        """
+class TranslationResult:
+    def __init__(self, trace=False):
+        self.morphism = object()
+        self.traces = [type("Trace", (), {"spans": [1, 2, 3]})()] if trace else []
+
+    @classmethod
+    def from_source(cls, source, trace=False, name=None):
+        return cls(trace=trace)
+""",
+        encoding="utf-8",
+    )
+    (sd_core / "analysis_server.py").write_text(
+        """
+import time
+
+def analyze_source(source, module_name):
+    if "slow" in source:
+        time.sleep(5)
+    return {"functions": [{"name": "f"}]}
+""",
+        encoding="utf-8",
+    )
+    source = tmp_path / "demo.py"
+    source.write_text("slow = True\n", encoding="utf-8")
+
+    profile = capture_runtime_phase_profile_file(
+        engine_worktree=engine,
+        source_path=source,
+        module_name="demo",
+        runner=(sys.executable,),
+        timeout=1,
+    )
+
+    assert profile["file"] == str(source)
+    assert profile["import_only"]["ok"] is True
+    assert profile["translation_no_trace"]["ok"] is True
+    assert profile["translation_trace"]["ok"] is True
+    assert profile["translation_trace"]["span_count"] == 3
+    assert profile["analyze_source"]["ok"] is False
+    assert "TimeoutExpired" in profile["analyze_source"]["error"]
