@@ -48,6 +48,14 @@ def _list_of(elt):
     return {"kind": "list", "element": elt}
 
 
+def _set_of(elt):
+    return {"kind": "set", "element": elt}
+
+
+def _generator_of(elt):
+    return {"kind": "generator", "element": elt}
+
+
 def _instance(cls_body):
     return {"kind": "instance", "cls": {"kind": "class", "body": cls_body}}
 
@@ -253,6 +261,29 @@ def test_subscript_through_container_base_still_projects():
 def test_plain_variable_unaffected():
     preds = _predict([_gt("variable", "a", 33, 1, {"int"})])
     assert preds == {"a": frozenset({"int"})}
+
+
+def test_set_and_generator_render_as_own_runtime_kinds():
+    result = ArchwayAnalysisResult(
+        snippet_path="fixtures/container_kinds",
+        module_bindings={
+            "s": [_event(41, 0, _set_of(_pytype("int")))],
+            "g": [_event(42, 0, _generator_of(_pytype("int")))],
+        },
+        functions=(),
+        module_name="main",
+    )
+    snippet = _snippet([
+        _gt("variable", "s", 41, 1, {"set"}),
+        _gt("variable", "g", 42, 1, {"generator"}),
+    ])
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "s": frozenset({"set"}),
+        "g": frozenset({"generator"}),
+    }
 
 
 def test_typeevalpy_micro_mro_method_family_return_projection():

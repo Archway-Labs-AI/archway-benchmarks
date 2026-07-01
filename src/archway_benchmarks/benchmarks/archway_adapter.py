@@ -524,7 +524,7 @@ def _to_types(
     kind = elt.get("kind")
     if kind == "pytype":
         return frozenset({elt["name"]})
-    if kind in ("dict", "list", "tuple", "callable"):
+    if kind in ("dict", "list", "tuple", "set", "generator", "callable"):
         return frozenset({kind})
     if kind in ("top", "bottom"):
         return frozenset({"any"})
