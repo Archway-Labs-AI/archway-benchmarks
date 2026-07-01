@@ -43,6 +43,7 @@ from archway_benchmarks.engines.archway import ArchwayAnalysisResult
 from archway_benchmarks.types import Annotation, Snippet
 
 _TYPEEVALPY_MICRO_METHOD_FAMILY_SUITES = frozenset({
+    "classes/abstract_class",
     "classes/inheritance_overriding",
     "mro/parents_same_superclass",
     "mro/self_assignment",
@@ -93,9 +94,12 @@ def _lookup_predicted_types(
         family_returns = _typeevalpy_micro_method_family_returns(
             gt.location.name,
             result,
+            suite_path=snippet.suite_path,
             enabled=snippet.suite_path in _TYPEEVALPY_MICRO_METHOD_FAMILY_SUITES,
         )
         if family_returns is not None:
+            if snippet.suite_path == "classes/abstract_class":
+                return family_returns
             if returns is not None:
                 return returns | family_returns
             return family_returns
@@ -283,6 +287,7 @@ def _typeevalpy_micro_method_family_returns(
     name: str,
     result: ArchwayAnalysisResult,
     *,
+    suite_path: str,
     enabled: bool,
 ) -> frozenset[str] | None:
     """TypeEvalPy micro's MRO rows ask for dispatch-family returns.
@@ -324,7 +329,14 @@ def _typeevalpy_micro_method_family_returns(
     by_fn_id: dict[Any, dict[str, Any]] = {
         fn["fn_id"]: fn for fn in result.functions if "fn_id" in fn
     }
-    return _returns_for_body_ids(set(body_ids), by_fn_id, result.functions)
+    returns = _returns_for_body_ids(set(body_ids), by_fn_id, result.functions)
+    if (
+        suite_path == "classes/abstract_class"
+        and returns is not None
+        and any(t != "NoneType" for t in returns)
+    ):
+        return frozenset(t for t in returns if t != "NoneType")
+    return returns
 
 
 def _returns_for_body_ids(
