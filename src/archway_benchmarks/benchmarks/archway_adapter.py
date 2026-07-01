@@ -303,6 +303,9 @@ def _to_types(
     if kind == "instance":
         # GT names instances by the bound class name (e.g., `Person`).
         cls = elt.get("cls") or {}
+        cls_name = cls.get("name")
+        if cls_name:
+            return frozenset({cls_name})
         cls_body = cls.get("body")
         if cls_body is not None:
             for fn in functions:

@@ -49,7 +49,11 @@ def _list_of(elt):
 
 
 def _instance(cls_body):
-    return {"kind": "instance", "cls": {"kind": "class", "body": cls_body, "name": "ignored"}}
+    return {"kind": "instance", "cls": {"kind": "class", "body": cls_body}}
+
+
+def _qualified_instance(cls_body, name):
+    return {"kind": "instance", "cls": {"kind": "class", "body": cls_body, "name": name}}
 
 
 def _build_result() -> ArchwayAnalysisResult:
@@ -154,6 +158,31 @@ def test_instance_valued_self_attr_resolves_class_name():
     # GT `B.c` <-> engine `self.c` instance whose cls.body=300 resolves to "C".
     preds = _predict([_gt("variable", "B.c", 20, 9, {"C"})])
     assert preds == {"B.c": frozenset({"C"})}
+
+
+def test_instance_uses_qualified_class_display_name_before_body_name():
+    result = ArchwayAnalysisResult(
+        snippet_path="fixtures/self_attr",
+        module_bindings={
+            "a": [_event(40, 0, _qualified_instance(300, "to_import.A"))],
+        },
+        functions=(
+            {
+                "fn_id": 300,
+                "name": "A",
+                "source_position": _pos(1, 6),
+                "instantiations": [],
+            },
+        ),
+        module_name="main",
+    )
+    snippet = _snippet([_gt("variable", "a", 40, 1, {"to_import.A"})])
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "a": frozenset({"to_import.A"}),
+    }
 
 
 # ----- the parallel false TYPE_MISS on container-valued attributes -----
