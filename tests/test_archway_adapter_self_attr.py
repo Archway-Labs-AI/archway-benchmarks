@@ -373,3 +373,64 @@ def test_mro_method_family_projection_is_not_global_typeevalpy_behavior():
     assert {a.location.name: a.types for a in out} == {
         "B.func": frozenset({"str"}),
     }
+
+
+def test_typeevalpy_micro_abstract_method_family_return_projection():
+    shape_area = _callable("Shape.area")
+    rectangle_area = _callable("Rectangle.area")
+    class_shape = _class("Shape", "Shape", namespace=(("area", shape_area),))
+    class_rectangle = _class(
+        "Rectangle",
+        "Rectangle",
+        bases=(class_shape,),
+        namespace=(("area", rectangle_area),),
+    )
+    result = ArchwayAnalysisResult(
+        snippet_path="classes/abstract_class",
+        module_bindings={
+            "Shape": [_event(4, 6, class_shape)],
+            "Rectangle": [_event(10, 6, class_rectangle)],
+        },
+        functions=(
+            {
+                "fn_id": "Shape.area",
+                "name": "area",
+                "source_position": _pos(6, 8),
+                "instantiations": [
+                    {
+                        "ret": _event(7, 8, _pytype("NoneType")),
+                        "params": {},
+                        "captures": {},
+                        "locals": {},
+                    },
+                ],
+            },
+            {
+                "fn_id": "Rectangle.area",
+                "name": "area",
+                "source_position": _pos(15, 8),
+                "instantiations": [
+                    {
+                        "ret": _event(16, 8, _pytype("int")),
+                        "params": {},
+                        "captures": {},
+                        "locals": {},
+                    },
+                ],
+            },
+        ),
+        module_name="main",
+    )
+    snippet = Snippet(
+        benchmark="typeevalpy",
+        suite_path="classes/abstract_class",
+        file_path=FILE,
+        source="",
+        annotations=(_gt("return", "Shape.area", 6, 9, {"int"}),),
+    )
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "Shape.area": frozenset({"int"}),
+    }
