@@ -73,6 +73,16 @@ def test_inline_synthetic_frame_edges_handles_nested_comprehensions():
     ) == {("main", "main.func1"), ("main", "main.func2")}
 
 
+def test_inline_synthetic_frame_edges_filters_direct_implementation_helpers():
+    assert _inline_synthetic_frame_edges(
+        {
+            ("main", "<builtin>.iter"),
+            ("main", "<**PyDict**>.update"),
+            ("main", "main.func"),
+        }
+    ) == {("main", "main.func")}
+
+
 def test_load_cases_reads_pycg_micro_layout(tmp_path: Path):
     _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
 

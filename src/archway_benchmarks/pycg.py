@@ -386,12 +386,11 @@ def _inline_synthetic_frame_edges(
     for caller, callee in edge_set:
         caller_is_synthetic = _is_synthetic_frame(caller)
         callee_is_synthetic = _is_synthetic_frame(callee)
-        if callee_is_synthetic:
+        if callee_is_synthetic or _is_synthetic_implementation_target(callee):
             continue
         if caller_is_synthetic:
             for parent in source_parents(caller):
-                if not _is_synthetic_implementation_target(callee):
-                    projected.add((parent, callee))
+                projected.add((parent, callee))
             continue
         projected.add((caller, callee))
     return projected
@@ -411,6 +410,7 @@ def _is_synthetic_implementation_target(name: str) -> bool:
         "<builtin-method>.list.append",
         "<builtin-method>.set.add",
         "<builtin-method>.dict.__setitem__",
+        "<**PyDict**>.update",
     }
 
 
