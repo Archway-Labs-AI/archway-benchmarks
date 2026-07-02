@@ -48,8 +48,29 @@ def _list_of(elt):
     return {"kind": "list", "element": elt}
 
 
+def _set_of(elt):
+    return {"kind": "set", "element": elt}
+
+
+def _generator_of(elt):
+    return {"kind": "generator", "element": elt}
+
+
 def _instance(cls_body):
-    return {"kind": "instance", "cls": {"kind": "class", "body": cls_body, "name": "ignored"}}
+    return {"kind": "instance", "cls": {"kind": "class", "body": cls_body}}
+
+
+def _qualified_instance(cls_body, name):
+    return {"kind": "instance", "cls": {"kind": "class", "body": cls_body, "name": name}}
+
+
+def _class(body, name, *, bases=(), namespace=()):
+    out = {"kind": "class", "body": body, "name": name}
+    if bases:
+        out["bases"] = list(bases)
+    if namespace:
+        out["namespace"] = [[member_name, member] for member_name, member in namespace]
+    return out
 
 
 def _build_result() -> ArchwayAnalysisResult:
@@ -156,6 +177,31 @@ def test_instance_valued_self_attr_resolves_class_name():
     assert preds == {"B.c": frozenset({"C"})}
 
 
+def test_instance_uses_qualified_class_display_name_before_body_name():
+    result = ArchwayAnalysisResult(
+        snippet_path="fixtures/self_attr",
+        module_bindings={
+            "a": [_event(40, 0, _qualified_instance(300, "to_import.A"))],
+        },
+        functions=(
+            {
+                "fn_id": 300,
+                "name": "A",
+                "source_position": _pos(1, 6),
+                "instantiations": [],
+            },
+        ),
+        module_name="main",
+    )
+    snippet = _snippet([_gt("variable", "a", 40, 1, {"to_import.A"})])
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "a": frozenset({"to_import.A"}),
+    }
+
+
 # ----- the parallel false TYPE_MISS on container-valued attributes -----
 
 def test_container_valued_attr_returns_own_type_not_element():
@@ -215,3 +261,207 @@ def test_subscript_through_container_base_still_projects():
 def test_plain_variable_unaffected():
     preds = _predict([_gt("variable", "a", 33, 1, {"int"})])
     assert preds == {"a": frozenset({"int"})}
+
+
+def test_set_and_generator_render_as_own_runtime_kinds():
+    result = ArchwayAnalysisResult(
+        snippet_path="fixtures/container_kinds",
+        module_bindings={
+            "s": [_event(41, 0, _set_of(_pytype("int")))],
+            "g": [_event(42, 0, _generator_of(_pytype("int")))],
+        },
+        functions=(),
+        module_name="main",
+    )
+    snippet = _snippet([
+        _gt("variable", "s", 41, 1, {"set"}),
+        _gt("variable", "g", 42, 1, {"generator"}),
+    ])
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "s": frozenset({"set"}),
+        "g": frozenset({"generator"}),
+    }
+
+
+def test_typeevalpy_micro_mro_method_family_return_projection():
+    a_func = _callable("A.func")
+    b_func = _callable("B.func")
+    class_a = _class("A", "A", namespace=(("func", a_func),))
+    class_b = _class("B", "B", namespace=(("func", b_func),))
+    class_c = _class("C", "C", bases=(class_a, class_b))
+    result = ArchwayAnalysisResult(
+        snippet_path="mro/two_parents",
+        module_bindings={
+            "A": [_event(4, 6, class_a)],
+            "B": [_event(9, 6, class_b)],
+            "C": [_event(16, 6, class_c)],
+        },
+        functions=(
+            {
+                "fn_id": "A.func",
+                "name": "func",
+                "source_position": _pos(5, 8),
+                "instantiations": [
+                    {
+                        "ret": _event(5, 8, _pytype("int")),
+                        "params": {},
+                        "captures": {},
+                        "locals": {},
+                    },
+                ],
+            },
+            {
+                "fn_id": "B.func",
+                "name": "func",
+                "source_position": _pos(13, 8),
+                "instantiations": [
+                    {
+                        "ret": _event(13, 8, _pytype("str")),
+                        "params": {},
+                        "captures": {},
+                        "locals": {},
+                    },
+                ],
+            },
+        ),
+        module_name="main",
+    )
+    snippet = Snippet(
+        benchmark="typeevalpy",
+        suite_path="mro/two_parents",
+        file_path=FILE,
+        source="",
+        annotations=(
+            _gt("return", "B.func", 13, 9, {"int", "str"}),
+            _gt("return", "A.func", 5, 9, {"int"}),
+        ),
+    )
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "A.func": frozenset({"int"}),
+        "B.func": frozenset({"int", "str"}),
+    }
+
+
+def test_mro_method_family_projection_is_not_global_typeevalpy_behavior():
+    a_func = _callable("A.func")
+    b_func = _callable("B.func")
+    class_a = _class("A", "A", namespace=(("func", a_func),))
+    class_b = _class("B", "B", namespace=(("func", b_func),))
+    class_c = _class("C", "C", bases=(class_a, class_b))
+    result = ArchwayAnalysisResult(
+        snippet_path="autogen/mro/two_parents",
+        module_bindings={
+            "A": [_event(4, 6, class_a)],
+            "B": [_event(9, 6, class_b)],
+            "C": [_event(16, 6, class_c)],
+        },
+        functions=(
+            {
+                "fn_id": "A.func",
+                "name": "func",
+                "source_position": _pos(5, 8),
+                "instantiations": [
+                    {
+                        "ret": _event(5, 8, _pytype("int")),
+                        "params": {},
+                        "captures": {},
+                        "locals": {},
+                    },
+                ],
+            },
+            {
+                "fn_id": "B.func",
+                "name": "func",
+                "source_position": _pos(13, 8),
+                "instantiations": [
+                    {
+                        "ret": _event(13, 8, _pytype("str")),
+                        "params": {},
+                        "captures": {},
+                        "locals": {},
+                    },
+                ],
+            },
+        ),
+        module_name="main",
+    )
+    snippet = Snippet(
+        benchmark="typeevalpy",
+        suite_path="autogen/mro/two_parents",
+        file_path=FILE,
+        source="",
+        annotations=(_gt("return", "B.func", 13, 9, {"str"}),),
+    )
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "B.func": frozenset({"str"}),
+    }
+
+
+def test_typeevalpy_micro_abstract_method_family_return_projection():
+    shape_area = _callable("Shape.area")
+    rectangle_area = _callable("Rectangle.area")
+    class_shape = _class("Shape", "Shape", namespace=(("area", shape_area),))
+    class_rectangle = _class(
+        "Rectangle",
+        "Rectangle",
+        bases=(class_shape,),
+        namespace=(("area", rectangle_area),),
+    )
+    result = ArchwayAnalysisResult(
+        snippet_path="classes/abstract_class",
+        module_bindings={
+            "Shape": [_event(4, 6, class_shape)],
+            "Rectangle": [_event(10, 6, class_rectangle)],
+        },
+        functions=(
+            {
+                "fn_id": "Shape.area",
+                "name": "area",
+                "source_position": _pos(6, 8),
+                "instantiations": [
+                    {
+                        "ret": _event(7, 8, _pytype("NoneType")),
+                        "params": {},
+                        "captures": {},
+                        "locals": {},
+                    },
+                ],
+            },
+            {
+                "fn_id": "Rectangle.area",
+                "name": "area",
+                "source_position": _pos(15, 8),
+                "instantiations": [
+                    {
+                        "ret": _event(16, 8, _pytype("int")),
+                        "params": {},
+                        "captures": {},
+                        "locals": {},
+                    },
+                ],
+            },
+        ),
+        module_name="main",
+    )
+    snippet = Snippet(
+        benchmark="typeevalpy",
+        suite_path="classes/abstract_class",
+        file_path=FILE,
+        source="",
+        annotations=(_gt("return", "Shape.area", 6, 9, {"int"}),),
+    )
+
+    out = ArchwayAnalysisResultAdapter().to_annotations(result, snippet)
+
+    assert {a.location.name: a.types for a in out} == {
+        "Shape.area": frozenset({"int"}),
+    }
