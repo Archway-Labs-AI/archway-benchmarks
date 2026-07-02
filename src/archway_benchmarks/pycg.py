@@ -1,10 +1,12 @@
-"""PyCG micro-benchmark loader, scorer, and Archway runner.
+"""PyCG benchmark loader, scorer, and Archway runner.
 
-This module targets PyCG's published micro benchmark shape:
+This module targets PyCG's published benchmark shapes:
 
 ```
 micro-benchmark/snippets/<category>/<case>/main.py
 micro-benchmark/snippets/<category>/<case>/callgraph.json
+data/macro-benchmark/projects/<project>/...
+data/macro-benchmark/ground-truth-cgs/<project>.json
 ```
 
 The scorer is intentionally graph-shaped rather than annotation-shaped. It
@@ -18,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import multiprocessing
+import queue
 import sys
 import time
 from dataclasses import dataclass, field
@@ -29,14 +33,21 @@ Edge = tuple[str, str]
 
 @dataclass(frozen=True)
 class PyCGCase:
+    suite: str
     suite_path: str
     root: Path
+    package_root: Path
     main_path: Path
+    source_paths: tuple[Path, ...]
     expected: dict[str, tuple[str, ...]]
 
     @property
     def expected_edges(self) -> frozenset[Edge]:
         return frozenset(expected_edges_from_callgraph(self.expected))
+
+    @property
+    def expected_edge_occurrence_count(self) -> int:
+        return sum(len(callees) for callees in self.expected.values())
 
 
 @dataclass(frozen=True)
@@ -44,6 +55,7 @@ class EdgeScore:
     true_positive: int
     false_positive: int
     false_negative: int
+    recall_true_positive: int | None = None
 
     @property
     def precision(self) -> float:
@@ -52,8 +64,13 @@ class EdgeScore:
 
     @property
     def recall(self) -> float:
-        denom = self.true_positive + self.false_negative
-        return self.true_positive / denom if denom else 0.0
+        true_positive = (
+            self.true_positive
+            if self.recall_true_positive is None
+            else self.recall_true_positive
+        )
+        denom = true_positive + self.false_negative
+        return true_positive / denom if denom else 0.0
 
     @property
     def f1(self) -> float:
@@ -61,7 +78,7 @@ class EdgeScore:
         return 2 * self.precision * self.recall / denom if denom else 0.0
 
     def to_jsonable(self) -> dict[str, float | int]:
-        return {
+        payload = {
             "true_positive": self.true_positive,
             "false_positive": self.false_positive,
             "false_negative": self.false_negative,
@@ -69,6 +86,9 @@ class EdgeScore:
             "recall": self.recall,
             "f1": self.f1,
         }
+        if self.recall_true_positive is not None:
+            payload["recall_true_positive"] = self.recall_true_positive
+        return payload
 
 
 @dataclass(frozen=True)
@@ -101,6 +121,7 @@ class PyCGCaseResult:
 
 @dataclass(frozen=True)
 class PyCGRunResult:
+    suite: str
     corpus_root: str
     engine_root: str
     cases_total: int
@@ -112,9 +133,11 @@ class PyCGRunResult:
     score: EdgeScore
     elapsed_seconds: float
     cases: tuple[PyCGCaseResult, ...] = field(default_factory=tuple)
+    project_scores: dict[str, dict[str, float | int]] = field(default_factory=dict)
 
     def to_jsonable(self) -> dict:
         return {
+            "suite": self.suite,
             "corpus_root": self.corpus_root,
             "engine_root": self.engine_root,
             "cases_total": self.cases_total,
@@ -125,6 +148,7 @@ class PyCGRunResult:
             "predicted_edges_total": self.predicted_edges_total,
             "score": self.score.to_jsonable(),
             "elapsed_seconds": self.elapsed_seconds,
+            "project_scores": self.project_scores,
             "cases": [case.to_jsonable() for case in self.cases],
         }
 
@@ -145,7 +169,126 @@ def score_edges(expected: set[Edge], predicted: set[Edge]) -> EdgeScore:
     )
 
 
-def load_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase, ...]:
+def score_adjacency_lists(
+    expected: Mapping[str, Iterable[str]],
+    predicted_edges: set[Edge],
+) -> EdgeScore:
+    """Score like PyCG's macro comparison script.
+
+    Precision iterates predicted adjacency-list entries and checks membership in
+    expected[caller]. Recall iterates expected adjacency-list entries and checks
+    membership in actual[caller]. That preserves the official denominator when a
+    released ground-truth list contains duplicate callees.
+    """
+
+    expected_lists = {
+        str(caller): tuple(str(callee) for callee in callees)
+        for caller, callees in expected.items()
+    }
+    predicted: dict[str, set[str]] = {}
+    for caller, callee in predicted_edges:
+        predicted.setdefault(caller, set()).add(callee)
+
+    precision_total = len(predicted_edges)
+    precision_caught = sum(
+        1
+        for caller, callee in predicted_edges
+        if callee in expected_lists.get(caller, ())
+    )
+    recall_total = sum(len(callees) for callees in expected_lists.values())
+    recall_caught = sum(
+        1
+        for caller, callees in expected_lists.items()
+        for callee in callees
+        if callee in predicted.get(caller, set())
+    )
+    return EdgeScore(
+        true_positive=precision_caught,
+        false_positive=precision_total - precision_caught,
+        false_negative=recall_total - recall_caught,
+        recall_true_positive=recall_caught,
+    )
+
+
+def _add_scores(left: EdgeScore, right: EdgeScore) -> EdgeScore:
+    left_recall_tp = (
+        left.true_positive
+        if left.recall_true_positive is None
+        else left.recall_true_positive
+    )
+    right_recall_tp = (
+        right.true_positive
+        if right.recall_true_positive is None
+        else right.recall_true_positive
+    )
+    recall_true_positive = left_recall_tp + right_recall_tp
+    true_positive = left.true_positive + right.true_positive
+    return EdgeScore(
+        true_positive=true_positive,
+        false_positive=left.false_positive + right.false_positive,
+        false_negative=left.false_negative + right.false_negative,
+        recall_true_positive=(
+            recall_true_positive
+            if recall_true_positive != true_positive
+            else None
+        ),
+    )
+
+
+@dataclass(frozen=True)
+class MacroProjectSpec:
+    name: str
+    package_root_parts: tuple[str, ...]
+    file_root_parts: tuple[str, ...]
+    exclude_tests: bool = False
+    exclude_setup_py: bool = False
+
+
+_MACRO_PROJECTS: tuple[MacroProjectSpec, ...] = (
+    MacroProjectSpec(
+        name="autojump",
+        package_root_parts=("autojump", "bin"),
+        file_root_parts=("autojump", "bin"),
+    ),
+    MacroProjectSpec(
+        name="fabric",
+        package_root_parts=("fabric",),
+        file_root_parts=("fabric",),
+        exclude_tests=True,
+        exclude_setup_py=True,
+    ),
+    MacroProjectSpec(
+        name="asciinema",
+        package_root_parts=("asciinema",),
+        file_root_parts=("asciinema", "asciinema"),
+    ),
+    MacroProjectSpec(
+        name="face_classification",
+        package_root_parts=("face_classification", "src"),
+        file_root_parts=("face_classification", "src"),
+    ),
+    MacroProjectSpec(
+        name="Sublist3r",
+        package_root_parts=("Sublist3r",),
+        file_root_parts=("Sublist3r",),
+    ),
+)
+
+
+def load_cases(
+    corpus_root: Path,
+    *,
+    suite: str = "micro",
+    limit: int | None = None,
+) -> tuple[PyCGCase, ...]:
+    if suite == "micro":
+        return load_micro_cases(corpus_root, limit=limit)
+    if suite == "macro":
+        return load_macro_cases(corpus_root, limit=limit)
+    raise ValueError(f"unknown PyCG suite: {suite}")
+
+
+def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase, ...]:
     snippet_root = corpus_root / "micro-benchmark" / "snippets"
     if not snippet_root.is_dir():
         raise FileNotFoundError(
@@ -165,9 +308,12 @@ def load_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase
         }
         cases.append(
             PyCGCase(
+                suite="micro",
                 suite_path=str(case_root.relative_to(snippet_root)),
                 root=case_root,
+                package_root=case_root,
                 main_path=main_path,
+                source_paths=tuple(sorted(case_root.rglob("*.py"))),
                 expected=expected,
             )
         )
@@ -176,61 +322,145 @@ def load_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase
     return tuple(cases)
 
 
+def load_macro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase, ...]:
+    macro_root = _resolve_macro_root(corpus_root)
+    projects_root = macro_root / "projects"
+    ground_truth_root = macro_root / "ground-truth-cgs"
+    if not projects_root.is_dir() or not ground_truth_root.is_dir():
+        raise FileNotFoundError(
+            "PyCG macro corpus root must contain projects/ and ground-truth-cgs/: "
+            f"{corpus_root}"
+        )
+
+    cases: list[PyCGCase] = []
+    for spec in _MACRO_PROJECTS:
+        package_root = projects_root.joinpath(*spec.package_root_parts)
+        file_root = projects_root.joinpath(*spec.file_root_parts)
+        ground_truth_path = ground_truth_root / f"{spec.name}.json"
+        if not package_root.is_dir():
+            raise FileNotFoundError(f"PyCG macro package root not found: {package_root}")
+        if not file_root.is_dir():
+            raise FileNotFoundError(f"PyCG macro file root not found: {file_root}")
+        if not ground_truth_path.is_file():
+            raise FileNotFoundError(f"PyCG macro ground truth not found: {ground_truth_path}")
+
+        expected_json = json.loads(ground_truth_path.read_text(encoding="utf-8"))
+        expected = {
+            str(caller): tuple(str(callee) for callee in callees)
+            for caller, callees in expected_json.items()
+        }
+        source_paths = tuple(
+            path
+            for path in sorted(file_root.rglob("*.py"))
+            if _macro_file_is_included(path, spec)
+        )
+        cases.append(
+            PyCGCase(
+                suite="macro",
+                suite_path=spec.name,
+                root=projects_root / spec.name,
+                package_root=package_root,
+                main_path=source_paths[0] if source_paths else file_root,
+                source_paths=source_paths,
+                expected=expected,
+            )
+        )
+        if limit is not None and len(cases) >= limit:
+            break
+    return tuple(cases)
+
+
+def _resolve_macro_root(corpus_root: Path) -> Path:
+    if (corpus_root / "data" / "macro-benchmark").is_dir():
+        return corpus_root / "data" / "macro-benchmark"
+    return corpus_root
+
+
+def _macro_file_is_included(path: Path, spec: MacroProjectSpec) -> bool:
+    path_text = path.as_posix()
+    if spec.exclude_setup_py and "setup.py" in path_text:
+        return False
+    if spec.exclude_tests and "tests" in path_text:
+        return False
+    return True
+
+
 def run_archway_pycg(
     *,
     corpus_root: Path,
     engine_root: Path,
+    suite: str = "micro",
     limit: int | None = None,
     include_diagnostic_name_hints: bool = False,
     analysis_product: str = "standalone",
+    case_timeout_seconds: float | None = None,
 ) -> PyCGRunResult:
-    cases = load_cases(corpus_root, limit=limit)
+    if case_timeout_seconds is not None and case_timeout_seconds <= 0:
+        raise ValueError("--case-timeout-seconds must be positive")
+    cases = load_cases(corpus_root, suite=suite, limit=limit)
     started = time.perf_counter()
     results: list[PyCGCaseResult] = []
     total = EdgeScore(0, 0, 0)
     predicted_total = 0
     expected_total = 0
 
-    for case in cases:
+    for index, case in enumerate(cases, start=1):
         case_started = time.perf_counter()
+        print(
+            f"PyCG {suite} case {index}/{len(cases)} {case.suite_path}: "
+            f"start elapsed={case_started - started:.3f}s",
+            file=sys.stderr,
+            flush=True,
+        )
         expected = set(case.expected_edges)
-        expected_total += len(expected)
+        expected_total += case.expected_edge_occurrence_count
         try:
-            predicted = archway_call_edges(
+            predicted = _archway_call_edges_with_timeout(
                 case,
                 engine_root=engine_root,
                 include_diagnostic_name_hints=include_diagnostic_name_hints,
                 analysis_product=analysis_product,
+                case_timeout_seconds=case_timeout_seconds,
             )
             status = "ok"
             error = None
+        except TimeoutError as exc:
+            predicted = set()
+            status = "timeout"
+            error = str(exc)
         except Exception as exc:
             predicted = set()
             status = "error"
             error = f"{type(exc).__name__}: {exc}"
-        score = score_edges(expected, predicted)
-        total = EdgeScore(
-            total.true_positive + score.true_positive,
-            total.false_positive + score.false_positive,
-            total.false_negative + score.false_negative,
-        )
+        score = score_adjacency_lists(case.expected, predicted)
+        total = _add_scores(total, score)
         predicted_total += len(predicted)
+        case_elapsed = time.perf_counter() - case_started
         results.append(
             PyCGCaseResult(
                 suite_path=case.suite_path,
-                expected_edge_count=len(expected),
+                expected_edge_count=case.expected_edge_occurrence_count,
                 predicted_edge_count=len(predicted),
                 score=score,
                 status=status,
                 error=error,
-                elapsed_seconds=time.perf_counter() - case_started,
+                elapsed_seconds=case_elapsed,
                 predicted_edges=tuple(sorted(predicted)),
                 missing_edges=tuple(sorted(expected - predicted)),
                 extra_edges=tuple(sorted(predicted - expected)),
             )
         )
+        print(
+            f"PyCG {suite} case {index}/{len(cases)} {case.suite_path}: "
+            f"{status} case_elapsed={case_elapsed:.3f}s "
+            f"elapsed={time.perf_counter() - started:.3f}s "
+            f"predicted_edges={len(predicted)}",
+            file=sys.stderr,
+            flush=True,
+        )
 
     return PyCGRunResult(
+        suite=suite,
         corpus_root=str(corpus_root),
         engine_root=str(engine_root),
         cases_total=len(cases),
@@ -242,7 +472,91 @@ def run_archway_pycg(
         score=total,
         elapsed_seconds=time.perf_counter() - started,
         cases=tuple(results),
+        project_scores={
+            result.suite_path: result.score.to_jsonable()
+            | {
+                "expected_edge_count": result.expected_edge_count,
+                "predicted_edge_count": result.predicted_edge_count,
+            }
+            for result in results
+        },
     )
+
+
+def _archway_call_edges_with_timeout(
+    case: PyCGCase,
+    *,
+    engine_root: Path,
+    include_diagnostic_name_hints: bool,
+    analysis_product: str,
+    case_timeout_seconds: float | None,
+) -> set[Edge]:
+    if case_timeout_seconds is None:
+        return archway_call_edges(
+            case,
+            engine_root=engine_root,
+            include_diagnostic_name_hints=include_diagnostic_name_hints,
+            analysis_product=analysis_product,
+        )
+    if case_timeout_seconds <= 0:
+        raise ValueError("--case-timeout-seconds must be positive")
+
+    ctx = _multiprocessing_context()
+    result_queue = ctx.Queue()
+    process = ctx.Process(
+        target=_archway_call_edges_worker,
+        args=(
+            result_queue,
+            case,
+            engine_root,
+            include_diagnostic_name_hints,
+            analysis_product,
+        ),
+    )
+    process.start()
+    process.join(case_timeout_seconds)
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        raise TimeoutError(
+            f"case exceeded timeout of {case_timeout_seconds:.3f}s"
+        )
+    try:
+        status, payload = result_queue.get_nowait()
+    except queue.Empty as exc:
+        raise RuntimeError(
+            f"case worker exited without returning a result; exitcode={process.exitcode}"
+        ) from exc
+    if status == "ok":
+        return payload
+    raise RuntimeError(payload)
+
+
+def _multiprocessing_context() -> multiprocessing.context.BaseContext:
+    methods = multiprocessing.get_all_start_methods()
+    if "fork" in methods:
+        return multiprocessing.get_context("fork")
+    return multiprocessing.get_context()
+
+
+def _archway_call_edges_worker(
+    result_queue: multiprocessing.queues.Queue,
+    case: PyCGCase,
+    engine_root: Path,
+    include_diagnostic_name_hints: bool,
+    analysis_product: str,
+) -> None:
+    try:
+        predicted = archway_call_edges(
+            case,
+            engine_root=engine_root,
+            include_diagnostic_name_hints=include_diagnostic_name_hints,
+            analysis_product=analysis_product,
+        )
+    except Exception as exc:
+        result_queue.put(("error", f"{type(exc).__name__}: {exc}"))
+    else:
+        result_queue.put(("ok", predicted))
 
 
 def archway_call_edges(
@@ -267,11 +581,10 @@ def archway_call_edges(
 
     from sd_core.analysis.callloops.call_relation import project_call_relation
     from sd_core.analysis.callloops.runner import analyze_morphism
-    from sd_core.analysis.types.runner import load_package
     from sd_core.runners.types import analyze_program_result
     from sd_core.tooling.harness import ProgramResult
 
-    sources = load_package(case.root)
+    sources = _load_case_sources(case)
     program = ProgramResult.from_sources(sources)
     edges: set[Edge] = set()
     program_run = analyze_program_result(
@@ -339,6 +652,25 @@ def archway_call_edges(
                 if callee is not None:
                     edges.add((caller, callee))
     return _inline_synthetic_frame_edges(edges)
+
+
+def _load_case_sources(case: PyCGCase) -> dict[str, str]:
+    sources: dict[str, str] = {}
+    for path in case.source_paths:
+        module_name = _module_name_for_path(path, case.package_root)
+        source = path.read_text(encoding="utf-8-sig")
+        if path.name == "__init__.py" and not source.strip():
+            source = "pass\n"
+        sources[module_name] = source
+    return sources
+
+
+def _module_name_for_path(path: Path, package_root: Path) -> str:
+    rel = path.relative_to(package_root)
+    parts = list(rel.parent.parts) if rel.parent != Path(".") else []
+    if rel.stem != "__init__":
+        parts.append(rel.stem)
+    return ".".join(parts)
 
 
 _SYNTHETIC_FRAME_NAMES = frozenset(
@@ -526,8 +858,18 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m archway_benchmarks.pycg")
     parser.add_argument("--corpus-root", required=True)
     parser.add_argument("--engine-root", required=True)
+    parser.add_argument("--suite", choices=("micro", "macro"), default="micro")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--output", default=None)
+    parser.add_argument(
+        "--case-timeout-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Optional per-case wall-clock timeout. Timed-out cases are recorded "
+            "with status=timeout and zero predicted edges; the run continues."
+        ),
+    )
     parser.add_argument(
         "--analysis-product",
         choices=("standalone", "type_requirements_product"),
@@ -551,9 +893,11 @@ def main(argv: list[str] | None = None) -> int:
     result = run_archway_pycg(
         corpus_root=Path(args.corpus_root),
         engine_root=Path(args.engine_root),
+        suite=args.suite,
         limit=args.limit,
         include_diagnostic_name_hints=args.include_diagnostic_name_hints,
         analysis_product=args.analysis_product,
+        case_timeout_seconds=args.case_timeout_seconds,
     )
     payload = result.to_jsonable()
     text = json.dumps(payload, indent=2, sort_keys=True)
@@ -562,7 +906,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(text)
     print(
-        "PyCG Archway score: "
+        f"PyCG Archway {result.suite} score: "
         f"precision={result.score.precision:.3f} "
         f"recall={result.score.recall:.3f} "
         f"f1={result.score.f1:.3f} "
