@@ -1100,11 +1100,33 @@ class _Annotator(ast.NodeTransformer):
     def _annotate_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         info = self.function_types.get((node.lineno, node.name))
         if not info:
+            for arg in [
+                *node.args.posonlyargs,
+                *node.args.args,
+                *node.args.kwonlyargs,
+                *([node.args.vararg] if node.args.vararg else []),
+                *([node.args.kwarg] if node.args.kwarg else []),
+            ]:
+                self._record_missing_slot(
+                    node,
+                    f"param:{arg.arg}",
+                    "function absent from engine projection",
+                )
+            self._record_missing_slot(
+                node,
+                "return",
+                "function absent from engine projection",
+            )
             return
         changed = False
         params = info.get("params") or {}
         for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
             if arg.arg not in params:
+                self._record_missing_slot(
+                    node,
+                    f"param:{arg.arg}",
+                    "no inferred parameter candidate",
+                )
                 continue
             slot = f"param:{arg.arg}"
             if arg.annotation is None:
@@ -1118,6 +1140,12 @@ class _Annotator(ast.NodeTransformer):
                 )
         for arg in (node.args.vararg, node.args.kwarg):
             if not arg or arg.arg not in params:
+                if arg:
+                    self._record_missing_slot(
+                        node,
+                        f"param:{arg.arg}",
+                        "no inferred parameter candidate",
+                    )
                 continue
             slot = f"param:{arg.arg}"
             if arg.annotation is None:
@@ -1139,6 +1167,8 @@ class _Annotator(ast.NodeTransformer):
             self._mark_trace(
                 node, "return", False, "existing annotation preserved", ast.unparse(node.returns)
             )
+        elif not ret:
+            self._record_missing_slot(node, "return", "no inferred return candidate")
         for pname in set(params) - {
             arg.arg
             for arg in [
@@ -1173,6 +1203,29 @@ class _Annotator(ast.NodeTransformer):
                 reason=reason,
                 final_annotation=final_annotation,
             )
+
+    def _record_missing_slot(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        slot: str,
+        reason: str,
+    ) -> None:
+        if not self.trace:
+            return
+        self.trace.add_slot(
+            line=node.lineno,
+            function=node.name,
+            slot=slot,
+            candidates=[{
+                "instantiation": None,
+                "raw_elements": [],
+                "rendered_events": [],
+                "rendered_annotation": None,
+                "fallback_reasons": [reason],
+            }],
+            merged_annotation=None,
+        )
+        self._mark_trace(node, slot, False, reason, None)
 
 
 def _needs_typing_import(info: dict[str, Any]) -> bool:

@@ -538,6 +538,52 @@ def analyze_source(source, module_name):
     assert by_slot["return"]["final_annotation"] == "bool"
 
 
+def test_emit_trace_records_slots_omitted_by_engine_projection(tmp_path) -> None:
+    engine = tmp_path / "engine"
+    sd_core = engine / "sd_core"
+    sd_core.mkdir(parents=True)
+    (sd_core / "__init__.py").write_text("", encoding="utf-8")
+    (sd_core / "analysis_server.py").write_text(
+        """
+def analyze_source(source, module_name):
+    return {
+        "functions": [{
+            "fn_id": 1,
+            "name": "main",
+            "source_position": {"row": 1},
+            "instantiations": [{"params": {}, "ret": {}}],
+        }]
+    }
+""",
+        encoding="utf-8",
+    )
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "demo.py").write_text(
+        "def main(argv=None):\n    return 0\n",
+        encoding="utf-8",
+    )
+    trace_jsonl = tmp_path / "trace.jsonl"
+
+    emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=tmp_path / "predictions",
+        engine_worktree=engine,
+        runner=(sys.executable,),
+        timeout=30,
+        per_file_timeout=5,
+        trace_jsonl=trace_jsonl,
+    )
+
+    records = [json.loads(line) for line in trace_jsonl.read_text().splitlines()]
+    by_slot = {record["slot"]: record for record in records}
+    assert by_slot["param:argv"]["insertion_happened"] is False
+    assert by_slot["param:argv"]["insertion_reason"] == "no inferred parameter candidate"
+    assert by_slot["param:argv"]["fallback_reason"] == "no inferred parameter candidate"
+    assert by_slot["return"]["insertion_reason"] == "no inferred return candidate"
+
+
 def test_emit_predictions_profile_jsonl_records_per_file_timings(tmp_path) -> None:
     engine = tmp_path / "engine"
     sd_core = engine / "sd_core"
