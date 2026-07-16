@@ -217,6 +217,31 @@ def test_run_archway_pycg_logs_case_progress_to_stderr(
     assert "predicted_edges=1" in stderr
 
 
+def test_run_archway_pycg_forwards_callable_root_activation(
+    tmp_path: Path,
+    monkeypatch,
+):
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+    observed = []
+
+    def fake_archway_call_edges(*args, **kwargs):
+        observed.append(kwargs["callable_root_activation"])
+        return {("main", "main.f")}
+
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.archway_call_edges",
+        fake_archway_call_edges,
+    )
+
+    run_archway_pycg(
+        corpus_root=tmp_path,
+        engine_root=tmp_path,
+        callable_root_activation="all",
+    )
+
+    assert observed == ["all"]
+
+
 def test_run_archway_pycg_timeout_marks_case_without_predictions(
     tmp_path: Path,
     monkeypatch,
