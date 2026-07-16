@@ -393,6 +393,7 @@ def run_archway_pycg(
     limit: int | None = None,
     include_diagnostic_name_hints: bool = False,
     analysis_product: str = "standalone",
+    callable_root_activation: str = "off",
     case_timeout_seconds: float | None = None,
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
@@ -420,6 +421,7 @@ def run_archway_pycg(
                 engine_root=engine_root,
                 include_diagnostic_name_hints=include_diagnostic_name_hints,
                 analysis_product=analysis_product,
+                callable_root_activation=callable_root_activation,
                 case_timeout_seconds=case_timeout_seconds,
             )
             status = "ok"
@@ -489,6 +491,7 @@ def _archway_call_edges_with_timeout(
     engine_root: Path,
     include_diagnostic_name_hints: bool,
     analysis_product: str,
+    callable_root_activation: str,
     case_timeout_seconds: float | None,
 ) -> set[Edge]:
     if case_timeout_seconds is None:
@@ -497,6 +500,7 @@ def _archway_call_edges_with_timeout(
             engine_root=engine_root,
             include_diagnostic_name_hints=include_diagnostic_name_hints,
             analysis_product=analysis_product,
+            callable_root_activation=callable_root_activation,
         )
     if case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -511,6 +515,7 @@ def _archway_call_edges_with_timeout(
             engine_root,
             include_diagnostic_name_hints,
             analysis_product,
+            callable_root_activation,
         ),
     )
     process.start()
@@ -545,6 +550,7 @@ def _archway_call_edges_worker(
     engine_root: Path,
     include_diagnostic_name_hints: bool,
     analysis_product: str,
+    callable_root_activation: str,
 ) -> None:
     try:
         predicted = archway_call_edges(
@@ -552,6 +558,7 @@ def _archway_call_edges_worker(
             engine_root=engine_root,
             include_diagnostic_name_hints=include_diagnostic_name_hints,
             analysis_product=analysis_product,
+            callable_root_activation=callable_root_activation,
         )
     except Exception as exc:
         result_queue.put(("error", f"{type(exc).__name__}: {exc}"))
@@ -565,6 +572,7 @@ def archway_call_edges(
     engine_root: Path,
     include_diagnostic_name_hints: bool = False,
     analysis_product: str = "standalone",
+    callable_root_activation: str = "off",
 ) -> set[Edge]:
     """Project Archway call-relation facts to PyCG edge strings.
 
@@ -594,6 +602,7 @@ def archway_call_edges(
         external_from_import_fallback=(
             analysis_product == "type_requirements_product"
         ),
+        callable_root_activation=callable_root_activation,
     )
     structural_runs = {
         module_name: analyze_morphism(
@@ -881,6 +890,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--callable-root-activation",
+        choices=("off", "all"),
+        default="off",
+        help=(
+            "Opt-in engine root policy. 'all' analyzes every uncalled "
+            "parameter-bearing source callable with conservative arguments."
+        ),
+    )
+    parser.add_argument(
         "--include-diagnostic-name-hints",
         action="store_true",
         help=(
@@ -897,6 +915,7 @@ def main(argv: list[str] | None = None) -> int:
         limit=args.limit,
         include_diagnostic_name_hints=args.include_diagnostic_name_hints,
         analysis_product=args.analysis_product,
+        callable_root_activation=args.callable_root_activation,
         case_timeout_seconds=args.case_timeout_seconds,
     )
     payload = result.to_jsonable()
