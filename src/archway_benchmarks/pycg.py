@@ -573,6 +573,7 @@ def archway_call_edges(
     include_diagnostic_name_hints: bool = False,
     analysis_product: str = "standalone",
     callable_root_activation: str = "off",
+    callable_root_body_ids: frozenset[str] | None = None,
 ) -> set[Edge]:
     """Project Archway call-relation facts to PyCG edge strings.
 
@@ -603,6 +604,7 @@ def archway_call_edges(
             analysis_product == "type_requirements_product"
         ),
         callable_root_activation=callable_root_activation,
+        callable_root_body_ids=callable_root_body_ids,
     )
     structural_runs = {
         module_name: analyze_morphism(
