@@ -493,7 +493,10 @@ def analyze_source(source, module_name):
                             "y": [{"element": {"kind": "list"}}],
                             "z": [{"element": {"kind": "pytype", "name": "builtins.str"}}],
                         },
-                        "ret": {"element": {"kind": "top"}},
+                        "ret": {
+                            "element": {"kind": "top"},
+                            "source_position": {"row": 2, "col": 11, "end_row": 2, "end_col": 12},
+                        },
                     }
                 ],
             }
@@ -525,6 +528,9 @@ def analyze_source(source, module_name):
     assert by_slot["param:x"]["raw_candidates"][0]["raw_elements"] == [
         {"kind": "pytype", "name": "builtins.int"}
     ]
+    assert by_slot["param:x"]["raw_candidates"][0]["raw_events"] == [
+        {"element": {"kind": "pytype", "name": "builtins.int"}}
+    ]
     assert by_slot["param:x"]["rendered_annotation"] == "int"
     assert by_slot["param:x"]["insertion_happened"] is True
     assert by_slot["param:x"]["final_annotation"] == "int"
@@ -536,6 +542,9 @@ def analyze_source(source, module_name):
     assert by_slot["return"]["rendered_annotation"] == "Any"
     assert by_slot["return"]["fallback_reason"] == "top"
     assert by_slot["return"]["final_annotation"] == "bool"
+    assert by_slot["return"]["raw_candidates"][0]["top_origin_positions"] == [
+        {"row": 2, "col": 11, "end_row": 2, "end_col": 12}
+    ]
 
 
 def test_emit_trace_records_slots_omitted_by_engine_projection(tmp_path) -> None:

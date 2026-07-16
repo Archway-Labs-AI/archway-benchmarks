@@ -898,9 +898,11 @@ def _function_types(
             return_trace.append(
                 {
                     "instantiation": inst_index,
+                    "raw_event": ret,
                     "raw_element": ret.get("element"),
                     "rendered_annotation": typ,
                     "fallback_reasons": [reason] if reason else [],
+                    "top_origin_positions": _top_origin_positions([ret]),
                 }
             )
             if typ:
@@ -941,10 +943,12 @@ def _events_type(
             None,
             {
                 "instantiation": instantiation,
+                "raw_events": [],
                 "raw_elements": [],
                 "rendered_events": [],
                 "rendered_annotation": None,
                 "fallback_reasons": ["missing events"],
+                "top_origin_positions": [],
             },
         )
     if isinstance(events, dict):
@@ -967,12 +971,30 @@ def _events_type(
         typ,
         {
             "instantiation": instantiation,
+            "raw_events": events,
             "raw_elements": raw_elements,
             "rendered_events": rendered_events,
             "rendered_annotation": typ,
             "fallback_reasons": reasons,
+            "top_origin_positions": _top_origin_positions(events),
         },
     )
+
+
+def _top_origin_positions(events: list[Any]) -> list[dict[str, Any]]:
+    positions = []
+    for event in events:
+        if not isinstance(event, dict):
+            continue
+        element = event.get("element")
+        position = event.get("source_position")
+        if (
+            isinstance(element, dict)
+            and element.get("kind") == "top"
+            and isinstance(position, dict)
+        ):
+            positions.append(position)
+    return positions
 
 
 def _merge_types(types: list[str]) -> Optional[str]:
@@ -1218,10 +1240,12 @@ class _Annotator(ast.NodeTransformer):
             slot=slot,
             candidates=[{
                 "instantiation": None,
+                "raw_events": [],
                 "raw_elements": [],
                 "rendered_events": [],
                 "rendered_annotation": None,
                 "fallback_reasons": [reason],
+                "top_origin_positions": [],
             }],
             merged_annotation=None,
         )
