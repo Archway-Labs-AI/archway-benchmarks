@@ -1,0 +1,4927 @@
+{
+  "cases": [
+    {
+      "elapsed_seconds": 0.2384312089998275,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main.func",
+          "main.param_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "args/assigned_call"
+    },
+    {
+      "elapsed_seconds": 0.20851424988359213,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main.func",
+          "main.param_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "args/call"
+    },
+    {
+      "elapsed_seconds": 0.5788655839860439,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.func"
+        ],
+        [
+          "to_import.func",
+          "main.param_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "args/imported_assigned_call"
+    },
+    {
+      "elapsed_seconds": 0.4907549580093473,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.func"
+        ],
+        [
+          "to_import.func",
+          "main.param_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "args/imported_call"
+    },
+    {
+      "elapsed_seconds": 0.7702124579809606,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 3,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main.func",
+          "main.param_func"
+        ],
+        [
+          "main.param_func",
+          "main.nested_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 3,
+        "true_positive": 3
+      },
+      "status": "ok",
+      "suite_path": "args/nested_call"
+    },
+    {
+      "elapsed_seconds": 0.6257877910975367,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 3,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main.func",
+          "main.func3"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 3,
+        "true_positive": 3
+      },
+      "status": "ok",
+      "suite_path": "args/param_call"
+    },
+    {
+      "elapsed_seconds": 0.22734433319419622,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "assignments/chained"
+    },
+    {
+      "elapsed_seconds": 0.4987457918468863,
+      "error": null,
+      "expected_edge_count": 6,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main",
+          "main.func3"
+        ],
+        [
+          "main",
+          "main.func4"
+        ],
+        [
+          "main",
+          "main.func5"
+        ],
+        [
+          "main",
+          "main.func6"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 6,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "assignments/recursive_tuple"
+    },
+    {
+      "elapsed_seconds": 0.40017108293250203,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main",
+          "main.func3"
+        ],
+        [
+          "main",
+          "main.func4"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 4,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "assignments/starred"
+    },
+    {
+      "elapsed_seconds": 0.3907832079567015,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main",
+          "main.func3"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "assignments/tuple"
+    },
+    {
+      "elapsed_seconds": 0.14792962512001395,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "<builtin>.len"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "builtins/functions"
+    },
+    {
+      "elapsed_seconds": 0.3172459171619266,
+      "error": null,
+      "expected_edge_count": 6,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "<builtin>.map"
+        ],
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main",
+          "main.func3"
+        ],
+        [
+          "main",
+          "main.func3.func"
+        ],
+        [
+          "main.func2",
+          "main.func"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 6,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "builtins/map"
+    },
+    {
+      "elapsed_seconds": 0.595958957914263,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "<**PyDict**>.items"
+        ],
+        [
+          "main",
+          "<**PyStr**>.join"
+        ],
+        [
+          "main",
+          "<**PyStr**>.split"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "builtins/types"
+    },
+    {
+      "elapsed_seconds": 0.3916365841869265,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.MyClass.func"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "classes/assigned_call"
+    },
+    {
+      "elapsed_seconds": 1.3055557918269187,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.func2"
+        ],
+        [
+          "main.MyClass.func2",
+          "main.MyClass.func1"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "classes/assigned_self_call"
+    },
+    {
+      "elapsed_seconds": 0.6012841670308262,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.B.bfunc"
+        ],
+        [
+          "main",
+          "main.C.cfunc"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "classes/base_class_attr"
+    },
+    {
+      "elapsed_seconds": 5.00295375008136,
+      "error": "case exceeded timeout of 5.000s",
+      "expected_edge_count": 5,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.func"
+        ],
+        [
+          "main",
+          "main.B.__init__"
+        ],
+        [
+          "main",
+          "main.C.__init__"
+        ],
+        [
+          "main.A.func",
+          "main.B.func2"
+        ],
+        [
+          "main.A.func",
+          "main.C.func2"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 5,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "timeout",
+      "suite_path": "classes/base_class_calls_child"
+    },
+    {
+      "elapsed_seconds": 0.575223624939099,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "classes/call"
+    },
+    {
+      "elapsed_seconds": 0.5690600420348346,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.__init__"
+        ],
+        [
+          "main",
+          "main.MyClass.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "classes/direct_call"
+    },
+    {
+      "elapsed_seconds": 0.4273376250639558,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "classes/imported_attr_access"
+    },
+    {
+      "elapsed_seconds": 1.2374567079823464,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.MyClass.__init__"
+        ],
+        [
+          "main",
+          "to_import.MyClass.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "classes/imported_call"
+    },
+    {
+      "elapsed_seconds": 1.1662492498289794,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.MyClass.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "classes/imported_call_without_init"
+    },
+    {
+      "elapsed_seconds": 0.19454858312383294,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "nest.imported.func"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "classes/imported_nested_attr_access"
+    },
+    {
+      "elapsed_seconds": 0.6102864590939134,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.__init__"
+        ],
+        [
+          "main",
+          "main.MyClass.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "classes/instance"
+    },
+    {
+      "elapsed_seconds": 0.7292929168324918,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.func"
+        ],
+        [
+          "main.MyClass.func",
+          "main.MyClass.func.nested"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "classes/nested_call"
+    },
+    {
+      "elapsed_seconds": 5.00319341593422,
+      "error": "case exceeded timeout of 5.000s",
+      "expected_edge_count": 5,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.__init__"
+        ],
+        [
+          "main",
+          "main.A.func"
+        ],
+        [
+          "main.A.func",
+          "main.B.__init__"
+        ],
+        [
+          "main.A.func",
+          "main.B.func"
+        ],
+        [
+          "main.B.func",
+          "main.C.func"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 5,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "timeout",
+      "suite_path": "classes/nested_class_calls"
+    },
+    {
+      "elapsed_seconds": 0.8563290000893176,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.MyClass.func1",
+          "main.MyClass.func2"
+        ],
+        [
+          "main.MyClass.func2",
+          "main.MyClass.func3"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.func1"
+        ]
+      ],
+      "score": {
+        "f1": 0.5,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.3333333333333333,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "classes/parameter_call"
+    },
+    {
+      "elapsed_seconds": 1.0541965828742832,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.MyClass.func2"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.func1"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "classes/return_call"
+    },
+    {
+      "elapsed_seconds": 1.0838270408567041,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.MyClass.func2"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.func1"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "classes/return_call_direct"
+    },
+    {
+      "elapsed_seconds": 2.808849791996181,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 3,
+      "predicted_edges": [
+        [
+          "main",
+          "main.B.__init__"
+        ],
+        [
+          "main",
+          "main.B.func"
+        ],
+        [
+          "main.B.func",
+          "main.A.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 3,
+        "true_positive": 3
+      },
+      "status": "ok",
+      "suite_path": "classes/self_assign_func"
+    },
+    {
+      "elapsed_seconds": 1.8197989999316633,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.A.func",
+          "main.A.func2"
+        ]
+      ],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.A.__init__"
+        ],
+        [
+          "main",
+          "main.A.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.8,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.6666666666666666,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "classes/self_assignment"
+    },
+    {
+      "elapsed_seconds": 1.3508834161330014,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.MyClass.__init__",
+          "main.MyClass.func1"
+        ]
+      ],
+      "predicted_edge_count": 3,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.__init__"
+        ],
+        [
+          "main",
+          "main.MyClass.func2"
+        ],
+        [
+          "main.MyClass.func2",
+          "main.MyClass.func1"
+        ]
+      ],
+      "score": {
+        "f1": 0.8571428571428571,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.75,
+        "recall_true_positive": 3,
+        "true_positive": 3
+      },
+      "status": "ok",
+      "suite_path": "classes/self_call"
+    },
+    {
+      "elapsed_seconds": 0.2855690000578761,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "classes/static_method_call"
+    },
+    {
+      "elapsed_seconds": 1.4548944160342216,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.func1"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.B.func2"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "classes/super_class_return"
+    },
+    {
+      "elapsed_seconds": 0.39072583289816976,
+      "error": null,
+      "expected_edge_count": 5,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.MyClass.func1"
+        ],
+        [
+          "main",
+          "main.MyClass.func2"
+        ],
+        [
+          "main",
+          "main.MyClass.func3"
+        ]
+      ],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.MyClass.__init__"
+        ],
+        [
+          "main",
+          "main.MyClass2.__init__"
+        ]
+      ],
+      "score": {
+        "f1": 0.5714285714285715,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.4,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "classes/tuple_assignment"
+    },
+    {
+      "elapsed_seconds": 0.1548468330875039,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.dec2"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "decorators/assigned"
+    },
+    {
+      "elapsed_seconds": 0.1534757090266794,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.dec"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "decorators/call"
+    },
+    {
+      "elapsed_seconds": 0.15466737491078675,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.func",
+          "main.func.dec"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "decorators/nested"
+    },
+    {
+      "elapsed_seconds": 0.15878904098644853,
+      "error": null,
+      "expected_edge_count": 6,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.dec1"
+        ],
+        [
+          "main",
+          "main.dec1.inner"
+        ],
+        [
+          "main",
+          "main.dec2"
+        ],
+        [
+          "main.dec1.inner",
+          "main.dec2.inner"
+        ],
+        [
+          "main.dec2.inner",
+          "main.func"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.2857142857142857,
+        "false_negative": 5,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.16666666666666666,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "decorators/nested_decorators"
+    },
+    {
+      "elapsed_seconds": 0.1567101669497788,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.dec"
+        ],
+        [
+          "main.dec",
+          "main.func"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.5,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.3333333333333333,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "decorators/param_call"
+    },
+    {
+      "elapsed_seconds": 0.1565269168931991,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func1.dec"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 0.5,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.3333333333333333,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "decorators/return"
+    },
+    {
+      "elapsed_seconds": 0.4369839581195265,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [
+        [
+          "main.func2",
+          "main.func"
+        ]
+      ],
+      "missing_edges": [
+        [
+          "main",
+          "main.dec"
+        ],
+        [
+          "main.dec.inner",
+          "main.func"
+        ],
+        [
+          "main.func2",
+          "main.dec.inner"
+        ]
+      ],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main.func2",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.3333333333333333,
+        "false_negative": 3,
+        "false_positive": 1,
+        "precision": 0.5,
+        "recall": 0.25,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "decorators/return_different_func"
+    },
+    {
+      "elapsed_seconds": 0.32881233282387257,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "dicts/add_key"
+    },
+    {
+      "elapsed_seconds": 0.36796158319339156,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "dicts/assign"
+    },
+    {
+      "elapsed_seconds": 0.6736886659637094,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "dicts/call"
+    },
+    {
+      "elapsed_seconds": 0.637069083051756,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "dicts/ext_key"
+    },
+    {
+      "elapsed_seconds": 0.6432405000086874,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "dicts/nested"
+    },
+    {
+      "elapsed_seconds": 1.2027456250507385,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "dicts/new_key_param"
+    },
+    {
+      "elapsed_seconds": 0.34143116720952094,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main.func1",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "dicts/param"
+    },
+    {
+      "elapsed_seconds": 1.6786420829594135,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.func1",
+          "main.func2"
+        ]
+      ],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main.func1",
+          "main.func3"
+        ]
+      ],
+      "score": {
+        "f1": 0.8,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.6666666666666666,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "dicts/param_key"
+    },
+    {
+      "elapsed_seconds": 0.8676119172014296,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "dicts/return"
+    },
+    {
+      "elapsed_seconds": 0.9302979169879109,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "dicts/return_assign"
+    },
+    {
+      "elapsed_seconds": 0.269189041107893,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "dicts/type_coercion"
+    },
+    {
+      "elapsed_seconds": 0.6175067080184817,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "dicts/update"
+    },
+    {
+      "elapsed_seconds": 0.6148265001829714,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main",
+          "main.return_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "direct_calls/assigned_call"
+    },
+    {
+      "elapsed_seconds": 0.9854476249311119,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.func"
+        ],
+        [
+          "main",
+          "to_import.return_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "direct_calls/imported_return_call"
+    },
+    {
+      "elapsed_seconds": 1.3227932078298181,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 3,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main",
+          "main.return_func"
+        ],
+        [
+          "main",
+          "main.return_func.nested_return_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 3,
+        "true_positive": 3
+      },
+      "status": "ok",
+      "suite_path": "direct_calls/return_call"
+    },
+    {
+      "elapsed_seconds": 0.9279163749888539,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 3,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main",
+          "main.func3"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 3,
+        "true_positive": 3
+      },
+      "status": "ok",
+      "suite_path": "direct_calls/with_parameters"
+    },
+    {
+      "elapsed_seconds": 0.14859212492592633,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main.func",
+          "<builtin>.eval"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "dynamic/eval"
+    },
+    {
+      "elapsed_seconds": 0.1326493329834193,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.__init__"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "exceptions/raise"
+    },
+    {
+      "elapsed_seconds": 0.13336620898917317,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.__init__"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "exceptions/raise_assigned"
+    },
+    {
+      "elapsed_seconds": 0.13317241705954075,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.B.__init__"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "exceptions/raise_attr"
+    },
+    {
+      "elapsed_seconds": 0.28039049985818565,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "ext.Cls"
+        ],
+        [
+          "main",
+          "ext.Cls.fun"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "external/attribute"
+    },
+    {
+      "elapsed_seconds": 0.3072833330370486,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "ext.Cls"
+        ],
+        [
+          "main.fn",
+          "ext.Cls.fun"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.fn"
+        ]
+      ],
+      "score": {
+        "f1": 0.5,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.3333333333333333,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "external/attribute_assigned"
+    },
+    {
+      "elapsed_seconds": 0.3490128330886364,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "ext.parent.__init__"
+        ],
+        [
+          "main",
+          "main.A.fn"
+        ],
+        [
+          "main.A.fn",
+          "ext.parent.parent_fn"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "external/cls_parent"
+    },
+    {
+      "elapsed_seconds": 0.14643950015306473,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "ext.function"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "external/function"
+    },
+    {
+      "elapsed_seconds": 0.14865162502974272,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "ext.function"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "external/function_asname"
+    },
+    {
+      "elapsed_seconds": 0.15686204098165035,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "ext.function"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "external/function_assigned"
+    },
+    {
+      "elapsed_seconds": 0.1638078331016004,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "functions/assigned_call"
+    },
+    {
+      "elapsed_seconds": 0.2428009998984635,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "functions/assigned_call_lit_param"
+    },
+    {
+      "elapsed_seconds": 0.15230629197321832,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "functions/call"
+    },
+    {
+      "elapsed_seconds": 0.43175629200413823,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "functions/imported_call"
+    },
+    {
+      "elapsed_seconds": 0.3228592500090599,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.func",
+          "main.Cls.__iter__"
+        ],
+        [
+          "main.func",
+          "main.Cls.__next__"
+        ]
+      ],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.Cls.__init__"
+        ],
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "generators/iter_param"
+    },
+    {
+      "elapsed_seconds": 0.18768787500448525,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.Cls.__iter__"
+        ],
+        [
+          "main",
+          "main.Cls.__next__"
+        ],
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.Cls.__init__"
+        ]
+      ],
+      "score": {
+        "f1": 0.4,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.25,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "generators/iter_return"
+    },
+    {
+      "elapsed_seconds": 0.15299991704523563,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func.__iter__"
+        ],
+        [
+          "main",
+          "main.func.__next__"
+        ],
+        [
+          "main.func.__next__",
+          "<builtin>.StopIteration"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func.__init__"
+        ]
+      ],
+      "score": {
+        "f1": 0.4,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.25,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "generators/iterable"
+    },
+    {
+      "elapsed_seconds": 0.15246179094538093,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.Cls.__iter__"
+        ],
+        [
+          "main",
+          "main.Cls.__next__"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.Cls.__init__"
+        ]
+      ],
+      "score": {
+        "f1": 0.5,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.3333333333333333,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "generators/iterable_assigned"
+    },
+    {
+      "elapsed_seconds": 0.15230037504807115,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.Cls.__init__"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "generators/no_iter"
+    },
+    {
+      "elapsed_seconds": 0.20308687491342425,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "generators/yield"
+    },
+    {
+      "elapsed_seconds": 1.0036054581869394,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "from_import.func2",
+          "chained_import.func1"
+        ],
+        [
+          "main",
+          "from_import.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "imports/chained_import"
+    },
+    {
+      "elapsed_seconds": 0.1845179998781532,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "from_module.func1"
+        ],
+        [
+          "main",
+          "from_module.func2"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/import_all"
+    },
+    {
+      "elapsed_seconds": 0.13461204199120402,
+      "error": null,
+      "expected_edge_count": 0,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/import_as"
+    },
+    {
+      "elapsed_seconds": 0.31344308401457965,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "from_module.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "imports/import_from"
+    },
+    {
+      "elapsed_seconds": 0.8577799580525607,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "nested.mod.func2"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "nested.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "imports/init_func_import"
+    },
+    {
+      "elapsed_seconds": 0.53317308309488,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "nested.nested.Smth.func"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/init_import"
+    },
+    {
+      "elapsed_seconds": 0.1354865417815745,
+      "error": null,
+      "expected_edge_count": 0,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/parent_import"
+    },
+    {
+      "elapsed_seconds": 0.13885045796632767,
+      "error": null,
+      "expected_edge_count": 0,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/relative_import"
+    },
+    {
+      "elapsed_seconds": 0.40367733407765627,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "nested.to_import.func1",
+          "nested.relative.func2"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "nested.to_import.func1"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "imports/relative_import_with_name"
+    },
+    {
+      "elapsed_seconds": 0.1346691669896245,
+      "error": null,
+      "expected_edge_count": 0,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/simple_import"
+    },
+    {
+      "elapsed_seconds": 0.15417120815254748,
+      "error": null,
+      "expected_edge_count": 0,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/submodule_import"
+    },
+    {
+      "elapsed_seconds": 0.1890312081668526,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "from_module.nested_module.func1"
+        ],
+        [
+          "main",
+          "from_module.nested_module.func2"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/submodule_import_all"
+    },
+    {
+      "elapsed_seconds": 0.1401172918267548,
+      "error": null,
+      "expected_edge_count": 0,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "imports/submodule_import_as"
+    },
+    {
+      "elapsed_seconds": 1.0661485001910478,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "from_module.nested_module.func1"
+        ],
+        [
+          "main",
+          "from_module.nested_module.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "imports/submodule_import_from"
+    },
+    {
+      "elapsed_seconds": 0.2379743328783661,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main.func",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "kwargs/assigned_call"
+    },
+    {
+      "elapsed_seconds": 0.45904383319430053,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 4,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main.func",
+          "main.func2"
+        ],
+        [
+          "main.func",
+          "main.func3"
+        ],
+        [
+          "main.func",
+          "main.func4"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 4,
+        "true_positive": 4
+      },
+      "status": "ok",
+      "suite_path": "kwargs/call"
+    },
+    {
+      "elapsed_seconds": 0.32917450019158423,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.func2",
+          "main.func2"
+        ]
+      ],
+      "predicted_edge_count": 3,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main.func1",
+          "main.func2"
+        ],
+        [
+          "main.func2",
+          "main.func3"
+        ]
+      ],
+      "score": {
+        "f1": 0.8571428571428571,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.75,
+        "recall_true_positive": 3,
+        "true_positive": 3
+      },
+      "status": "ok",
+      "suite_path": "kwargs/chained_call"
+    },
+    {
+      "elapsed_seconds": 0.16893974994309247,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.<lambda1>"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "lambdas/call"
+    },
+    {
+      "elapsed_seconds": 0.2913429168984294,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.<lambda1>"
+        ],
+        [
+          "main.<lambda1>",
+          "main.func1"
+        ],
+        [
+          "main.<lambda1>",
+          "main.func2"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "lambdas/calls_parameter"
+    },
+    {
+      "elapsed_seconds": 1.871105165919289,
+      "error": null,
+      "expected_edge_count": 6,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.func1",
+          "main.<lambda1>"
+        ],
+        [
+          "main.func2",
+          "main.<lambda2>"
+        ],
+        [
+          "main.func3",
+          "main.<lambda3>"
+        ]
+      ],
+      "predicted_edge_count": 3,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main.func1",
+          "main.func2"
+        ],
+        [
+          "main.func2",
+          "main.func3"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 3,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 3,
+        "true_positive": 3
+      },
+      "status": "ok",
+      "suite_path": "lambdas/chained_calls"
+    },
+    {
+      "elapsed_seconds": 0.23871754086576402,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.func",
+          "main.<lambda1>"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "lambdas/parameter_call"
+    },
+    {
+      "elapsed_seconds": 0.28967220801860094,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func.<lambda1>"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "lambdas/return_call"
+    },
+    {
+      "elapsed_seconds": 0.13458362501114607,
+      "error": "RuntimeError: ValueError: translated IR has no unique EVALUATE identity for call at (4, 29, 4, 35)",
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "<builtin>.range"
+        ],
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "error",
+      "suite_path": "lists/comprehension_if"
+    },
+    {
+      "elapsed_seconds": 0.19909074995666742,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "<builtin>.range"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "lists/comprehension_val"
+    },
+    {
+      "elapsed_seconds": 0.766899042064324,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "lists/ext_index"
+    },
+    {
+      "elapsed_seconds": 0.43996920902282,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "lists/nested"
+    },
+    {
+      "elapsed_seconds": 0.30513304099440575,
+      "error": null,
+      "expected_edge_count": 3,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "<builtin>.range"
+        ]
+      ],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 0.8,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.6666666666666666,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "lists/nested_comprehension"
+    },
+    {
+      "elapsed_seconds": 0.7793915420770645,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main.func1",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "lists/param_index"
+    },
+    {
+      "elapsed_seconds": 2.9414152919780463,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 4,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func1"
+        ],
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main",
+          "main.func3"
+        ],
+        [
+          "main",
+          "main.func4"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 4,
+        "true_positive": 4
+      },
+      "status": "ok",
+      "suite_path": "lists/simple"
+    },
+    {
+      "elapsed_seconds": 0.23331395792774856,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.func2"
+        ]
+      ],
+      "predicted_edge_count": 0,
+      "predicted_edges": [],
+      "score": {
+        "f1": 0.0,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "recall_true_positive": 0,
+        "true_positive": 0
+      },
+      "status": "ok",
+      "suite_path": "lists/slice"
+    },
+    {
+      "elapsed_seconds": 0.9618691250216216,
+      "error": null,
+      "expected_edge_count": 1,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.A.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "mro/basic"
+    },
+    {
+      "elapsed_seconds": 0.8901287082117051,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.__init__"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.B.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "mro/basic_init"
+    },
+    {
+      "elapsed_seconds": 1.9367761248722672,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.__init__"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.C.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "mro/parents_same_superclass"
+    },
+    {
+      "elapsed_seconds": 4.10175129189156,
+      "error": null,
+      "expected_edge_count": 4,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.A.func"
+        ],
+        [
+          "main",
+          "main.B.func"
+        ]
+      ],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.A.funca"
+        ],
+        [
+          "main",
+          "main.B.funcb"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 2,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "mro/self_assignment"
+    },
+    {
+      "elapsed_seconds": 0.16724058287218213,
+      "error": null,
+      "expected_edge_count": 5,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main.B.__init__",
+          "<builtin>.super"
+        ],
+        [
+          "main.B.__init__",
+          "main.A.__init__"
+        ],
+        [
+          "main.C.__init__",
+          "<builtin>.super"
+        ],
+        [
+          "main.C.__init__",
+          "main.B.__init__"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.C.__init__"
+        ]
+      ],
+      "score": {
+        "f1": 0.33333333333333337,
+        "false_negative": 4,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.2,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "mro/super_call"
+    },
+    {
+      "elapsed_seconds": 1.3501735420431942,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [
+        [
+          "main",
+          "main.B.__init__"
+        ]
+      ],
+      "predicted_edge_count": 1,
+      "predicted_edges": [
+        [
+          "main",
+          "main.A.func"
+        ]
+      ],
+      "score": {
+        "f1": 0.6666666666666666,
+        "false_negative": 1,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 0.5,
+        "recall_true_positive": 1,
+        "true_positive": 1
+      },
+      "status": "ok",
+      "suite_path": "mro/two_parents"
+    },
+    {
+      "elapsed_seconds": 0.8692755000665784,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.C.__init__"
+        ],
+        [
+          "main",
+          "main.C.func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "mro/two_parents_method_defined"
+    },
+    {
+      "elapsed_seconds": 0.48343395814299583,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main",
+          "main.return_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "returns/call"
+    },
+    {
+      "elapsed_seconds": 1.0529970000497997,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.func"
+        ],
+        [
+          "main",
+          "to_import.return_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "returns/imported_call"
+    },
+    {
+      "elapsed_seconds": 1.484663249924779,
+      "error": null,
+      "expected_edge_count": 2,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 2,
+      "predicted_edges": [
+        [
+          "main",
+          "to_import.func"
+        ],
+        [
+          "main",
+          "to_import2.return_func"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 2,
+        "true_positive": 2
+      },
+      "status": "ok",
+      "suite_path": "returns/nested_import_call"
+    },
+    {
+      "elapsed_seconds": 3.584170542191714,
+      "error": null,
+      "expected_edge_count": 6,
+      "extra_edges": [],
+      "missing_edges": [],
+      "predicted_edge_count": 6,
+      "predicted_edges": [
+        [
+          "main",
+          "main.func"
+        ],
+        [
+          "main",
+          "main.func2"
+        ],
+        [
+          "main",
+          "main.func4"
+        ],
+        [
+          "main",
+          "main.func5"
+        ],
+        [
+          "main.func4",
+          "main.func3"
+        ],
+        [
+          "main.func5",
+          "main.func2"
+        ]
+      ],
+      "score": {
+        "f1": 1.0,
+        "false_negative": 0,
+        "false_positive": 0,
+        "precision": 1.0,
+        "recall": 1.0,
+        "recall_true_positive": 6,
+        "true_positive": 6
+      },
+      "status": "ok",
+      "suite_path": "returns/return_complex"
+    }
+  ],
+  "cases_attempted": 119,
+  "cases_error": 3,
+  "cases_ok": 116,
+  "cases_total": 119,
+  "corpus_root": "/Users/remote/Technical_Projects/ben-archway/benchmark-assets/pycg/upstream",
+  "edge_provider": "coordinated",
+  "elapsed_seconds": 84.25282770791091,
+  "engine_root": "/Users/remote/Technical_Projects/ben-archway/stacks/analysis-workbench/engine",
+  "expected_edges_total": 264,
+  "predicted_edges_total": 144,
+  "project_scores": {
+    "args/assigned_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "args/call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "args/imported_assigned_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "args/imported_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "args/nested_call": {
+      "expected_edge_count": 3,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 3,
+      "recall": 1.0,
+      "recall_true_positive": 3,
+      "true_positive": 3
+    },
+    "args/param_call": {
+      "expected_edge_count": 3,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 3,
+      "recall": 1.0,
+      "recall_true_positive": 3,
+      "true_positive": 3
+    },
+    "assignments/chained": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "assignments/recursive_tuple": {
+      "expected_edge_count": 6,
+      "f1": 0.0,
+      "false_negative": 6,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "assignments/starred": {
+      "expected_edge_count": 4,
+      "f1": 0.0,
+      "false_negative": 4,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "assignments/tuple": {
+      "expected_edge_count": 3,
+      "f1": 0.0,
+      "false_negative": 3,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "builtins/functions": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "builtins/map": {
+      "expected_edge_count": 6,
+      "f1": 0.0,
+      "false_negative": 6,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "builtins/types": {
+      "expected_edge_count": 3,
+      "f1": 0.0,
+      "false_negative": 3,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "classes/assigned_call": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "classes/assigned_self_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "classes/base_class_attr": {
+      "expected_edge_count": 2,
+      "f1": 0.0,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "classes/base_class_calls_child": {
+      "expected_edge_count": 5,
+      "f1": 0.0,
+      "false_negative": 5,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "classes/call": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "classes/direct_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "classes/imported_attr_access": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "classes/imported_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "classes/imported_call_without_init": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "classes/imported_nested_attr_access": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "classes/instance": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "classes/nested_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "classes/nested_class_calls": {
+      "expected_edge_count": 5,
+      "f1": 0.0,
+      "false_negative": 5,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "classes/parameter_call": {
+      "expected_edge_count": 3,
+      "f1": 0.5,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.3333333333333333,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "classes/return_call": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "classes/return_call_direct": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "classes/self_assign_func": {
+      "expected_edge_count": 3,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 3,
+      "recall": 1.0,
+      "recall_true_positive": 3,
+      "true_positive": 3
+    },
+    "classes/self_assignment": {
+      "expected_edge_count": 3,
+      "f1": 0.8,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 0.6666666666666666,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "classes/self_call": {
+      "expected_edge_count": 4,
+      "f1": 0.8571428571428571,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 3,
+      "recall": 0.75,
+      "recall_true_positive": 3,
+      "true_positive": 3
+    },
+    "classes/static_method_call": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "classes/super_class_return": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "classes/tuple_assignment": {
+      "expected_edge_count": 5,
+      "f1": 0.5714285714285715,
+      "false_negative": 3,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 0.4,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "decorators/assigned": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "decorators/call": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "decorators/nested": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "decorators/nested_decorators": {
+      "expected_edge_count": 6,
+      "f1": 0.2857142857142857,
+      "false_negative": 5,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.16666666666666666,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "decorators/param_call": {
+      "expected_edge_count": 3,
+      "f1": 0.5,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.3333333333333333,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "decorators/return": {
+      "expected_edge_count": 3,
+      "f1": 0.5,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.3333333333333333,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "decorators/return_different_func": {
+      "expected_edge_count": 4,
+      "f1": 0.3333333333333333,
+      "false_negative": 3,
+      "false_positive": 1,
+      "precision": 0.5,
+      "predicted_edge_count": 2,
+      "recall": 0.25,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "dicts/add_key": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "dicts/assign": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "dicts/call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "dicts/ext_key": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "dicts/nested": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "dicts/new_key_param": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "dicts/param": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "dicts/param_key": {
+      "expected_edge_count": 3,
+      "f1": 0.8,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 0.6666666666666666,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "dicts/return": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "dicts/return_assign": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "dicts/type_coercion": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "dicts/update": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "direct_calls/assigned_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "direct_calls/imported_return_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "direct_calls/return_call": {
+      "expected_edge_count": 3,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 3,
+      "recall": 1.0,
+      "recall_true_positive": 3,
+      "true_positive": 3
+    },
+    "direct_calls/with_parameters": {
+      "expected_edge_count": 3,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 3,
+      "recall": 1.0,
+      "recall_true_positive": 3,
+      "true_positive": 3
+    },
+    "dynamic/eval": {
+      "expected_edge_count": 2,
+      "f1": 0.0,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "exceptions/raise": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "exceptions/raise_assigned": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "exceptions/raise_attr": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "external/attribute": {
+      "expected_edge_count": 2,
+      "f1": 0.0,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "external/attribute_assigned": {
+      "expected_edge_count": 3,
+      "f1": 0.5,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.3333333333333333,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "external/cls_parent": {
+      "expected_edge_count": 3,
+      "f1": 0.0,
+      "false_negative": 3,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "external/function": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "external/function_asname": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "external/function_assigned": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "functions/assigned_call": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "functions/assigned_call_lit_param": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "functions/call": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "functions/imported_call": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "generators/iter_param": {
+      "expected_edge_count": 4,
+      "f1": 0.6666666666666666,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 0.5,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "generators/iter_return": {
+      "expected_edge_count": 4,
+      "f1": 0.4,
+      "false_negative": 3,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.25,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "generators/iterable": {
+      "expected_edge_count": 4,
+      "f1": 0.4,
+      "false_negative": 3,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.25,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "generators/iterable_assigned": {
+      "expected_edge_count": 3,
+      "f1": 0.5,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.3333333333333333,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "generators/no_iter": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "generators/yield": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "imports/chained_import": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "imports/import_all": {
+      "expected_edge_count": 2,
+      "f1": 0.0,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/import_as": {
+      "expected_edge_count": 0,
+      "f1": 0.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/import_from": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "imports/init_func_import": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "imports/init_import": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/parent_import": {
+      "expected_edge_count": 0,
+      "f1": 0.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/relative_import": {
+      "expected_edge_count": 0,
+      "f1": 0.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/relative_import_with_name": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "imports/simple_import": {
+      "expected_edge_count": 0,
+      "f1": 0.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/submodule_import": {
+      "expected_edge_count": 0,
+      "f1": 0.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/submodule_import_all": {
+      "expected_edge_count": 2,
+      "f1": 0.0,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/submodule_import_as": {
+      "expected_edge_count": 0,
+      "f1": 0.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "imports/submodule_import_from": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "kwargs/assigned_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "kwargs/call": {
+      "expected_edge_count": 4,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 4,
+      "recall": 1.0,
+      "recall_true_positive": 4,
+      "true_positive": 4
+    },
+    "kwargs/chained_call": {
+      "expected_edge_count": 4,
+      "f1": 0.8571428571428571,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 3,
+      "recall": 0.75,
+      "recall_true_positive": 3,
+      "true_positive": 3
+    },
+    "lambdas/call": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "lambdas/calls_parameter": {
+      "expected_edge_count": 3,
+      "f1": 0.0,
+      "false_negative": 3,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "lambdas/chained_calls": {
+      "expected_edge_count": 6,
+      "f1": 0.6666666666666666,
+      "false_negative": 3,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 3,
+      "recall": 0.5,
+      "recall_true_positive": 3,
+      "true_positive": 3
+    },
+    "lambdas/parameter_call": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "lambdas/return_call": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "lists/comprehension_if": {
+      "expected_edge_count": 2,
+      "f1": 0.0,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "lists/comprehension_val": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "lists/ext_index": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "lists/nested": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "lists/nested_comprehension": {
+      "expected_edge_count": 3,
+      "f1": 0.8,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 0.6666666666666666,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "lists/param_index": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "lists/simple": {
+      "expected_edge_count": 4,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 4,
+      "recall": 1.0,
+      "recall_true_positive": 4,
+      "true_positive": 4
+    },
+    "lists/slice": {
+      "expected_edge_count": 1,
+      "f1": 0.0,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 0.0,
+      "predicted_edge_count": 0,
+      "recall": 0.0,
+      "recall_true_positive": 0,
+      "true_positive": 0
+    },
+    "mro/basic": {
+      "expected_edge_count": 1,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 1.0,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "mro/basic_init": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "mro/parents_same_superclass": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "mro/self_assignment": {
+      "expected_edge_count": 4,
+      "f1": 0.6666666666666666,
+      "false_negative": 2,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 0.5,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "mro/super_call": {
+      "expected_edge_count": 5,
+      "f1": 0.33333333333333337,
+      "false_negative": 4,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.2,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "mro/two_parents": {
+      "expected_edge_count": 2,
+      "f1": 0.6666666666666666,
+      "false_negative": 1,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 1,
+      "recall": 0.5,
+      "recall_true_positive": 1,
+      "true_positive": 1
+    },
+    "mro/two_parents_method_defined": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "returns/call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "returns/imported_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "returns/nested_import_call": {
+      "expected_edge_count": 2,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 2,
+      "recall": 1.0,
+      "recall_true_positive": 2,
+      "true_positive": 2
+    },
+    "returns/return_complex": {
+      "expected_edge_count": 6,
+      "f1": 1.0,
+      "false_negative": 0,
+      "false_positive": 0,
+      "precision": 1.0,
+      "predicted_edge_count": 6,
+      "recall": 1.0,
+      "recall_true_positive": 6,
+      "true_positive": 6
+    }
+  },
+  "score": {
+    "f1": 0.7009803921568627,
+    "false_negative": 121,
+    "false_positive": 1,
+    "precision": 0.9930555555555556,
+    "recall": 0.5416666666666666,
+    "true_positive": 143
+  },
+  "suite": "micro"
+}

@@ -26,9 +26,10 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Iterable, Literal, Mapping
 
 Edge = tuple[str, str]
+EdgeProvider = Literal["coordinated", "legacy"]
 
 
 @dataclass(frozen=True)
@@ -124,6 +125,7 @@ class PyCGRunResult:
     suite: str
     corpus_root: str
     engine_root: str
+    edge_provider: EdgeProvider
     cases_total: int
     cases_attempted: int
     cases_ok: int
@@ -140,6 +142,7 @@ class PyCGRunResult:
             "suite": self.suite,
             "corpus_root": self.corpus_root,
             "engine_root": self.engine_root,
+            "edge_provider": self.edge_provider,
             "cases_total": self.cases_total,
             "cases_attempted": self.cases_attempted,
             "cases_ok": self.cases_ok,
@@ -395,6 +398,7 @@ def run_archway_pycg(
     analysis_product: str = "standalone",
     callable_root_activation: str = "off",
     case_timeout_seconds: float | None = None,
+    edge_provider: EdgeProvider = "coordinated",
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -423,6 +427,7 @@ def run_archway_pycg(
                 analysis_product=analysis_product,
                 callable_root_activation=callable_root_activation,
                 case_timeout_seconds=case_timeout_seconds,
+                edge_provider=edge_provider,
             )
             status = "ok"
             error = None
@@ -465,6 +470,7 @@ def run_archway_pycg(
         suite=suite,
         corpus_root=str(corpus_root),
         engine_root=str(engine_root),
+        edge_provider=edge_provider,
         cases_total=len(cases),
         cases_attempted=len(cases),
         cases_ok=sum(1 for result in results if result.status == "ok"),
@@ -493,14 +499,16 @@ def _archway_call_edges_with_timeout(
     analysis_product: str,
     callable_root_activation: str,
     case_timeout_seconds: float | None,
+    edge_provider: EdgeProvider,
 ) -> set[Edge]:
     if case_timeout_seconds is None:
-        return archway_call_edges(
+        return _produce_archway_call_edges(
             case,
             engine_root=engine_root,
             include_diagnostic_name_hints=include_diagnostic_name_hints,
             analysis_product=analysis_product,
             callable_root_activation=callable_root_activation,
+            edge_provider=edge_provider,
         )
     if case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -516,6 +524,7 @@ def _archway_call_edges_with_timeout(
             include_diagnostic_name_hints,
             analysis_product,
             callable_root_activation,
+            edge_provider,
         ),
     )
     process.start()
@@ -551,19 +560,135 @@ def _archway_call_edges_worker(
     include_diagnostic_name_hints: bool,
     analysis_product: str,
     callable_root_activation: str,
+    edge_provider: EdgeProvider,
 ) -> None:
     try:
-        predicted = archway_call_edges(
+        predicted = _produce_archway_call_edges(
+            case,
+            engine_root=engine_root,
+            include_diagnostic_name_hints=include_diagnostic_name_hints,
+            analysis_product=analysis_product,
+            callable_root_activation=callable_root_activation,
+            edge_provider=edge_provider,
+        )
+    except Exception as exc:
+        result_queue.put(("error", f"{type(exc).__name__}: {exc}"))
+    else:
+        result_queue.put(("ok", predicted))
+
+
+def _produce_archway_call_edges(
+    case: PyCGCase,
+    *,
+    engine_root: Path,
+    include_diagnostic_name_hints: bool,
+    analysis_product: str,
+    callable_root_activation: str,
+    edge_provider: EdgeProvider,
+) -> set[Edge]:
+    if edge_provider == "coordinated":
+        return coordinated_archway_call_edges(case, engine_root=engine_root)
+    if edge_provider == "legacy":
+        return archway_call_edges(
             case,
             engine_root=engine_root,
             include_diagnostic_name_hints=include_diagnostic_name_hints,
             analysis_product=analysis_product,
             callable_root_activation=callable_root_activation,
         )
-    except Exception as exc:
-        result_queue.put(("error", f"{type(exc).__name__}: {exc}"))
-    else:
-        result_queue.put(("ok", predicted))
+    raise ValueError(f"unknown edge provider: {edge_provider}")
+
+
+def coordinated_archway_call_edges(
+    case: PyCGCase,
+    *,
+    engine_root: Path,
+) -> set[Edge]:
+    """Project the demand-driven semantic graph into PyCG's edge vocabulary."""
+
+    if not engine_root.exists():
+        raise FileNotFoundError(f"engine root not found: {engine_root}")
+    engine_text = str(engine_root)
+    if engine_text not in sys.path:
+        sys.path.insert(0, engine_text)
+
+    from sd_core.analysis.runtime.call_targets import (
+        BoundMethod,
+        BuiltinBoundary,
+        ClassConstruction,
+        ExternalSummaryBoundary,
+        LocalFunction,
+    )
+    from sd_core.analysis.runtime.contracts import BoundarySubject, ModuleKey
+    from sd_core.analysis.runtime.semantic_call_graph import (
+        EntrySeed,
+        SemanticCallGraphRequest,
+        SemanticCallGraphRuntime,
+    )
+    from sd_core.runners.contextual_call_resolution import (
+        build_python_program_callable_indexes,
+    )
+
+    sources = _load_case_sources(case)
+    program = build_python_program_callable_indexes(sources)
+    root_modules = _coordinated_root_modules(case, sources)
+    roots = tuple(
+        EntrySeed(
+            f"module:{module_name}",
+            BoundarySubject(
+                ModuleKey("workspace:program", module_name),
+                f"{module_name}:<module>",
+            ),
+        )
+        for module_name in root_modules
+    )
+    result = SemanticCallGraphRuntime(program).build(SemanticCallGraphRequest(
+        program.revision,
+        roots,
+        requester=f"pycg:{case.suite}:{case.suite_path}",
+    ))
+    declared_initializers = {
+        boundary.declaration
+        for boundary, _parameters in program.signatures
+        if boundary.declaration.endswith(".__init__")
+    }
+    edges: set[Edge] = set()
+    for edge in result.edges:
+        caller = _coordinated_local_display_name(edge.caller.boundary.declaration)
+        target = edge.target
+        if isinstance(target, (LocalFunction, BoundMethod)):
+            callee = _coordinated_local_display_name(target.boundary.declaration)
+        elif isinstance(target, ClassConstruction):
+            initializer = f"{target.boundary.declaration}.__init__"
+            callee = (
+                _coordinated_local_display_name(initializer)
+                if initializer in declared_initializers
+                else None
+            )
+        elif isinstance(target, BuiltinBoundary):
+            qualified = target.boundary.qualified_name.removeprefix("builtins.")
+            callee = f"<builtin>.{qualified}"
+        elif isinstance(target, ExternalSummaryBoundary):
+            callee = target.boundary.qualified_name
+        else:
+            callee = None
+        if callee is not None:
+            edges.add((caller, callee))
+    return edges
+
+
+def _coordinated_root_modules(
+    case: PyCGCase,
+    sources: Mapping[str, str],
+) -> tuple[str, ...]:
+    if case.suite == "micro" and "main" in sources:
+        return ("main",)
+    return tuple(sorted(sources))
+
+
+def _coordinated_local_display_name(declaration: str) -> str:
+    module_name, local_name = declaration.split(":", 1)
+    return module_name if local_name == "<module>" else f"{module_name}.{local_name}"
 
 
 def archway_call_edges(
@@ -681,6 +806,8 @@ def _module_name_for_path(path: Path, package_root: Path) -> str:
     parts = list(rel.parent.parts) if rel.parent != Path(".") else []
     if rel.stem != "__init__":
         parts.append(rel.stem)
+    elif not parts:
+        parts.append(package_root.name)
     return ".".join(parts)
 
 
@@ -882,6 +1009,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--edge-provider",
+        choices=("coordinated", "legacy"),
+        default="coordinated",
+        help=(
+            "Call-edge producer. coordinated uses the demand-driven semantic "
+            "runtime; legacy projects the reduced-product call relation."
+        ),
+    )
+    parser.add_argument(
         "--analysis-product",
         choices=("standalone", "type_requirements_product"),
         default="standalone",
@@ -919,6 +1055,7 @@ def main(argv: list[str] | None = None) -> int:
         analysis_product=args.analysis_product,
         callable_root_activation=args.callable_root_activation,
         case_timeout_seconds=args.case_timeout_seconds,
+        edge_provider=args.edge_provider,
     )
     payload = result.to_jsonable()
     text = json.dumps(payload, indent=2, sort_keys=True)

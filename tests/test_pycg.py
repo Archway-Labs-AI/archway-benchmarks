@@ -11,6 +11,7 @@ from archway_benchmarks.pycg import (
     _callee_display_name,
     _inline_synthetic_frame_edges,
     _load_case_sources,
+    _module_name_for_path,
     EdgeScore,
     expected_edges_from_callgraph,
     load_cases,
@@ -208,7 +209,9 @@ def test_run_archway_pycg_logs_case_progress_to_stderr(
         fake_archway_call_edges,
     )
 
-    result = run_archway_pycg(corpus_root=tmp_path, engine_root=tmp_path)
+    result = run_archway_pycg(
+        corpus_root=tmp_path, engine_root=tmp_path, edge_provider="legacy"
+    )
 
     assert result.cases_ok == 1
     stderr = capsys.readouterr().err
@@ -237,6 +240,7 @@ def test_run_archway_pycg_forwards_callable_root_activation(
         corpus_root=tmp_path,
         engine_root=tmp_path,
         callable_root_activation="all",
+        edge_provider="legacy",
     )
 
     assert observed == ["all"]
@@ -263,6 +267,7 @@ def test_run_archway_pycg_timeout_marks_case_without_predictions(
         corpus_root=tmp_path,
         engine_root=tmp_path,
         case_timeout_seconds=0.05,
+        edge_provider="legacy",
     )
 
     assert result.cases_ok == 0
@@ -271,3 +276,32 @@ def test_run_archway_pycg_timeout_marks_case_without_predictions(
     assert result.cases[0].status == "timeout"
     assert result.cases[0].predicted_edge_count == 0
     assert result.cases[0].predicted_edges == ()
+
+
+def test_run_archway_pycg_uses_coordinated_provider_by_default(
+    tmp_path: Path,
+    monkeypatch,
+):
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.coordinated_archway_call_edges",
+        lambda *args, **kwargs: {("main", "main.f")},
+    )
+
+    result = run_archway_pycg(corpus_root=tmp_path, engine_root=tmp_path)
+
+    assert result.score.true_positive == 1
+    assert result.score.false_positive == 0
+    assert result.score.false_negative == 0
+    assert result.edge_provider == "coordinated"
+    assert result.to_jsonable()["edge_provider"] == "coordinated"
+
+
+def test_root_package_init_receives_nonempty_module_name(tmp_path: Path):
+    package_root = tmp_path / "relative_case"
+    package_root.mkdir()
+    init = package_root / "__init__.py"
+    init.write_text("", encoding="utf-8")
+
+    assert _module_name_for_path(init, package_root) == "relative_case"
