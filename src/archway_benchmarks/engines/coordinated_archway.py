@@ -142,8 +142,14 @@ def _demand_location(
             node for node in candidates if node.control_position[0] == location.line
         ] or candidates
         types: set[str] = set()
-        for node in candidates:
-            types.update(demand(node.location, result.global_context))
+        contexts = (
+            tuple(session.value_inputs.contexts)
+            if location.function is not None
+            else (result.global_context,)
+        )
+        for context in contexts:
+            for node in candidates:
+                types.update(demand(node.location, context))
         return frozenset(types)
 
     if location.kind == "return":

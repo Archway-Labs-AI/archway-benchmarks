@@ -56,3 +56,26 @@ def test_parameter_query_demands_each_reachable_invocation_context(tmp_path):
     assert {item.location: item.types for item in predictions} == {
         item.location: item.types for item in snippet.annotations
     }
+
+
+def test_local_variable_query_uses_reachable_invocation_context(tmp_path):
+    suite = tmp_path / "assignments" / "augmented"
+    suite.mkdir(parents=True)
+    source = "def twice(value):\n    value *= 2\n    return value\nanswer = twice(3)\n"
+    (suite / "main.py").write_text(source)
+    (suite / "main_gt.json").write_text("""[
+      {"file":"main.py","line_number":2,"col_offset":5,"function":"twice","variable":"value","type":["int"]},
+      {"file":"main.py","line_number":3,"col_offset":5,"function":"twice","type":["int"]},
+      {"file":"main.py","line_number":4,"col_offset":1,"variable":"answer","type":["int"]}
+    ]""")
+    snippet = TypeEvalPyBenchmark(tmp_path).load()[0]
+    result = CoordinatedArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = CoordinatedTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert {item.location: item.types for item in predictions} == {
+        item.location: item.types for item in snippet.annotations
+    }
