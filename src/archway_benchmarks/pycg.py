@@ -725,9 +725,7 @@ def archway_call_edges(
         program,
         body_summary_consumption="safe",
         analysis_product=analysis_product,
-        external_from_import_fallback=(
-            analysis_product == "type_requirements_product"
-        ),
+        external_from_import_fallback=True,
         callable_root_activation=callable_root_activation,
         callable_root_body_ids=callable_root_body_ids,
     )
