@@ -26,3 +26,33 @@ def test_coordinated_adapter_infers_lambda_call_without_legacy_product(tmp_path)
     assert {item.location: item.types for item in predictions} == {
         item.location: item.types for item in snippet.annotations
     }
+
+
+def test_parameter_query_demands_each_reachable_invocation_context(tmp_path):
+    suite = tmp_path / "lambdas" / "callable_parameter"
+    suite.mkdir(parents=True)
+    source = (
+        "def leaf():\n"
+        "    return 1\n"
+        "apply = lambda fn: fn()\n"
+        "answer = apply(leaf)\n"
+    )
+    (suite / "main.py").write_text(source)
+    (suite / "main_gt.json").write_text("""[
+      {"file":"main.py","line_number":1,"col_offset":5,"function":"leaf","type":["int"]},
+      {"file":"main.py","line_number":3,"col_offset":1,"variable":"apply","type":["callable"]},
+      {"file":"main.py","line_number":3,"col_offset":16,"function":"lambda","parameter":"fn","type":["callable"]},
+      {"file":"main.py","line_number":4,"col_offset":1,"variable":"answer","type":["int"]}
+    ]""")
+    snippet = TypeEvalPyBenchmark(tmp_path).load()[0]
+    result = CoordinatedArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = CoordinatedTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert result.diagnostics == []
+    assert {item.location: item.types for item in predictions} == {
+        item.location: item.types for item in snippet.annotations
+    }

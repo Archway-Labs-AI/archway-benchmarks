@@ -170,15 +170,10 @@ def _demand_location(
                 getattr(node.location.owner, "declaration", "")
             )
         ]
-        candidate_locations = {node.location for node in candidates}
         types: set[str] = set()
-        for generation in session.store.snapshot():
-            record = generation.record
-            if (
-                record.address.fact_kind == "type_judgment"
-                and record.address.subject in candidate_locations
-            ):
-                types.update(record.payload.types)
+        for context in tuple(session.value_inputs.contexts):
+            for node in candidates:
+                types.update(demand(node.location, context))
         return frozenset(types)
 
     return frozenset()
