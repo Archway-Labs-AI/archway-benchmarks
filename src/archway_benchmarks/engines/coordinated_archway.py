@@ -1,0 +1,207 @@
+"""In-process TypeEvalPy bridge for Archway's coordinated analysis session.
+
+This bridge is intentionally thin: the benchmark supplies requested source
+locations, while type values and dependency traces come only from coordinated
+runtime facts. It does not invoke the legacy monolithic analysis product.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+from archway_benchmarks.benchmarks.base import AnalysisResultAdapter
+from archway_benchmarks.engines.archway import ArchwayTranslation
+from archway_benchmarks.types import Annotation, Snippet
+
+
+@dataclass
+class CoordinatedArchwayResult:
+    source: str
+    path: str
+    build: Any | None = None
+    session: Any | None = None
+    global_context: Any | None = None
+    error: str | None = None
+    diagnostics: list[str] | None = None
+
+
+class CoordinatedArchwayAnalysisEngine:
+    """Build one analysis-neutral session; consumers issue targeted demands."""
+
+    name = "archway-coordinated-analysis"
+
+    def analyze(self, translation: Any) -> CoordinatedArchwayResult:
+        if not isinstance(translation, ArchwayTranslation):
+            raise TypeError(
+                "CoordinatedArchwayAnalysisEngine consumes ArchwayTranslation"
+            )
+        try:
+            from sd_core.analysis.runtime.call_targets import InvocationContext
+            from sd_core.analysis.runtime.coordinated_session import (
+                CoordinatedAnalysisSession,
+            )
+            from sd_core.runners.contextual_call_resolution import (
+                build_python_callable_index,
+            )
+
+            build = build_python_callable_index(
+                translation.source, module_name="main"
+            )
+            session = CoordinatedAnalysisSession(build.index)
+            context = session.admit_context(InvocationContext())
+            return CoordinatedArchwayResult(
+                translation.source, translation.path, build, session, context,
+                diagnostics=[],
+            )
+        except Exception as exc:
+            return CoordinatedArchwayResult(
+                translation.source,
+                translation.path,
+                error=f"{type(exc).__name__}: {exc}",
+            )
+
+
+class CoordinatedTypeEvalPyAdapter(AnalysisResultAdapter):
+    """Resolve only TypeEvalPy-requested locations through typed demands."""
+
+    def to_annotations(
+        self, result: Any, snippet: Snippet
+    ) -> list[Annotation]:
+        if not isinstance(result, CoordinatedArchwayResult):
+            raise TypeError(
+                "CoordinatedTypeEvalPyAdapter requires CoordinatedArchwayResult"
+            )
+        if result.error:
+            return []
+
+        out: list[Annotation] = []
+        _seed_module_outputs(result)
+        for requested in snippet.annotations:
+            try:
+                types = _demand_location(result, requested)
+            except Exception as exc:
+                assert result.diagnostics is not None
+                result.diagnostics.append(
+                    f"{requested.location}: {type(exc).__name__}: {exc}"
+                )
+                continue
+            if types:
+                out.append(Annotation(requested.location, types))
+        return out
+
+
+def _demand_location(
+    result: CoordinatedArchwayResult, requested: Annotation
+) -> frozenset[str]:
+    from sd_core.analysis.runtime.coordinated_session import CoordinatedDemand
+    from sd_core.analysis.runtime.type_facts import type_judgment_address
+
+    index = result.build.index
+    session = result.session
+    location = requested.location
+
+    def demand(value_location, context) -> frozenset[str]:
+        response = session.demand(CoordinatedDemand(
+            type_judgment_address(value_location, context, index.revision),
+            "benchmark:typeevalpy",
+        ))
+        return response.requested.payload.types
+
+    def in_requested_function(declaration: str) -> bool:
+        if location.function is None:
+            return declaration.endswith(":<module>")
+        if location.function == "lambda":
+            return ":<lambda" in declaration
+        return declaration.endswith(f":{location.function}")
+
+    if location.kind == "variable":
+        candidates = [
+            node for node in index.value_nodes
+            if node.location.role == f"module_binding_value:{location.name}"
+            and in_requested_function(
+                getattr(node.location.owner, "declaration", "")
+            )
+        ]
+        # Function-local assignments currently retain their source role rather
+        # than the module-binding label; use the stable binding suffix there.
+        if not candidates:
+            candidates = [
+                node for node in index.value_nodes
+                if node.location.role.endswith(f"binding_value:{location.name}")
+                and (
+                    in_requested_function(
+                        getattr(node.location.owner, "declaration", "")
+                    )
+                )
+            ]
+        candidates = [
+            node for node in candidates if node.control_position[0] == location.line
+        ] or candidates
+        types: set[str] = set()
+        for node in candidates:
+            types.update(demand(node.location, result.global_context))
+        return frozenset(types)
+
+    if location.kind == "return":
+        boundaries = [
+            item.boundary for item in index.returns
+            if item.boundary.declaration.endswith(f":{location.name}")
+        ]
+        types: set[str] = set()
+        contexts = tuple(session.value_inputs.contexts) or (result.global_context,)
+        for boundary in boundaries:
+            observation = index.return_observation(boundary)
+            for context in contexts:
+                for value in observation.values:
+                    types.update(demand(value, context))
+        return frozenset(types)
+
+    if location.kind == "parameter":
+        # First demand module outputs. This discovers only contexts reachable
+        # from actual calls; parameters are never solved by a greedy pre-pass.
+        for node in index.value_nodes:
+            if node.location.role.startswith("module_binding_value:"):
+                demand(node.location, result.global_context)
+        candidates = [
+            node for node in index.value_nodes
+            if node.parameter_name == location.name
+            and in_requested_function(
+                getattr(node.location.owner, "declaration", "")
+            )
+        ]
+        candidate_locations = {node.location for node in candidates}
+        types: set[str] = set()
+        for generation in session.store.snapshot():
+            record = generation.record
+            if (
+                record.address.fact_kind == "type_judgment"
+                and record.address.subject in candidate_locations
+            ):
+                types.update(record.payload.types)
+        return frozenset(types)
+
+    return frozenset()
+
+
+def _seed_module_outputs(result: CoordinatedArchwayResult) -> None:
+    """Demand externally visible module values, discovering reachable contexts."""
+    from sd_core.analysis.runtime.coordinated_session import CoordinatedDemand
+    from sd_core.analysis.runtime.type_facts import type_judgment_address
+
+    index = result.build.index
+    for node in index.value_nodes:
+        if not node.location.role.startswith("module_binding_value:"):
+            continue
+        try:
+            result.session.demand(CoordinatedDemand(
+                type_judgment_address(
+                    node.location, result.global_context, index.revision
+                ),
+                "benchmark:typeevalpy:module-output",
+            ))
+        except Exception as exc:
+            assert result.diagnostics is not None
+            result.diagnostics.append(
+                f"{node.location.role}: {type(exc).__name__}: {exc}"
+            )
