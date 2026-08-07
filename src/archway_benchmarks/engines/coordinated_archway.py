@@ -116,9 +116,11 @@ def _demand_location(
         return declaration.endswith(f":{location.function}")
 
     if location.kind == "variable":
+        indexed_base = location.name.split("[", 1)[0]
+        is_indexed = indexed_base != location.name
         candidates = [
             node for node in index.value_nodes
-            if node.location.role == f"module_binding_value:{location.name}"
+            if node.location.role == f"module_binding_value:{indexed_base}"
             and in_requested_function(
                 getattr(node.location.owner, "declaration", "")
             )
@@ -129,8 +131,8 @@ def _demand_location(
             candidates = [
                 node for node in index.value_nodes
                 if (
-                    node.location.role.endswith(f"binding_value:{location.name}")
-                    or node.location.role.startswith(f"binding:{location.name}:")
+                    node.location.role.endswith(f"binding_value:{indexed_base}")
+                    or node.location.role.startswith(f"binding:{indexed_base}:")
                 )
                 and (
                     in_requested_function(
@@ -149,7 +151,32 @@ def _demand_location(
         )
         for context in contexts:
             for node in candidates:
-                types.update(demand(node.location, context))
+                if not is_indexed:
+                    types.update(demand(node.location, context))
+                    continue
+                from sd_core.analysis.runtime.coordinated_session import (
+                    CoordinatedDemand,
+                )
+                from sd_core.analysis.runtime.type_facts import (
+                    container_element_type_address,
+                )
+                from sd_core.analysis.runtime.value_flow_facts import (
+                    value_flow_address,
+                )
+                flowed = session.demand(CoordinatedDemand(
+                    value_flow_address(
+                        node.location, context, index.revision
+                    ),
+                    "benchmark:typeevalpy:container-base",
+                )).requested.payload
+                for region in flowed.container_regions:
+                    element = session.demand(CoordinatedDemand(
+                        container_element_type_address(
+                            region, index.revision
+                        ),
+                        "benchmark:typeevalpy:container-element",
+                    )).requested.payload
+                    types.update(element.types)
         return frozenset(types)
 
     if location.kind == "return":
@@ -160,6 +187,8 @@ def _demand_location(
         types: set[str] = set()
         contexts = tuple(session.value_inputs.contexts) or (result.global_context,)
         for boundary in boundaries:
+            if any(item.boundary == boundary for item in index.yields):
+                types.add("generator")
             observation = index.return_observation(boundary)
             for context in contexts:
                 for value in observation.values:
