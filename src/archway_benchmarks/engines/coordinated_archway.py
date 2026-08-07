@@ -112,7 +112,7 @@ def _demand_location(
         if location.function is None:
             return declaration.endswith(":<module>")
         if location.function == "lambda":
-            return ":<lambda" in declaration
+            return "<lambda" in declaration
         return declaration.endswith(f":{location.function}")
 
     if location.kind == "variable":
@@ -128,7 +128,10 @@ def _demand_location(
         if not candidates:
             candidates = [
                 node for node in index.value_nodes
-                if node.location.role.endswith(f"binding_value:{location.name}")
+                if (
+                    node.location.role.endswith(f"binding_value:{location.name}")
+                    or node.location.role.startswith(f"binding:{location.name}:")
+                )
                 and (
                     in_requested_function(
                         getattr(node.location.owner, "declaration", "")
@@ -186,7 +189,15 @@ def _seed_module_outputs(result: CoordinatedArchwayResult) -> None:
 
     index = result.build.index
     for node in index.value_nodes:
-        if not node.location.role.startswith("module_binding_value:"):
+        if not (
+            node.location.role.startswith("module_binding_value:")
+            or (
+                node.location.role.startswith("binding:")
+                and getattr(node.location.owner, "declaration", "").endswith(
+                    ":<module>"
+                )
+            )
+        ):
             continue
         try:
             result.session.demand(CoordinatedDemand(
