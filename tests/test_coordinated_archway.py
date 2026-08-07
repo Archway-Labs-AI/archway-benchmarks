@@ -107,3 +107,31 @@ def test_generator_and_comprehension_shape_queries_use_runtime_facts(tmp_path):
     assert {item.location: item.types for item in predictions} == {
         item.location: item.types for item in snippet.annotations
     }
+
+
+def test_instance_assignment_target_reads_contextual_written_type(tmp_path):
+    suite = tmp_path / "classes" / "field"
+    suite.mkdir(parents=True)
+    source = (
+        "class Box:\n"
+        "    def __init__(self, value):\n"
+        "        self.value = value\n"
+        "box = Box(3)\n"
+    )
+    (suite / "main.py").write_text(source)
+    (suite / "main_gt.json").write_text("""[
+      {"file":"main.py","line_number":2,"col_offset":24,"function":"Box.__init__","parameter":"value","type":["int"]},
+      {"file":"main.py","line_number":3,"col_offset":9,"function":"Box.__init__","variable":"self.value","type":["int"]},
+      {"file":"main.py","line_number":4,"col_offset":1,"variable":"box","type":["Box"]}
+    ]""")
+    snippet = TypeEvalPyBenchmark(tmp_path).load()[0]
+    result = CoordinatedArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = CoordinatedTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert {item.location: item.types for item in predictions} == {
+        item.location: item.types for item in snippet.annotations
+    }
