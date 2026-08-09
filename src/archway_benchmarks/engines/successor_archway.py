@@ -28,6 +28,7 @@ class SuccessorArchwayResult:
     path: str
     session: Any | None = None
     forward: Any | None = None
+    targeted_runs: list[Any] = field(default_factory=list)
     gaps: list[SuccessorGap] = field(default_factory=list)
     error: str | None = None
 
@@ -46,6 +47,11 @@ class SuccessorGapAudit:
     forward_events: int
     knowledge_deltas: int
     resolved_facts: int
+    targeted_roots: int
+    targeted_cache_hits: int
+    targeted_events: int
+    targeted_knowledge_deltas: int
+    targeted_topology_changes: int
 
     def to_jsonable(self) -> dict[str, Any]:
         return {
@@ -61,6 +67,11 @@ class SuccessorGapAudit:
             "forward_events": self.forward_events,
             "knowledge_deltas": self.knowledge_deltas,
             "resolved_facts": self.resolved_facts,
+            "targeted_roots": self.targeted_roots,
+            "targeted_cache_hits": self.targeted_cache_hits,
+            "targeted_events": self.targeted_events,
+            "targeted_knowledge_deltas": self.targeted_knowledge_deltas,
+            "targeted_topology_changes": self.targeted_topology_changes,
         }
 
 
@@ -125,6 +136,7 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
             return []
         predictions: list[Annotation] = []
         observations = result.session.type_observations()
+        mapped: list[tuple[Annotation, tuple[Any, ...]]] = []
         for requested in snippet.annotations:
             candidates = _map_observations(observations, requested.location)
             if not candidates:
@@ -140,6 +152,23 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
                     detail="no diagram type observation at benchmark location",
                 ))
                 continue
+            mapped.append((requested, candidates))
+
+        missing_addresses = tuple(sorted({
+            item.address
+            for _requested, candidates in mapped
+            for item in candidates
+            if (
+                (fact := result.session.store.resolved(item.address)) is None
+                or not fact.value
+            )
+        }, key=lambda address: address.id))
+        if missing_addresses:
+            result.targeted_runs.append(
+                result.session.observe(missing_addresses)
+            )
+
+        for requested, candidates in mapped:
             resolved = [
                 result.session.store.resolved(item.address)
                 for item in candidates
@@ -266,6 +295,8 @@ def audit_successor_typeevalpy(
     family_groups: Counter[str] = Counter()
     family_representatives: dict[str, str] = {}
     forward_events = knowledge_deltas = resolved_facts = 0
+    targeted_roots = targeted_cache_hits = targeted_events = 0
+    targeted_knowledge_deltas = targeted_topology_changes = 0
     for completed, snippet in enumerate(snippets, start=1):
         result = analyzer.analyze(
             translator.translate(snippet.source, snippet.file_path)
@@ -289,6 +320,15 @@ def audit_successor_typeevalpy(
             resolved_facts += len(
                 result.session.store.snapshot().resolved_facts
             )
+            for targeted in result.targeted_runs:
+                targeted_roots += len(targeted.roots)
+                targeted_cache_hits += targeted.cache_hits
+                targeted_events += len(targeted.events)
+                targeted_knowledge_deltas += len(targeted.knowledge_deltas)
+                targeted_topology_changes += (
+                    targeted.topology_generation_after
+                    - targeted.topology_generation_before
+                )
         category = snippet.suite_path.split("/", 1)[0]
         for gap in result.gaps:
             classifications[gap.classification] += 1
@@ -326,6 +366,11 @@ def audit_successor_typeevalpy(
         forward_events=forward_events,
         knowledge_deltas=knowledge_deltas,
         resolved_facts=resolved_facts,
+        targeted_roots=targeted_roots,
+        targeted_cache_hits=targeted_cache_hits,
+        targeted_events=targeted_events,
+        targeted_knowledge_deltas=targeted_knowledge_deltas,
+        targeted_topology_changes=targeted_topology_changes,
     )
 
 

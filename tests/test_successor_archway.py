@@ -58,6 +58,39 @@ def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     assert result.gaps == []
 
 
+def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
+    tmp_path,
+):
+    snippet = _snippet(
+        tmp_path,
+        "def first(value):\n"
+        "    return True\n"
+        "def second():\n"
+        "    return 1.5\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":5,"function":"first","type":["bool"]},
+          {"file":"main.py","line_number":3,"col_offset":5,"function":"second","type":["float"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    assert all(
+        result.session.store.resolved(item.address) is None
+        for item in result.session.type_observations()
+        if item.kind == "return"
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+    assert len(result.targeted_runs) == 1
+    assert len(result.targeted_runs[0].roots) == 2
+    assert result.targeted_runs[0].knowledge_deltas
+
+
 def test_successor_program_translation_expands_available_star_imports(tmp_path):
     suite = tmp_path / "imports" / "import_all"
     suite.mkdir(parents=True)
@@ -157,6 +190,29 @@ def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
     assert audit.knowledge_deltas == 1
     assert audit.resolved_facts > 1
     assert progress == [(1, 1)]
+
+
+def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
+    _snippet(
+        tmp_path,
+        "def untouched(value):\n"
+        "    return 3\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":5,"function":"untouched","type":["int"]}
+        ]""",
+    )
+
+    audit = audit_successor_typeevalpy(
+        TypeEvalPyBenchmark(tmp_path),
+        record_events=False,
+    )
+
+    assert audit.exact == 1
+    assert audit.targeted_roots == 1
+    assert audit.targeted_cache_hits == 0
+    assert audit.targeted_events == 0
+    assert audit.targeted_knowledge_deltas == 1
+    assert audit.targeted_topology_changes > 0
 
 
 def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
