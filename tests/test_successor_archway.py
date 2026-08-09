@@ -91,6 +91,34 @@ def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
     assert result.targeted_runs[0].knowledge_deltas
 
 
+def test_successor_adapter_maps_qualified_class_attribute_observations(
+    tmp_path,
+):
+    snippet = _snippet(
+        tmp_path,
+        "class MyClass:\n"
+        "    class_var = 1.5\n"
+        "    def __init__(self, values):\n"
+        "        self.values = values\n"
+        "item = MyClass([1, 2])\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":5,"variable":"MyClass.class_var","type":["float"]},
+          {"file":"main.py","line_number":3,"col_offset":24,"parameter":"values","function":"__init__","type":["list"]},
+          {"file":"main.py","line_number":4,"col_offset":9,"variable":"MyClass.values","function":"__init__","type":["list"]},
+          {"file":"main.py","line_number":4,"col_offset":9,"variable":"MyClass.values[0]","function":"__init__","type":["int"]},
+          {"file":"main.py","line_number":4,"col_offset":9,"variable":"MyClass.values[1]","function":"__init__","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_successor_program_translation_expands_available_star_imports(tmp_path):
     suite = tmp_path / "imports" / "import_all"
     suite.mkdir(parents=True)

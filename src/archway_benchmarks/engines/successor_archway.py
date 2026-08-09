@@ -209,9 +209,9 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
 def _map_observations(observations, location: Location):
     exact = tuple(
         item for item in observations
-        if item.name == location.name
+        if _observation_name_matches(item, location.name)
         and item.kind == location.kind
-        and item.function == location.function
+        and _observation_function_matches(item.function, location.function)
         and item.position is not None
         and item.position.row == location.line
         and (
@@ -223,12 +223,35 @@ def _map_observations(observations, location: Location):
         return exact
     return tuple(
         item for item in observations
-        if item.name == location.name
+        if _observation_name_matches(item, location.name)
         and item.kind == location.kind
-        and item.function == location.function
+        and _observation_function_matches(item.function, location.function)
         and item.position is not None
         and item.position.row == location.line
     )
+
+
+def _observation_function_matches(
+    observed: str | None, requested: str | None
+) -> bool:
+    if observed == requested:
+        return True
+    return bool(
+        observed
+        and requested
+        and observed.endswith(f".{requested}")
+    )
+
+
+def _observation_name_matches(item, requested: str) -> bool:
+    if item.name == requested:
+        return True
+    if not item.function or "." not in item.function:
+        return False
+    owner = item.function.rsplit(".", 1)[0]
+    if not item.name.startswith("self."):
+        return False
+    return requested == f"{owner}.{item.name.removeprefix('self.')}"
 
 
 def _map_container_path(session, location: Location):
