@@ -71,14 +71,19 @@ class SuccessorArchwayAnalysisEngine:
             )
         try:
             from sd_core.analysis.diagram_analysis import (
-                open_hybrid_forward_session,
+                open_hybrid_program_session,
             )
-            from sd_core.tooling.harness import TranslationResult
+            from sd_core.tooling.harness import ProgramResult
 
-            morphism = TranslationResult.from_source(
-                translation.source, name="main"
-            ).morphism
-            session = open_hybrid_forward_session(morphism)
+            program = ProgramResult.from_sources({
+                item.module_name: item.source
+                for item in translation.modules
+            })
+            modules = {
+                name: item.morphism
+                for name, item in program.modules.items()
+            }
+            session = open_hybrid_program_session(modules, "main")
             forward = session.run_forward()
             return SuccessorArchwayResult(
                 translation.source,
@@ -198,7 +203,9 @@ def audit_successor_typeevalpy(
 
     from archway_benchmarks.engines.archway import ArchwayTranslationEngine
 
-    translator = ArchwayTranslationEngine()
+    translator = ArchwayTranslationEngine(
+        corpus_root=benchmark.corpus_root
+    )
     analyzer = SuccessorArchwayAnalysisEngine()
     adapter = SuccessorTypeEvalPyAdapter()
     snippets = benchmark.load()

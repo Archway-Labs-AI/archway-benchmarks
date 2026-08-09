@@ -34,6 +34,13 @@ from archway_benchmarks.archway_config import DEFAULT_SERVER_URL
 
 
 @dataclass(frozen=True)
+class ArchwayModuleTranslation:
+    module_name: str
+    source: str
+    path: str
+
+
+@dataclass(frozen=True)
 class ArchwayTranslation:
     """Passthrough — the server reads the snippet from disk via ``root``.
 
@@ -45,6 +52,7 @@ class ArchwayTranslation:
 
     source: str
     path: str
+    modules: tuple[ArchwayModuleTranslation, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -78,8 +86,42 @@ class ArchwayAnalysisResult:
 class ArchwayTranslationEngine:
     name = "archway-translation"
 
+    def __init__(self, corpus_root: Path | str | None = None) -> None:
+        self.corpus_root = Path(corpus_root) if corpus_root else None
+
     def translate(self, source: str, path: str) -> ArchwayTranslation:
-        return ArchwayTranslation(source=source, path=path)
+        main_path = Path(path)
+        if not main_path.is_absolute() and self.corpus_root is not None:
+            main_path = self.corpus_root / main_path
+        modules: list[ArchwayModuleTranslation] = []
+        if main_path.exists():
+            root = main_path.parent
+            for module_path in sorted(root.rglob("*.py")):
+                relative = module_path.relative_to(root)
+                if relative == Path("__init__.py"):
+                    continue
+                module_name = _module_name(relative)
+                module_source = (
+                    source if module_path == main_path
+                    else module_path.read_text()
+                )
+                modules.append(ArchwayModuleTranslation(
+                    module_name, module_source, str(module_path)
+                ))
+        if not modules:
+            modules.append(ArchwayModuleTranslation("main", source, path))
+        return ArchwayTranslation(
+            source=source,
+            path=path,
+            modules=tuple(modules),
+        )
+
+
+def _module_name(relative: Path) -> str:
+    parts = list(relative.with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts) if parts else relative.parent.name
 
 
 class ArchwayAnalysisEngine:

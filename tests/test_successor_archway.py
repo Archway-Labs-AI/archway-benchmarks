@@ -58,6 +58,36 @@ def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     assert result.gaps == []
 
 
+def test_successor_program_translation_expands_available_star_imports(tmp_path):
+    suite = tmp_path / "imports" / "import_all"
+    suite.mkdir(parents=True)
+    (suite / "from_module.py").write_text(
+        "def func1():\n    return 42\n\n"
+        "def func2():\n    return 'hello'\n"
+    )
+    (suite / "main.py").write_text(
+        "from from_module import *\n"
+        "a = func1()\n"
+        "b = func2()\n"
+    )
+    (suite / "main_gt.json").write_text("""[
+      {"file":"main.py","line_number":2,"col_offset":1,"variable":"a","type":["int"]},
+      {"file":"main.py","line_number":3,"col_offset":1,"variable":"b","type":["str"]}
+    ]""")
+    benchmark = TypeEvalPyBenchmark(tmp_path)
+    snippet = benchmark.load()[0]
+    translation = ArchwayTranslationEngine(
+        corpus_root=benchmark.corpus_root
+    ).translate(snippet.source, snippet.file_path)
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
     _snippet(
         tmp_path,
