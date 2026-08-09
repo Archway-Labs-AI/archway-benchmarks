@@ -119,6 +119,51 @@ def test_successor_adapter_maps_qualified_class_attribute_observations(
     assert result.gaps == []
 
 
+def test_successor_adapter_uses_owner_qualified_attribute_as_scope(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "class Outer:\n"
+        "    class Inner:\n"
+        "        def __init__(self):\n"
+        "            self.values = [1, 2]\n"
+        "item = Outer.Inner()\n",
+        """[
+          {"file":"main.py","line_number":4,"col_offset":13,"variable":"Outer.Inner.values","type":["list"]},
+          {"file":"main.py","line_number":4,"col_offset":13,"variable":"Outer.Inner.values[0]","type":["int"]},
+          {"file":"main.py","line_number":4,"col_offset":13,"variable":"Outer.Inner.values[1]","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_maps_unqualified_method_return_name(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "class Worker:\n"
+        "    def run(self):\n"
+        "        return 3\n"
+        "result = Worker().run()\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":9,"function":"run","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_successor_program_translation_expands_available_star_imports(tmp_path):
     suite = tmp_path / "imports" / "import_all"
     suite.mkdir(parents=True)

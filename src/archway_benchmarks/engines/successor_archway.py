@@ -211,7 +211,7 @@ def _map_observations(observations, location: Location):
         item for item in observations
         if _observation_name_matches(item, location.name)
         and item.kind == location.kind
-        and _observation_function_matches(item.function, location.function)
+        and _observation_scope_matches(item, location)
         and item.position is not None
         and item.position.row == location.line
         and (
@@ -225,26 +225,42 @@ def _map_observations(observations, location: Location):
         item for item in observations
         if _observation_name_matches(item, location.name)
         and item.kind == location.kind
-        and _observation_function_matches(item.function, location.function)
+        and _observation_scope_matches(item, location)
         and item.position is not None
         and item.position.row == location.line
     )
 
 
-def _observation_function_matches(
-    observed: str | None, requested: str | None
+def _observation_scope_matches(
+    item, location: Location
 ) -> bool:
+    observed = item.function
+    requested = location.function
     if observed == requested:
         return True
-    return bool(
+    if (
         observed
         and requested
         and observed.endswith(f".{requested}")
+    ):
+        return True
+    if not observed or requested is not None:
+        return False
+    owner = observed.rsplit(".", 1)[0] if "." in observed else ""
+    return bool(
+        owner
+        and item.name.startswith("self.")
+        and location.name
+        == f"{owner}.{item.name.removeprefix('self.')}"
     )
 
 
 def _observation_name_matches(item, requested: str) -> bool:
     if item.name == requested:
+        return True
+    if not isinstance(item.name, str):
+        return False
+    if item.kind == "return" and item.name.endswith(f".{requested}"):
         return True
     if not item.function or "." not in item.function:
         return False
