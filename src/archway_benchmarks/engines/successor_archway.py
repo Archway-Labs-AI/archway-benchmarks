@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from collections import Counter
+from pathlib import Path
 import re
 from typing import Any, Callable
 
@@ -94,10 +95,20 @@ class SuccessorArchwayAnalysisEngine:
             )
             from sd_core.tooling.harness import ProgramResult
 
-            program = ProgramResult.from_sources({
+            sources = {
                 item.module_name: item.source
                 for item in translation.modules
-            })
+            }
+            program = (
+                ProgramResult.from_module_resolver(
+                    sources,
+                    _filesystem_module_resolver(
+                        translation.dependency_roots
+                    ),
+                )
+                if translation.dependency_roots
+                else ProgramResult.from_sources(sources)
+            )
             modules = {
                 name: item.morphism
                 for name, item in program.modules.items()
@@ -315,7 +326,10 @@ def audit_successor_typeevalpy(
     from archway_benchmarks.engines.archway import ArchwayTranslationEngine
 
     translator = ArchwayTranslationEngine(
-        corpus_root=benchmark.corpus_root
+        corpus_root=benchmark.corpus_root,
+        dependency_roots=tuple(
+            getattr(benchmark, "dependency_roots", ())
+        ),
     )
     analyzer = SuccessorArchwayAnalysisEngine(record_events=record_events)
     adapter = SuccessorTypeEvalPyAdapter()
@@ -421,3 +435,24 @@ def _suite_family(suite_path: str) -> str:
         return suite_path
     family = re.sub(r"_[0-9]+_.*$", "", case)
     return f"{category}/{family}"
+
+
+def _filesystem_module_resolver(
+    roots: tuple[str, ...],
+) -> Callable[[str], str | None]:
+    """Build frontend-only dotted-module resolution for explicit roots."""
+
+    resolved_roots = tuple(Path(root).resolve() for root in roots)
+
+    def resolve(name: str) -> str | None:
+        relative = Path(*name.split("."))
+        for root in resolved_roots:
+            for candidate in (
+                root / relative.with_suffix(".py"),
+                root / relative / "__init__.py",
+            ):
+                if candidate.is_file():
+                    return candidate.read_text()
+        return None
+
+    return resolve

@@ -53,6 +53,7 @@ class ArchwayTranslation:
     source: str
     path: str
     modules: tuple[ArchwayModuleTranslation, ...] = ()
+    dependency_roots: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -86,8 +87,15 @@ class ArchwayAnalysisResult:
 class ArchwayTranslationEngine:
     name = "archway-translation"
 
-    def __init__(self, corpus_root: Path | str | None = None) -> None:
+    def __init__(
+        self,
+        corpus_root: Path | str | None = None,
+        dependency_roots: tuple[Path | str, ...] = (),
+    ) -> None:
         self.corpus_root = Path(corpus_root) if corpus_root else None
+        self.dependency_roots = tuple(
+            str(Path(root)) for root in dependency_roots
+        )
 
     def translate(self, source: str, path: str) -> ArchwayTranslation:
         main_path = Path(path)
@@ -114,6 +122,7 @@ class ArchwayTranslationEngine:
             source=source,
             path=path,
             modules=tuple(modules),
+            dependency_roots=self.dependency_roots,
         )
 
 

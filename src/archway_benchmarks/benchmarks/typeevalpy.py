@@ -36,6 +36,13 @@ _DEFAULT_AUTOGEN_CORPUS = (
     / "autogen_typeevalpy_benchmark"
     / "python_features"
 )
+_DEFAULT_DEPENDENCY_ROOTS = (
+    _REPO_ROOT
+    / "extras"
+    / "TypeEvalPy"
+    / "micro-benchmark-excluded"
+    / "typeevalpy_external_module",
+)
 
 
 class TypeEvalPyBenchmark(Benchmark):
@@ -49,6 +56,7 @@ class TypeEvalPyBenchmark(Benchmark):
                 "Initialize the submodule: `git submodule update --init --recursive`."
             )
         self._snippets: list[Snippet] | None = None
+        self.dependency_roots = _DEFAULT_DEPENDENCY_ROOTS
 
     # ----- Benchmark API -----
 

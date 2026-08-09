@@ -38,6 +38,32 @@ def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
     assert result.forward.cache_hit is False
 
 
+def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "from library import produce\nresult = produce()\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":1,"variable":"result","type":["Nonetype"]}
+        ]""",
+    )
+    dependencies = tmp_path / "dependencies"
+    dependencies.mkdir()
+    (dependencies / "library.py").write_text(
+        "def produce():\n    return None\n"
+    )
+    translation = ArchwayTranslationEngine(
+        corpus_root=tmp_path,
+        dependency_roots=(dependencies,),
+    ).translate(snippet.source, snippet.file_path)
+
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.targeted_runs == []
+
+
 def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     tmp_path,
 ):
