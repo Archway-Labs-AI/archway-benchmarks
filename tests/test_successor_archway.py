@@ -82,3 +82,27 @@ def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
     assert audit.forward_events > 0
     assert audit.knowledge_deltas == 1
     assert audit.resolved_facts > 1
+
+
+def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def choose(flag):\n"
+        "    if flag:\n"
+        "        return 1\n"
+        '    return "no"\n'
+        "result = choose(True)\n",
+        """[
+          {"file":"main.py","line_number":5,"col_offset":1,"variable":"result","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions[0].types == frozenset(("int", "str"))
+    assert [gap.classification for gap in result.gaps] == [
+        "mapped_imprecise"
+    ]

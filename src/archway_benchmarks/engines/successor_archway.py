@@ -130,6 +130,20 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
             )
             if values:
                 predictions.append(Annotation(requested.location, values))
+                if values != requested.types:
+                    classification = (
+                        "mapped_imprecise"
+                        if requested.types < values
+                        else "benchmark_disagreement"
+                    )
+                    result.gaps.append(SuccessorGap(
+                        requested.location,
+                        classification,
+                        snippet.suite_path,
+                        requested.types,
+                        tuple(item.address.id for item in candidates),
+                        f"resolved successor types: {sorted(values)!r}",
+                    ))
                 continue
             result.gaps.append(SuccessorGap(
                 requested.location,
