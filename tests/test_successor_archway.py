@@ -127,6 +127,9 @@ def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
     assert audit.representatives == {
         "provenance_unmapped|assignments|return": "assignments/forward"
     }
+    assert audit.family_groups == {
+        "provenance_unmapped|assignments/forward|return": 1
+    }
     assert audit.forward_events > 0
     assert audit.knowledge_deltas == 1
     assert audit.resolved_facts > 1
@@ -141,14 +144,19 @@ def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
         ]""",
     )
 
+    progress = []
     audit = audit_successor_typeevalpy(
-        TypeEvalPyBenchmark(tmp_path), record_events=False
+        TypeEvalPyBenchmark(tmp_path),
+        record_events=False,
+        suite_prefixes=("assignments/for",),
+        progress=lambda completed, total: progress.append((completed, total)),
     )
 
     assert audit.exact == 1
     assert audit.forward_events == 0
     assert audit.knowledge_deltas == 1
     assert audit.resolved_facts > 1
+    assert progress == [(1, 1)]
 
 
 def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):

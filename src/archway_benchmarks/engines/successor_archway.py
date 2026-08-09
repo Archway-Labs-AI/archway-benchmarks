@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from collections import Counter
 import re
-from typing import Any
+from typing import Any, Callable
 
 from archway_benchmarks.benchmarks.base import AnalysisResultAdapter
 from archway_benchmarks.engines.archway import ArchwayTranslation
@@ -41,6 +41,8 @@ class SuccessorGapAudit:
     classifications: dict[str, int]
     groups: dict[str, int]
     representatives: dict[str, str]
+    family_groups: dict[str, int]
+    family_representatives: dict[str, str]
     forward_events: int
     knowledge_deltas: int
     resolved_facts: int
@@ -54,6 +56,8 @@ class SuccessorGapAudit:
             "classifications": self.classifications,
             "groups": self.groups,
             "representatives": self.representatives,
+            "family_groups": self.family_groups,
+            "family_representatives": self.family_representatives,
             "forward_events": self.forward_events,
             "knowledge_deltas": self.knowledge_deltas,
             "resolved_facts": self.resolved_facts,
@@ -235,6 +239,8 @@ def audit_successor_typeevalpy(
     *,
     limit: int | None = None,
     record_events: bool = True,
+    suite_prefixes: tuple[str, ...] = (),
+    progress: Callable[[int, int], None] | None = None,
 ) -> SuccessorGapAudit:
     """Run a read-only gap census with one forward session per snippet."""
 
@@ -246,14 +252,21 @@ def audit_successor_typeevalpy(
     analyzer = SuccessorArchwayAnalysisEngine(record_events=record_events)
     adapter = SuccessorTypeEvalPyAdapter()
     snippets = benchmark.load()
+    if suite_prefixes:
+        snippets = [
+            snippet for snippet in snippets
+            if snippet.suite_path.startswith(suite_prefixes)
+        ]
     if limit is not None:
         snippets = snippets[:limit]
     predictions: dict[Location, frozenset[str]] = {}
     classifications: Counter[str] = Counter()
     groups: Counter[str] = Counter()
     representatives: dict[str, str] = {}
+    family_groups: Counter[str] = Counter()
+    family_representatives: dict[str, str] = {}
     forward_events = knowledge_deltas = resolved_facts = 0
-    for snippet in snippets:
+    for completed, snippet in enumerate(snippets, start=1):
         result = analyzer.analyze(
             translator.translate(snippet.source, snippet.file_path)
         )
@@ -282,6 +295,16 @@ def audit_successor_typeevalpy(
             key = f"{gap.classification}|{category}|{gap.location.kind}"
             groups[key] += 1
             representatives.setdefault(key, snippet.suite_path)
+            family_key = (
+                f"{gap.classification}|{_suite_family(snippet.suite_path)}|"
+                f"{gap.location.kind}"
+            )
+            family_groups[family_key] += 1
+            family_representatives.setdefault(
+                family_key, snippet.suite_path
+            )
+        if progress is not None:
+            progress(completed, len(snippets))
     ground_truth = {
         item.location: item.types
         for snippet in snippets for item in snippet.annotations
@@ -298,7 +321,19 @@ def audit_successor_typeevalpy(
         classifications=dict(sorted(classifications.items())),
         groups=dict(sorted(groups.items())),
         representatives=dict(sorted(representatives.items())),
+        family_groups=dict(sorted(family_groups.items())),
+        family_representatives=dict(sorted(family_representatives.items())),
         forward_events=forward_events,
         knowledge_deltas=knowledge_deltas,
         resolved_facts=resolved_facts,
     )
+
+
+def _suite_family(suite_path: str) -> str:
+    """Collapse an autogen parameter suffix while preserving the category."""
+
+    category, separator, case = suite_path.partition("/")
+    if not separator:
+        return suite_path
+    family = re.sub(r"_[0-9]+_.*$", "", case)
+    return f"{category}/{family}"
