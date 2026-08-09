@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from collections import Counter
+import re
 from typing import Any
 
 from archway_benchmarks.benchmarks.base import AnalysisResultAdapter
@@ -116,7 +117,7 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
         for requested in snippet.annotations:
             candidates = _map_observations(observations, requested.location)
             if not candidates:
-                candidates = _map_container_summary(
+                candidates = _map_container_path(
                     result.session, requested.location
                 )
             if not candidates:
@@ -190,15 +191,23 @@ def _map_observations(observations, location: Location):
     )
 
 
-def _map_container_summary(session, location: Location):
-    """Resolve a concrete single slot through existing summary knowledge."""
+def _map_container_path(session, location: Location):
+    """Resolve a concrete nested path through existing slot knowledge."""
 
     name = location.name
-    if not name.endswith("]") or name.count("[") != 1:
+    if not name.endswith("]") or "[" not in name:
         return ()
-    base, _separator, _slot = name.partition("[")
+    base = name.split("[", 1)[0]
+    slots = tuple(
+        item[1:-1]
+        if len(item) >= 2 and item[0] == item[-1] and item[0] in "\"'"
+        else item
+        for item in re.findall(r"\[([^]]+)\]", name)
+    )
+    if not slots:
+        return ()
     return tuple(
-        item for item in session.container_summary_observations(base)
+        item for item in session.container_path_observations(base, slots)
         if item.kind == location.kind
         and item.function == location.function
         and item.position is not None
