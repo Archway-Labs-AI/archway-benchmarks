@@ -132,6 +132,25 @@ def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
     assert audit.resolved_facts > 1
 
 
+def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
+    _snippet(
+        tmp_path,
+        "x = 1\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":1,"variable":"x","type":["int"]}
+        ]""",
+    )
+
+    audit = audit_successor_typeevalpy(
+        TypeEvalPyBenchmark(tmp_path), record_events=False
+    )
+
+    assert audit.exact == 1
+    assert audit.forward_events == 0
+    assert audit.knowledge_deltas == 1
+    assert audit.resolved_facts > 1
+
+
 def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
     snippet = _snippet(
         tmp_path,

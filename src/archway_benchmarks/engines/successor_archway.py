@@ -65,6 +65,9 @@ class SuccessorArchwayAnalysisEngine:
 
     name = "archway-successor-analysis"
 
+    def __init__(self, *, record_events: bool = True) -> None:
+        self.record_events = record_events
+
     def analyze(self, translation: Any) -> SuccessorArchwayResult:
         if not isinstance(translation, ArchwayTranslation):
             raise TypeError(
@@ -84,7 +87,11 @@ class SuccessorArchwayAnalysisEngine:
                 name: item.morphism
                 for name, item in program.modules.items()
             }
-            session = open_hybrid_program_session(modules, "main")
+            session = open_hybrid_program_session(
+                modules,
+                "main",
+                record_events=self.record_events,
+            )
             forward = session.run_forward()
             return SuccessorArchwayResult(
                 translation.source,
@@ -227,6 +234,7 @@ def audit_successor_typeevalpy(
     benchmark,
     *,
     limit: int | None = None,
+    record_events: bool = True,
 ) -> SuccessorGapAudit:
     """Run a read-only gap census with one forward session per snippet."""
 
@@ -235,7 +243,7 @@ def audit_successor_typeevalpy(
     translator = ArchwayTranslationEngine(
         corpus_root=benchmark.corpus_root
     )
-    analyzer = SuccessorArchwayAnalysisEngine()
+    analyzer = SuccessorArchwayAnalysisEngine(record_events=record_events)
     adapter = SuccessorTypeEvalPyAdapter()
     snippets = benchmark.load()
     if limit is not None:
