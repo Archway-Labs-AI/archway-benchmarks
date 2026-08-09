@@ -116,6 +116,10 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
         for requested in snippet.annotations:
             candidates = _map_observations(observations, requested.location)
             if not candidates:
+                candidates = _map_container_summary(
+                    result.session, requested.location
+                )
+            if not candidates:
                 result.gaps.append(SuccessorGap(
                     requested.location,
                     "provenance_unmapped",
@@ -180,6 +184,22 @@ def _map_observations(observations, location: Location):
         item for item in observations
         if item.name == location.name
         and item.kind == location.kind
+        and item.function == location.function
+        and item.position is not None
+        and item.position.row == location.line
+    )
+
+
+def _map_container_summary(session, location: Location):
+    """Resolve a concrete single slot through existing summary knowledge."""
+
+    name = location.name
+    if not name.endswith("]") or name.count("[") != 1:
+        return ()
+    base, _separator, _slot = name.partition("[")
+    return tuple(
+        item for item in session.container_summary_observations(base)
+        if item.kind == location.kind
         and item.function == location.function
         and item.position is not None
         and item.position.row == location.line

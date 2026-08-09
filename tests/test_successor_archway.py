@@ -88,6 +88,26 @@ def test_successor_program_translation_expands_available_star_imports(tmp_path):
     assert result.gaps == []
 
 
+def test_successor_adapter_reads_concrete_slot_from_summary_fact(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def generate():\n"
+        "    yield 1\n"
+        "values = generate()\n",
+        """[
+          {"file":"main.py","line_number":3,"col_offset":1,"variable":"values[0]","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
     _snippet(
         tmp_path,
