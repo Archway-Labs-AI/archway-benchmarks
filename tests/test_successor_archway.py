@@ -38,7 +38,7 @@ def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
     assert result.forward.cache_hit is False
 
 
-def test_successor_adapter_classifies_non_module_observation_without_fallback(
+def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     tmp_path,
 ):
     snippet = _snippet(
@@ -54,10 +54,8 @@ def test_successor_adapter_classifies_non_module_observation_without_fallback(
 
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
-    assert predictions == []
-    assert [gap.classification for gap in result.gaps] == [
-        "provenance_unmapped"
-    ]
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
 
 
 def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):

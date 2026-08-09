@@ -157,11 +157,11 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
 
 
 def _map_observations(observations, location: Location):
-    if location.kind != "variable" or location.function is not None:
-        return ()
     exact = tuple(
         item for item in observations
         if item.name == location.name
+        and item.kind == location.kind
+        and item.function == location.function
         and item.position is not None
         and item.position.row == location.line
         and (
@@ -174,6 +174,8 @@ def _map_observations(observations, location: Location):
     return tuple(
         item for item in observations
         if item.name == location.name
+        and item.kind == location.kind
+        and item.function == location.function
         and item.position is not None
         and item.position.row == location.line
     )
@@ -182,6 +184,8 @@ def _map_observations(observations, location: Location):
 def _typeeval_name(value: str) -> str:
     if value == "builtins.callable":
         return "callable"
+    if value == "builtins.NoneType":
+        return "Nonetype"
     return value.removeprefix("builtins.")
 
 
