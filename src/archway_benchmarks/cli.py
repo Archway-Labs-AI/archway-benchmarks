@@ -64,12 +64,38 @@ def _build_archway_engines(
     )
 
 
+def _build_successor_engines(
+    benchmark: Benchmark,
+    accuracy: float,
+    seed: int | None,
+):
+    """Construct the in-process diagram-only successor engine triple."""
+
+    from archway_benchmarks.engines.archway import ArchwayTranslationEngine
+    from archway_benchmarks.engines.successor_archway import (
+        SuccessorArchwayAnalysisEngine,
+        SuccessorTypeEvalPyAdapter,
+    )
+
+    return (
+        ArchwayTranslationEngine(
+            corpus_root=getattr(benchmark, "corpus_root", None),
+            dependency_roots=tuple(
+                getattr(benchmark, "dependency_roots", ())
+            ),
+        ),
+        SuccessorArchwayAnalysisEngine(record_events=False),
+        SuccessorTypeEvalPyAdapter(),
+    )
+
+
 ENGINES: dict[
     str,
     Callable[[Benchmark, float, int | None], tuple[TranslationEngine, AnalysisEngine, object]],
 ] = {
     "stub": _build_stub_engines,
     "archway": _build_archway_engines,
+    "successor": _build_successor_engines,
 }
 
 
@@ -213,6 +239,12 @@ def _cmd_run(args) -> int:
         translator, analyzer, adapter = ENGINES[args.engine](
             bench, args.stub_accuracy, args.seed
         )
+        if args.engine == "successor":
+            metadata = {
+                "analysis_surface": "diagram-only",
+                "record_events": False,
+                "session_policy": "persistent-forward-then-targeted",
+            }
     result = run_pipeline(
         benchmark=bench,
         translator=translator,
