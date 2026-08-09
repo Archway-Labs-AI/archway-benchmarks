@@ -29,7 +29,7 @@ from pathlib import Path
 from typing import Iterable, Literal, Mapping
 
 Edge = tuple[str, str]
-EdgeProvider = Literal["coordinated", "legacy"]
+EdgeProvider = Literal["successor", "coordinated", "legacy"]
 
 
 @dataclass(frozen=True)
@@ -49,6 +49,18 @@ class PyCGCase:
     @property
     def expected_edge_occurrence_count(self) -> int:
         return sum(len(callees) for callees in self.expected.values())
+
+
+@dataclass(frozen=True)
+class SuccessorEdgeResult:
+    """Thin PyCG projection plus shared-session cost evidence."""
+
+    edges: frozenset[Edge]
+    root_demands: int
+    cache_hits: int
+    production_events: int
+    knowledge_deltas: int
+    topology_growth: int
 
 
 @dataclass(frozen=True)
@@ -398,7 +410,7 @@ def run_archway_pycg(
     analysis_product: str = "standalone",
     callable_root_activation: str = "off",
     case_timeout_seconds: float | None = None,
-    edge_provider: EdgeProvider = "coordinated",
+    edge_provider: EdgeProvider = "successor",
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -586,6 +598,8 @@ def _produce_archway_call_edges(
     callable_root_activation: str,
     edge_provider: EdgeProvider,
 ) -> set[Edge]:
+    if edge_provider == "successor":
+        return successor_archway_call_edges(case, engine_root=engine_root)
     if edge_provider == "coordinated":
         return coordinated_archway_call_edges(case, engine_root=engine_root)
     if edge_provider == "legacy":
@@ -597,6 +611,110 @@ def _produce_archway_call_edges(
             callable_root_activation=callable_root_activation,
         )
     raise ValueError(f"unknown edge provider: {edge_provider}")
+
+
+def successor_archway_call_edges(
+    case: PyCGCase,
+    *,
+    engine_root: Path,
+) -> set[Edge]:
+    """Project only diagram-successor call-target facts into PyCG edges."""
+
+    return set(successor_archway_call_edge_result(
+        case, engine_root=engine_root
+    ).edges)
+
+
+def successor_archway_call_edge_result(
+    case: PyCGCase,
+    *,
+    engine_root: Path,
+) -> SuccessorEdgeResult:
+    """Run the narrow Stage 5 vertical without a source-derived index."""
+
+    if not engine_root.exists():
+        raise FileNotFoundError(f"engine root not found: {engine_root}")
+    engine_text = str(engine_root)
+    if engine_text not in sys.path:
+        sys.path.insert(0, engine_text)
+
+    from sd_core.analysis.base import core_access as ca
+    from sd_core.analysis.diagram_analysis import DiagramCatalog
+    from sd_core.analysis.diagram_analysis.callable_knowledge import (
+        InvocationTarget,
+    )
+    from sd_core.analysis.diagram_analysis.callable_vertical import (
+        open_callable_target_session,
+    )
+    from sd_core.analysis.diagram_analysis.functor import diagram_morphism_id
+    from sd_core.core import StructuralKind
+    from sd_core.tooling.harness import ProgramResult
+
+    sources = _load_case_sources(case)
+    if len(sources) != 1:
+        raise ValueError(
+            "initial successor PyCG adapter supports one translated module"
+        )
+    module_name, _source = next(iter(sources.items()))
+    morphism = ProgramResult.from_sources(sources).modules[module_name].morphism
+    catalog = DiagramCatalog(morphism)
+    session = open_callable_target_session(morphism)
+    query = session.demand_all_targets()
+
+    definitions = {
+        diagram_morphism_id(box): box
+        for box in catalog.atomic_boxes(StructuralKind.ABSTRACT)
+    }
+    lambda_ids = tuple(sorted(
+        (
+            definition_id for definition_id, box in definitions.items()
+            if ca.box_tag(box).detail == "<lambda>"
+        ),
+        key=lambda definition_id: _successor_definition_sort_key(
+            catalog, definition_id
+        ),
+    ))
+    edges: set[Edge] = set()
+    for run in query.runs:
+        for target in run.result.value:
+            if not isinstance(target, InvocationTarget):
+                continue
+            definition_id = target.callable_value.definition_morphism_id
+            definition = definitions.get(definition_id)
+            if definition is None:
+                continue
+            anchor = catalog.source_anchor(definition_id)
+            projected_module = (
+                ".".join(anchor.module.parts) if anchor.module else module_name
+            )
+            detail = ca.box_tag(definition).detail
+            if detail == "<lambda>":
+                local_name = f"<lambda{lambda_ids.index(definition_id) + 1}>"
+            else:
+                local_name = detail
+            edges.add((module_name, f"{projected_module}.{local_name}"))
+
+    return SuccessorEdgeResult(
+        edges=frozenset(edges),
+        root_demands=len(query.roots),
+        cache_hits=query.cache_hits,
+        production_events=len(query.events),
+        knowledge_deltas=len(query.knowledge_deltas),
+        topology_growth=(
+            query.topology_generation_after - query.topology_generation_before
+        ),
+    )
+
+
+def _successor_definition_sort_key(catalog, definition_id: str):
+    anchor = catalog.source_anchor(definition_id)
+    position = anchor.position
+    return (
+        tuple(anchor.module.parts) if anchor.module else (),
+        position.row if position else -1,
+        position.col if position else -1,
+        definition_id,
+    )
 
 
 def coordinated_archway_call_edges(
@@ -1008,11 +1126,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--edge-provider",
-        choices=("coordinated", "legacy"),
-        default="coordinated",
+        choices=("successor", "coordinated", "legacy"),
+        default="successor",
         help=(
-            "Call-edge producer. coordinated uses the demand-driven semantic "
-            "runtime; legacy projects the reduced-product call relation."
+            "Call-edge producer. successor uses the diagram-only fact runtime; "
+            "coordinated is the quarantined source-index runtime; legacy "
+            "projects the reduced-product call relation."
         ),
     )
     parser.add_argument(

@@ -19,6 +19,7 @@ from archway_benchmarks.pycg import (
     run_archway_pycg,
     score_adjacency_lists,
     score_edges,
+    successor_archway_call_edge_result,
 )
 
 
@@ -48,6 +49,34 @@ def test_score_edges():
     assert score.precision == 0.5
     assert score.recall == 0.5
     assert score.f1 == 0.5
+
+
+def test_successor_adapter_scores_lambda_from_diagram_provenance(
+    tmp_path: Path,
+):
+    case_root = _write_case(
+        tmp_path,
+        "lambdas",
+        "call",
+        {"main": ["main.<lambda1>"], "main.<lambda1>": []},
+    )
+    (case_root / "main.py").write_text(
+        "x = lambda x: x + 1\nx(1)\n", encoding="utf-8"
+    )
+    (case,) = load_cases(tmp_path)
+    engine_root = Path(__file__).parents[2] / "engine"
+
+    result = successor_archway_call_edge_result(
+        case, engine_root=engine_root.resolve()
+    )
+
+    assert result.edges == frozenset({("main", "main.<lambda1>")})
+    assert score_edges(set(case.expected_edges), set(result.edges)) == EdgeScore(
+        true_positive=1, false_positive=0, false_negative=0
+    )
+    assert result.root_demands == 1
+    assert result.knowledge_deltas > 0
+    assert result.topology_growth > 0
 
 
 def test_score_adjacency_lists_preserves_official_duplicate_recall_denominator():
@@ -278,14 +307,14 @@ def test_run_archway_pycg_timeout_marks_case_without_predictions(
     assert result.cases[0].predicted_edges == ()
 
 
-def test_run_archway_pycg_uses_coordinated_provider_by_default(
+def test_run_archway_pycg_uses_successor_provider_by_default(
     tmp_path: Path,
     monkeypatch,
 ):
     _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
 
     monkeypatch.setattr(
-        "archway_benchmarks.pycg.coordinated_archway_call_edges",
+        "archway_benchmarks.pycg.successor_archway_call_edges",
         lambda *args, **kwargs: {("main", "main.f")},
     )
 
@@ -294,8 +323,8 @@ def test_run_archway_pycg_uses_coordinated_provider_by_default(
     assert result.score.true_positive == 1
     assert result.score.false_positive == 0
     assert result.score.false_negative == 0
-    assert result.edge_provider == "coordinated"
-    assert result.to_jsonable()["edge_provider"] == "coordinated"
+    assert result.edge_provider == "successor"
+    assert result.to_jsonable()["edge_provider"] == "successor"
 
 
 def test_root_package_init_receives_nonempty_module_name(tmp_path: Path):
