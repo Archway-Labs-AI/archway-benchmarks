@@ -763,6 +763,22 @@ def successor_archway_call_edge_result(
                 family_counts.get(address.family, 0) + 1
             )
         production_counts = session.scheduler.production_counts
+        production_change_counts = session.scheduler.production_change_counts
+        production_growth_counts = (
+            session.scheduler.production_growth_coordinate_counts
+        )
+
+        def growth_for(key) -> dict[str, int]:
+            return dict(sorted(
+                (
+                    (coordinate, count)
+                    for (production, coordinate), count
+                    in production_growth_counts.items()
+                    if production == key
+                ),
+                key=lambda item: item[0],
+            ))
+
         hottest_productions = [
             {
                 "address_id": key.address.id,
@@ -780,6 +796,8 @@ def successor_archway_call_edge_result(
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "executions": executions,
+                "value_changes": production_change_counts.get(key, 0),
+                "growth_coordinates": growth_for(key),
             }
             for key, executions in sorted(
                 production_counts.items(),
@@ -842,6 +860,8 @@ def successor_archway_call_edge_result(
                             ))
                         ),
                         "executions": production_counts.get(key, 0),
+                        "value_changes": production_change_counts.get(key, 0),
+                        "growth_coordinates": growth_for(key),
                     }
                     for key in component.members
                 ],
@@ -943,6 +963,9 @@ def successor_archway_call_edge_result(
             )),
             "unique_production_count": len(production_counts),
             "production_execution_count": production_execution_count,
+            "production_value_change_count": sum(
+                production_change_counts.values()
+            ),
             "repeated_production_count": repeated_production_count,
             "repeated_production_ratio": (
                 repeated_production_count / production_execution_count
