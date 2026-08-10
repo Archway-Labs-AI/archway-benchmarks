@@ -824,6 +824,9 @@ def successor_archway_call_edge_result(
                 for root_id, seconds in completed_root_seconds
             ],
             "invocation_context_counts": session.invocation_context_counts(),
+            "invocation_input_growth_counts": (
+                session.invocation_input_growth_counts()
+            ),
             "invocation_admission_counts": (
                 session.invocation_admission_counts()
             ),

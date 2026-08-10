@@ -90,6 +90,7 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.topology_growth > 0
     assert result.evidence["root_demand_count"] == 1
     assert result.evidence["resolved_fact_count"] > 0
+    assert "invocation_input_growth_counts" in result.evidence
     assert result.evidence["trace_events_enabled"] is False
     assert result.evidence["peak_rss_bytes"] > 0
 
