@@ -739,6 +739,11 @@ def successor_archway_call_edge_result(
         address.id: f"callable:{name}"
         for name, address in session.callable_roots.items()
     })
+    body_labels = {
+        body_id: name
+        for name, address in session.callable_roots.items()
+        if (body_id := getattr(address.subject, "body_morphism_id", None))
+    }
 
     def current_evidence(*, phase: str) -> dict[str, object]:
         snapshot = session.store.snapshot()
@@ -753,6 +758,9 @@ def successor_archway_call_edge_result(
                 "address_id": key.address.id,
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
+                "callable": body_labels.get(
+                    getattr(key.address.subject, "body_morphism_id", None)
+                ),
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "executions": executions,
