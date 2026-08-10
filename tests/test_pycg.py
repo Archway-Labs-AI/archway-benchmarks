@@ -356,6 +356,70 @@ def test_run_archway_pycg_timeout_marks_case_without_predictions(
     assert result.cases[0].predicted_edges == ()
 
 
+def test_successor_timeout_retains_latest_progress_evidence(
+    tmp_path: Path,
+    monkeypatch,
+):
+    if "fork" not in multiprocessing.get_all_start_methods():
+        pytest.skip("timeout test requires fork multiprocessing support")
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+
+    def slow_successor(*args, progress=None, **kwargs):
+        assert progress is not None
+        progress({"phase": "analysis", "resolved_fact_count": 17})
+        time.sleep(1)
+
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.successor_archway_call_edge_result",
+        slow_successor,
+    )
+
+    result = run_archway_pycg(
+        corpus_root=tmp_path,
+        engine_root=tmp_path,
+        case_timeout_seconds=0.1,
+        edge_provider="successor",
+    )
+
+    assert result.cases[0].status == "timeout"
+    assert result.cases[0].analysis_evidence == {
+        "phase": "analysis",
+        "resolved_fact_count": 17,
+    }
+
+
+def test_successor_error_retains_terminal_evidence(
+    tmp_path: Path,
+    monkeypatch,
+):
+    if "fork" not in multiprocessing.get_all_start_methods():
+        pytest.skip("worker test requires fork multiprocessing support")
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+
+    def failing_successor(*args, progress=None, **kwargs):
+        assert progress is not None
+        progress({"phase": "analysis", "demand_node_count": 3})
+        raise RuntimeError("analysis failed")
+
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.successor_archway_call_edge_result",
+        failing_successor,
+    )
+
+    result = run_archway_pycg(
+        corpus_root=tmp_path,
+        engine_root=tmp_path,
+        case_timeout_seconds=1,
+        edge_provider="successor",
+    )
+
+    assert result.cases[0].status == "error"
+    assert result.cases[0].analysis_evidence == {
+        "phase": "analysis",
+        "demand_node_count": 3,
+    }
+
+
 def test_run_archway_pycg_uses_successor_provider_by_default(
     tmp_path: Path,
     monkeypatch,

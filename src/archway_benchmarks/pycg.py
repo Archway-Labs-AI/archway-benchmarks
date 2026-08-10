@@ -24,13 +24,26 @@ import multiprocessing
 import queue
 import resource
 import sys
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Literal, Mapping
+from typing import Callable, Iterable, Literal, Mapping
 
 Edge = tuple[str, str]
 EdgeProvider = Literal["successor", "coordinated", "legacy"]
+
+
+class PyCGCaseExecutionError(RuntimeError):
+    def __init__(self, message: str, evidence: dict[str, object]) -> None:
+        super().__init__(message)
+        self.analysis_evidence = evidence
+
+
+class PyCGCaseTimeoutError(TimeoutError):
+    def __init__(self, message: str, evidence: dict[str, object]) -> None:
+        super().__init__(message)
+        self.analysis_evidence = evidence
 
 
 @dataclass(frozen=True)
@@ -470,12 +483,12 @@ def run_archway_pycg(
             predicted = set()
             status = "timeout"
             error = str(exc)
-            analysis_evidence = {}
+            analysis_evidence = getattr(exc, "analysis_evidence", {})
         except Exception as exc:
             predicted = set()
             status = "error"
             error = f"{type(exc).__name__}: {exc}"
-            analysis_evidence = {}
+            analysis_evidence = getattr(exc, "analysis_evidence", {})
         score = score_adjacency_lists(case.expected, predicted)
         total = _add_scores(total, score)
         predicted_total += len(predicted)
@@ -569,22 +582,34 @@ def _archway_call_edges_with_timeout(
         ),
     )
     process.start()
-    process.join(case_timeout_seconds)
-    if process.is_alive():
-        process.terminate()
+    deadline = time.monotonic() + case_timeout_seconds
+    latest_evidence: dict[str, object] = {}
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            process.terminate()
+            process.join()
+            raise PyCGCaseTimeoutError(
+                f"case exceeded timeout of {case_timeout_seconds:.3f}s",
+                latest_evidence,
+            )
+        try:
+            status, payload = result_queue.get(timeout=min(1.0, remaining))
+        except queue.Empty:
+            if process.is_alive():
+                continue
+            raise RuntimeError(
+                "case worker exited without returning a result; "
+                f"exitcode={process.exitcode}"
+            )
+        if status == "progress":
+            latest_evidence = payload
+            continue
         process.join()
-        raise TimeoutError(
-            f"case exceeded timeout of {case_timeout_seconds:.3f}s"
-        )
-    try:
-        status, payload = result_queue.get_nowait()
-    except queue.Empty as exc:
-        raise RuntimeError(
-            f"case worker exited without returning a result; exitcode={process.exitcode}"
-        ) from exc
-    if status == "ok":
-        return payload
-    raise RuntimeError(payload)
+        if status == "ok":
+            return payload
+        error, evidence = payload
+        raise PyCGCaseExecutionError(error, evidence or latest_evidence)
 
 
 def _multiprocessing_context() -> multiprocessing.context.BaseContext:
@@ -613,9 +638,15 @@ def _archway_call_edges_worker(
             callable_root_activation=callable_root_activation,
             edge_provider=edge_provider,
             successor_record_events=successor_record_events,
+            successor_progress=(
+                lambda evidence: result_queue.put(("progress", evidence))
+            ),
         )
     except Exception as exc:
-        result_queue.put(("error", f"{type(exc).__name__}: {exc}"))
+        result_queue.put(("error", (
+            f"{type(exc).__name__}: {exc}",
+            getattr(exc, "analysis_evidence", {}),
+        )))
     else:
         result_queue.put(("ok", predicted))
 
@@ -629,12 +660,14 @@ def _produce_archway_call_edges(
     callable_root_activation: str,
     edge_provider: EdgeProvider,
     successor_record_events: bool,
+    successor_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
     if edge_provider == "successor":
         return successor_archway_call_edge_result(
             case,
             engine_root=engine_root,
             record_events=successor_record_events,
+            progress=successor_progress,
         )
     if edge_provider == "coordinated":
         return coordinated_archway_call_edges(case, engine_root=engine_root)
@@ -666,6 +699,7 @@ def successor_archway_call_edge_result(
     *,
     engine_root: Path,
     record_events: bool = False,
+    progress: Callable[[dict[str, object]], None] | None = None,
 ) -> SuccessorEdgeResult:
     """Project one persistent diagram-only reduced-product program session."""
 
@@ -696,9 +730,113 @@ def successor_archway_call_edge_result(
     topology_before = session.scheduler.graph.topology_generation
     analysis_started = time.perf_counter()
     include_callable_bodies = case.suite == "macro"
-    forward = session.run_analysis_roots(
-        include_callable_bodies=include_callable_bodies
-    )
+    stop_sampling = threading.Event()
+
+    def current_evidence(*, phase: str) -> dict[str, object]:
+        snapshot = session.store.snapshot()
+        family_counts: dict[str, int] = {}
+        for address in snapshot.resolved_facts:
+            family_counts[address.family] = (
+                family_counts.get(address.family, 0) + 1
+            )
+        production_counts = session.scheduler.production_counts
+        scheduler_event_counts = {
+            kind.value: count
+            for kind, count in session.scheduler.event_counts.items()
+        }
+        try:
+            components = session.scheduler.graph.components()
+            recursive_components = sum(
+                session.scheduler.graph.is_recursive(component)
+                for component in components
+            )
+        except RuntimeError:
+            components = ()
+            recursive_components = 0
+        return {
+            "phase": phase,
+            "source_module_count": len(sources),
+            "translated_module_count": len(modules),
+            "module_roots": sorted(modules),
+            "callable_body_root_count": (
+                len(session.callable_roots) if include_callable_bodies else 0
+            ),
+            "root_policy": (
+                "all_modules_and_callable_bodies"
+                if include_callable_bodies else "all_modules"
+            ),
+            "root_demand_count": scheduler_event_counts.get("root_demand", 0),
+            "invocation_context_counts": session.invocation_context_counts(),
+            "invocation_admission_counts": (
+                session.invocation_admission_counts()
+            ),
+            "deferred_materialization_counts": (
+                session.deferred_materialization_counts()
+            ),
+            "resolved_fact_count": len(snapshot.resolved_facts),
+            "fact_family_counts": dict(sorted(family_counts.items())),
+            "demand_node_count": len(session.scheduler.graph.nodes),
+            "scc_count": len(components),
+            "recursive_scc_count": recursive_components,
+            "topology_generation": (
+                session.scheduler.graph.topology_generation
+            ),
+            "production_event_count": sum(scheduler_event_counts.values()),
+            "scheduler_event_counts": dict(sorted(
+                scheduler_event_counts.items()
+            )),
+            "unique_production_count": len(production_counts),
+            "repeated_production_count": sum(
+                count - 1
+                for count in production_counts.values()
+                if count > 1
+            ),
+            "module_export_summary_count": family_counts.get(
+                "ModuleExportSummary", 0
+            ),
+            "module_semantic_summary_count": family_counts.get(
+                "ModuleSemanticSummary", 0
+            ),
+            "summary_cache_hit_count": session.scheduler.summary_cache_hits,
+            "knowledge_commit_counts": session.store.commit_counts,
+            "translation_seconds": translation_seconds,
+            "analysis_seconds": time.perf_counter() - analysis_started,
+            "total_provider_seconds": time.perf_counter() - started,
+            "trace_events_enabled": record_events,
+            "peak_rss_bytes": (
+                resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                * (1024 if sys.platform.startswith("linux") else 1)
+            ),
+        }
+
+    def sample_progress() -> None:
+        assert progress is not None
+        while not stop_sampling.wait(5.0):
+            try:
+                progress(current_evidence(phase="analysis"))
+            except Exception:
+                continue
+
+    sampler = None
+    if progress is not None:
+        progress(current_evidence(phase="session_opened"))
+        sampler = threading.Thread(target=sample_progress, daemon=True)
+        sampler.start()
+    try:
+        forward = session.run_analysis_roots(
+            include_callable_bodies=include_callable_bodies
+        )
+    except Exception as exc:
+        evidence = current_evidence(phase="error")
+        if progress is not None:
+            progress(evidence)
+        raise PyCGCaseExecutionError(
+            f"{type(exc).__name__}: {exc}", evidence
+        ) from exc
+    finally:
+        stop_sampling.set()
+        if sampler is not None:
+            sampler.join(timeout=1.0)
     analysis_seconds = time.perf_counter() - analysis_started
     edges = {
         (
@@ -711,64 +849,15 @@ def successor_archway_call_edge_result(
         if edge.caller is not None or edge.caller_module is not None
     }
 
-    snapshot = session.store.snapshot()
-    family_counts: dict[str, int] = {}
-    for address in snapshot.resolved_facts:
-        family_counts[address.family] = family_counts.get(address.family, 0) + 1
-    production_counts = session.scheduler.production_counts
-    scheduler_event_counts = {
-        kind.value: count
-        for kind, count in session.scheduler.event_counts.items()
-    }
-    components = session.scheduler.graph.components()
-    recursive_components = sum(
-        session.scheduler.graph.is_recursive(component)
-        for component in components
-    )
-    evidence = {
-        "source_module_count": len(sources),
-        "translated_module_count": len(modules),
-        "module_roots": sorted(modules),
-        "callable_body_root_count": (
-            len(session.callable_roots) if include_callable_bodies else 0
-        ),
-        "root_policy": (
-            "all_modules_and_callable_bodies"
-            if include_callable_bodies else "all_modules"
-        ),
+    evidence = current_evidence(phase="complete")
+    evidence.update({
         "root_demand_count": len(forward.roots),
-        "invocation_context_counts": session.invocation_context_counts(),
-        "invocation_admission_counts": session.invocation_admission_counts(),
-        "deferred_materialization_counts": (
-            session.deferred_materialization_counts()
-        ),
-        "resolved_fact_count": len(snapshot.resolved_facts),
-        "fact_family_counts": dict(sorted(family_counts.items())),
-        "demand_node_count": len(session.scheduler.graph.nodes),
-        "scc_count": len(components),
-        "recursive_scc_count": recursive_components,
-        "topology_generation": session.scheduler.graph.topology_generation,
-        "production_event_count": sum(scheduler_event_counts.values()),
         "retained_production_event_count": len(forward.events),
-        "scheduler_event_counts": dict(sorted(scheduler_event_counts.items())),
-        "unique_production_count": len(production_counts),
-        "repeated_production_count": sum(
-            count - 1 for count in production_counts.values() if count > 1
-        ),
         "knowledge_delta_count": len(forward.knowledge_deltas),
-        "module_export_summary_count": family_counts.get("ModuleExportSummary", 0),
-        "module_semantic_summary_count": family_counts.get("ModuleSemanticSummary", 0),
-        "summary_cache_hit_count": session.scheduler.summary_cache_hits,
-        "knowledge_commit_counts": session.store.commit_counts,
-        "translation_seconds": translation_seconds,
         "analysis_seconds": analysis_seconds,
-        "total_provider_seconds": time.perf_counter() - started,
-        "trace_events_enabled": record_events,
-        "peak_rss_bytes": (
-            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-            * (1024 if sys.platform.startswith("linux") else 1)
-        ),
-    }
+    })
+    if progress is not None:
+        progress(evidence)
     return SuccessorEdgeResult(
         edges=frozenset(_inline_synthetic_frame_edges(edges)),
         root_demands=len(forward.roots),
