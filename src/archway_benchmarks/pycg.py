@@ -684,7 +684,10 @@ def successor_archway_call_edge_result(
     )
     topology_before = session.scheduler.graph.topology_generation
     analysis_started = time.perf_counter()
-    forward = session.run_module_roots()
+    include_callable_bodies = case.suite == "macro"
+    forward = session.run_analysis_roots(
+        include_callable_bodies=include_callable_bodies
+    )
     analysis_seconds = time.perf_counter() - analysis_started
     edges = {
         (
@@ -725,6 +728,13 @@ def successor_archway_call_edge_result(
         "source_module_count": len(sources),
         "translated_module_count": len(modules),
         "module_roots": sorted(modules),
+        "callable_body_root_count": (
+            len(session.callable_roots) if include_callable_bodies else 0
+        ),
+        "root_policy": (
+            "all_modules_and_callable_bodies"
+            if include_callable_bodies else "all_modules"
+        ),
         "root_demand_count": len(forward.roots),
         "resolved_fact_count": len(snapshot.resolved_facts),
         "fact_family_counts": dict(sorted(family_counts.items())),
