@@ -738,6 +738,7 @@ def successor_archway_call_edge_result(
         ),
         "root_demand_count": len(forward.roots),
         "invocation_context_counts": session.invocation_context_counts(),
+        "invocation_admission_counts": session.invocation_admission_counts(),
         "deferred_materialization_counts": (
             session.deferred_materialization_counts()
         ),
