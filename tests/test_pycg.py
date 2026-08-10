@@ -13,6 +13,7 @@ from archway_benchmarks.pycg import (
     _load_case_sources,
     _module_name_for_path,
     _successor_pycg_target_name,
+    _write_json_artifact,
     EdgeScore,
     SuccessorEdgeResult,
     expected_edges_from_callgraph,
@@ -23,6 +24,14 @@ from archway_benchmarks.pycg import (
     score_edges,
     successor_archway_call_edge_result,
 )
+
+
+def test_write_json_artifact_creates_missing_storage_namespace(tmp_path: Path) -> None:
+    output = tmp_path / "external-store" / "runs" / "result.json"
+
+    _write_json_artifact(output, '{"status": "ok"}')
+
+    assert output.read_text() == '{"status": "ok"}\n'
 
 
 def test_successor_projects_semantic_container_method_names() -> None:

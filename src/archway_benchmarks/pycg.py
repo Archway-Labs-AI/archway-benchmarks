@@ -1467,7 +1467,7 @@ def main(argv: list[str] | None = None) -> int:
     payload = result.to_jsonable()
     text = json.dumps(payload, indent=2, sort_keys=True)
     if args.output:
-        Path(args.output).write_text(text + "\n", encoding="utf-8")
+        _write_json_artifact(Path(args.output), text)
     else:
         print(text)
     print(
@@ -1480,6 +1480,13 @@ def main(argv: list[str] | None = None) -> int:
         file=sys.stderr,
     )
     return 0
+
+
+def _write_json_artifact(path: Path, text: str) -> None:
+    """Persist an explicitly requested result, including its storage namespace."""
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":
