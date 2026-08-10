@@ -726,6 +726,7 @@ def successor_archway_call_edge_result(
             if include_callable_bodies else "all_modules"
         ),
         "root_demand_count": len(forward.roots),
+        "invocation_context_counts": session.invocation_context_counts(),
         "resolved_fact_count": len(snapshot.resolved_facts),
         "fact_family_counts": dict(sorted(family_counts.items())),
         "demand_node_count": len(session.scheduler.graph.nodes),
