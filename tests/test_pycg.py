@@ -13,6 +13,7 @@ from archway_benchmarks.pycg import (
     _load_case_sources,
     _module_name_for_path,
     EdgeScore,
+    SuccessorEdgeResult,
     expected_edges_from_callgraph,
     load_cases,
     load_macro_cases,
@@ -77,6 +78,10 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.root_demands == 1
     assert result.knowledge_deltas > 0
     assert result.topology_growth > 0
+    assert result.evidence["root_demand_count"] == 1
+    assert result.evidence["resolved_fact_count"] > 0
+    assert result.evidence["trace_events_enabled"] is False
+    assert result.evidence["peak_rss_bytes"] > 0
 
 
 def test_score_adjacency_lists_preserves_official_duplicate_recall_denominator():
@@ -314,8 +319,10 @@ def test_run_archway_pycg_uses_successor_provider_by_default(
     _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
 
     monkeypatch.setattr(
-        "archway_benchmarks.pycg.successor_archway_call_edges",
-        lambda *args, **kwargs: {("main", "main.f")},
+        "archway_benchmarks.pycg.successor_archway_call_edge_result",
+        lambda *args, **kwargs: SuccessorEdgeResult(
+            frozenset({("main", "main.f")}), 1, 0, 0, 0, 0
+        ),
     )
 
     result = run_archway_pycg(corpus_root=tmp_path, engine_root=tmp_path)

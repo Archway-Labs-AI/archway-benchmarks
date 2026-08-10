@@ -22,6 +22,7 @@ import argparse
 import json
 import multiprocessing
 import queue
+import resource
 import sys
 import time
 from dataclasses import dataclass, field
@@ -61,6 +62,7 @@ class SuccessorEdgeResult:
     production_events: int
     knowledge_deltas: int
     topology_growth: int
+    evidence: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -116,6 +118,7 @@ class PyCGCaseResult:
     predicted_edges: tuple[Edge, ...] = ()
     missing_edges: tuple[Edge, ...] = ()
     extra_edges: tuple[Edge, ...] = ()
+    analysis_evidence: dict[str, object] = field(default_factory=dict)
 
     def to_jsonable(self) -> dict:
         return {
@@ -129,6 +132,7 @@ class PyCGCaseResult:
             "predicted_edges": [list(edge) for edge in self.predicted_edges],
             "missing_edges": [list(edge) for edge in self.missing_edges],
             "extra_edges": [list(edge) for edge in self.extra_edges],
+            "analysis_evidence": self.analysis_evidence,
         }
 
 
@@ -411,6 +415,7 @@ def run_archway_pycg(
     callable_root_activation: str = "off",
     case_timeout_seconds: float | None = None,
     edge_provider: EdgeProvider = "successor",
+    successor_record_events: bool = False,
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -432,7 +437,7 @@ def run_archway_pycg(
         expected = set(case.expected_edges)
         expected_total += case.expected_edge_occurrence_count
         try:
-            predicted = _archway_call_edges_with_timeout(
+            produced = _archway_call_edges_with_timeout(
                 case,
                 engine_root=engine_root,
                 include_diagnostic_name_hints=include_diagnostic_name_hints,
@@ -440,17 +445,26 @@ def run_archway_pycg(
                 callable_root_activation=callable_root_activation,
                 case_timeout_seconds=case_timeout_seconds,
                 edge_provider=edge_provider,
+                successor_record_events=successor_record_events,
             )
+            if isinstance(produced, SuccessorEdgeResult):
+                predicted = set(produced.edges)
+                analysis_evidence = produced.evidence
+            else:
+                predicted = produced
+                analysis_evidence = {}
             status = "ok"
             error = None
         except TimeoutError as exc:
             predicted = set()
             status = "timeout"
             error = str(exc)
+            analysis_evidence = {}
         except Exception as exc:
             predicted = set()
             status = "error"
             error = f"{type(exc).__name__}: {exc}"
+            analysis_evidence = {}
         score = score_adjacency_lists(case.expected, predicted)
         total = _add_scores(total, score)
         predicted_total += len(predicted)
@@ -467,6 +481,7 @@ def run_archway_pycg(
                 predicted_edges=tuple(sorted(predicted)),
                 missing_edges=tuple(sorted(expected - predicted)),
                 extra_edges=tuple(sorted(predicted - expected)),
+                analysis_evidence=analysis_evidence,
             )
         )
         print(
@@ -512,7 +527,8 @@ def _archway_call_edges_with_timeout(
     callable_root_activation: str,
     case_timeout_seconds: float | None,
     edge_provider: EdgeProvider,
-) -> set[Edge]:
+    successor_record_events: bool,
+) -> set[Edge] | SuccessorEdgeResult:
     if case_timeout_seconds is None:
         return _produce_archway_call_edges(
             case,
@@ -521,6 +537,7 @@ def _archway_call_edges_with_timeout(
             analysis_product=analysis_product,
             callable_root_activation=callable_root_activation,
             edge_provider=edge_provider,
+            successor_record_events=successor_record_events,
         )
     if case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -537,6 +554,7 @@ def _archway_call_edges_with_timeout(
             analysis_product,
             callable_root_activation,
             edge_provider,
+            successor_record_events,
         ),
     )
     process.start()
@@ -573,6 +591,7 @@ def _archway_call_edges_worker(
     analysis_product: str,
     callable_root_activation: str,
     edge_provider: EdgeProvider,
+    successor_record_events: bool,
 ) -> None:
     try:
         predicted = _produce_archway_call_edges(
@@ -582,6 +601,7 @@ def _archway_call_edges_worker(
             analysis_product=analysis_product,
             callable_root_activation=callable_root_activation,
             edge_provider=edge_provider,
+            successor_record_events=successor_record_events,
         )
     except Exception as exc:
         result_queue.put(("error", f"{type(exc).__name__}: {exc}"))
@@ -597,9 +617,14 @@ def _produce_archway_call_edges(
     analysis_product: str,
     callable_root_activation: str,
     edge_provider: EdgeProvider,
-) -> set[Edge]:
+    successor_record_events: bool,
+) -> set[Edge] | SuccessorEdgeResult:
     if edge_provider == "successor":
-        return successor_archway_call_edges(case, engine_root=engine_root)
+        return successor_archway_call_edge_result(
+            case,
+            engine_root=engine_root,
+            record_events=successor_record_events,
+        )
     if edge_provider == "coordinated":
         return coordinated_archway_call_edges(case, engine_root=engine_root)
     if edge_provider == "legacy":
@@ -629,6 +654,7 @@ def successor_archway_call_edge_result(
     case: PyCGCase,
     *,
     engine_root: Path,
+    record_events: bool = False,
 ) -> SuccessorEdgeResult:
     """Project one persistent diagram-only reduced-product program session."""
 
@@ -641,8 +667,11 @@ def successor_archway_call_edge_result(
     from sd_core.analysis.diagram_analysis import open_hybrid_program_session
     from sd_core.tooling.harness import ProgramResult
 
+    started = time.perf_counter()
     sources = _load_case_sources(case)
+    translation_started = time.perf_counter()
     program = ProgramResult.from_sources(sources)
+    translation_seconds = time.perf_counter() - translation_started
     modules = {
         name: translation.morphism
         for name, translation in program.modules.items()
@@ -651,10 +680,12 @@ def successor_archway_call_edge_result(
     session = open_hybrid_program_session(
         modules,
         entry_module,
-        record_events=False,
+        record_events=record_events,
     )
     topology_before = session.scheduler.graph.topology_generation
-    forward = session.run_forward()
+    analysis_started = time.perf_counter()
+    forward = session.run_module_roots()
+    analysis_seconds = time.perf_counter() - analysis_started
     edges = {
         (
             edge.caller.display_name
@@ -666,15 +697,69 @@ def successor_archway_call_edge_result(
         if edge.caller is not None or edge.caller_module is not None
     }
 
+    snapshot = session.store.snapshot()
+    family_counts: dict[str, int] = {}
+    for address in snapshot.resolved_facts:
+        family_counts[address.family] = family_counts.get(address.family, 0) + 1
+    production_counts: dict[str, int] = {}
+    summary_cache_hits = 0
+    for event in forward.events:
+        if event.key is not None and event.kind.value == "production_enter":
+            production_counts[event.key.id] = production_counts.get(event.key.id, 0) + 1
+        if event.kind.value == "cache_hit":
+            address = event.address or (event.key.address if event.key else None)
+            if address is not None and address.family in {
+                "ModuleExportSummary", "ModuleSemanticSummary",
+            }:
+                summary_cache_hits += 1
+    components = session.scheduler.graph.components()
+    recursive_components = sum(
+        1
+        for component in components
+        if len(component.members) > 1 or any(
+            member in session.scheduler.graph.node(member).prerequisites
+            for member in component.members
+        )
+    )
+    evidence = {
+        "source_module_count": len(sources),
+        "translated_module_count": len(modules),
+        "module_roots": sorted(modules),
+        "root_demand_count": len(forward.roots),
+        "resolved_fact_count": len(snapshot.resolved_facts),
+        "fact_family_counts": dict(sorted(family_counts.items())),
+        "demand_node_count": len(session.scheduler.graph.nodes),
+        "scc_count": len(components),
+        "recursive_scc_count": recursive_components,
+        "topology_generation": session.scheduler.graph.topology_generation,
+        "production_event_count": len(forward.events),
+        "unique_production_count": len(production_counts),
+        "repeated_production_count": sum(
+            count - 1 for count in production_counts.values() if count > 1
+        ),
+        "knowledge_delta_count": len(forward.knowledge_deltas),
+        "module_export_summary_count": family_counts.get("ModuleExportSummary", 0),
+        "module_semantic_summary_count": family_counts.get("ModuleSemanticSummary", 0),
+        "summary_cache_hit_count": summary_cache_hits,
+        "translation_seconds": translation_seconds,
+        "analysis_seconds": analysis_seconds,
+        "total_provider_seconds": time.perf_counter() - started,
+        "trace_events_enabled": record_events,
+        "peak_rss_bytes": (
+            resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            * (1024 if sys.platform.startswith("linux") else 1)
+        ),
+    }
     return SuccessorEdgeResult(
         edges=frozenset(_inline_synthetic_frame_edges(edges)),
-        root_demands=1,
-        cache_hits=int(forward.cache_hit),
+        root_demands=len(forward.roots),
+        cache_hits=forward.cache_hits,
         production_events=len(forward.events),
         knowledge_deltas=len(forward.knowledge_deltas),
         topology_growth=(
             session.scheduler.graph.topology_generation - topology_before
         ),
+        evidence=evidence,
     )
 
 
@@ -1135,6 +1220,14 @@ def main(argv: list[str] | None = None) -> int:
             "must not be treated as claim-grade semantic call targets."
         ),
     )
+    parser.add_argument(
+        "--successor-record-events",
+        action="store_true",
+        help=(
+            "Retain detailed successor scheduler/transfer events. Facts and "
+            "knowledge deltas remain measured when this is disabled."
+        ),
+    )
     args = parser.parse_args(argv)
 
     result = run_archway_pycg(
@@ -1147,6 +1240,7 @@ def main(argv: list[str] | None = None) -> int:
         callable_root_activation=args.callable_root_activation,
         case_timeout_seconds=args.case_timeout_seconds,
         edge_provider=args.edge_provider,
+        successor_record_events=args.successor_record_events,
     )
     payload = result.to_jsonable()
     text = json.dumps(payload, indent=2, sort_keys=True)
