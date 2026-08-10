@@ -12,6 +12,7 @@ from archway_benchmarks.pycg import (
     _inline_synthetic_frame_edges,
     _load_case_sources,
     _module_name_for_path,
+    _successor_pycg_target_name,
     EdgeScore,
     SuccessorEdgeResult,
     expected_edges_from_callgraph,
@@ -22,6 +23,15 @@ from archway_benchmarks.pycg import (
     score_edges,
     successor_archway_call_edge_result,
 )
+
+
+def test_successor_projects_semantic_container_method_names() -> None:
+    assert _successor_pycg_target_name(
+        "<builtin>.list.append"
+    ) == "<**PyList**>.append"
+    assert _successor_pycg_target_name(
+        "<builtin>.set.add"
+    ) == "<**PySet**>.add"
 
 
 def _write_case(root: Path, category: str, name: str, callgraph: dict) -> Path:

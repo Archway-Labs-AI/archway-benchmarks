@@ -1062,6 +1062,8 @@ def _successor_pycg_target_name(name: str) -> str:
     for semantic, pycg in (
         ("<builtin>.str.", "<**PyStr**>."),
         ("<builtin>.dict.", "<**PyDict**>."),
+        ("<builtin>.list.", "<**PyList**>."),
+        ("<builtin>.set.", "<**PySet**>."),
     ):
         if name.startswith(semantic):
             return pycg + name.removeprefix(semantic)
