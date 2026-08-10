@@ -704,17 +704,11 @@ def successor_archway_call_edge_result(
     family_counts: dict[str, int] = {}
     for address in snapshot.resolved_facts:
         family_counts[address.family] = family_counts.get(address.family, 0) + 1
-    production_counts: dict[str, int] = {}
-    summary_cache_hits = 0
-    for event in forward.events:
-        if event.key is not None and event.kind.value == "production_enter":
-            production_counts[event.key.id] = production_counts.get(event.key.id, 0) + 1
-        if event.kind.value == "cache_hit":
-            address = event.address or (event.key.address if event.key else None)
-            if address is not None and address.family in {
-                "ModuleExportSummary", "ModuleSemanticSummary",
-            }:
-                summary_cache_hits += 1
+    production_counts = session.scheduler.production_counts
+    scheduler_event_counts = {
+        kind.value: count
+        for kind, count in session.scheduler.event_counts.items()
+    }
     components = session.scheduler.graph.components()
     recursive_components = sum(
         1
@@ -742,7 +736,9 @@ def successor_archway_call_edge_result(
         "scc_count": len(components),
         "recursive_scc_count": recursive_components,
         "topology_generation": session.scheduler.graph.topology_generation,
-        "production_event_count": len(forward.events),
+        "production_event_count": sum(scheduler_event_counts.values()),
+        "retained_production_event_count": len(forward.events),
+        "scheduler_event_counts": dict(sorted(scheduler_event_counts.items())),
         "unique_production_count": len(production_counts),
         "repeated_production_count": sum(
             count - 1 for count in production_counts.values() if count > 1
@@ -750,7 +746,8 @@ def successor_archway_call_edge_result(
         "knowledge_delta_count": len(forward.knowledge_deltas),
         "module_export_summary_count": family_counts.get("ModuleExportSummary", 0),
         "module_semantic_summary_count": family_counts.get("ModuleSemanticSummary", 0),
-        "summary_cache_hit_count": summary_cache_hits,
+        "summary_cache_hit_count": session.scheduler.summary_cache_hits,
+        "knowledge_commit_counts": session.store.commit_counts,
         "translation_seconds": translation_seconds,
         "analysis_seconds": analysis_seconds,
         "total_provider_seconds": time.perf_counter() - started,
