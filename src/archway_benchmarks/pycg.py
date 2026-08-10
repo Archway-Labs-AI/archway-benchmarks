@@ -922,6 +922,21 @@ def successor_archway_call_edge_result(
             "topology_generation": (
                 session.scheduler.graph.topology_generation
             ),
+            "scc_recompute_count": (
+                session.scheduler.graph.component_recompute_count
+            ),
+            "scc_recompute_seconds": (
+                session.scheduler.graph.component_recompute_seconds
+            ),
+            "scc_recompute_node_visits": (
+                session.scheduler.graph.component_node_visits
+            ),
+            "scc_recompute_edge_visits": (
+                session.scheduler.graph.component_edge_visits
+            ),
+            "scc_incremental_refresh_count": (
+                session.scheduler.graph.component_incremental_refresh_count
+            ),
             "production_event_count": sum(scheduler_event_counts.values()),
             "scheduler_event_counts": dict(sorted(
                 scheduler_event_counts.items()
