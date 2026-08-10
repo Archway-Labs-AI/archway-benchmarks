@@ -737,11 +737,20 @@ def successor_archway_call_edge_result(
         for name, address in session.module_roots.items()
     }
     root_labels.update({
-        address.id: f"callable:{name}"
+        address.id: "callable:" + (
+            session.callable_boundaries_by_body[body_id].display_name
+            if body_id in session.callable_boundaries_by_body
+            else name
+        )
         for name, address in session.callable_roots.items()
+        if (body_id := getattr(address.subject, "body_morphism_id", None))
     })
     body_labels = {
-        body_id: name
+        body_id: (
+            session.callable_boundaries_by_body[body_id].display_name
+            if body_id in session.callable_boundaries_by_body
+            else name
+        )
         for name, address in session.callable_roots.items()
         if (body_id := getattr(address.subject, "body_morphism_id", None))
     }
@@ -759,8 +768,14 @@ def successor_archway_call_edge_result(
                 "address_id": key.address.id,
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
-                "callable": body_labels.get(
-                    getattr(key.address.subject, "body_morphism_id", None)
+                "callable": (
+                    owner.display_name
+                    if (owner := session.callable_owners_by_morphism.get(
+                        getattr(key.address.subject, "morphism_id", "")
+                    )) is not None
+                    else body_labels.get(getattr(
+                        key.address.subject, "body_morphism_id", None
+                    ))
                 ),
                 "context": key.address.context,
                 "provider_id": key.provider_id,
@@ -802,6 +817,43 @@ def successor_archway_call_edge_result(
             (len(component.members) for component in components),
             reverse=True,
         )
+        recursive_component_details = [
+            {
+                "component_id": component.id,
+                "size": len(component.members),
+                "members": [
+                    {
+                        "family": key.address.family,
+                        "address_id": key.address.id,
+                        "morphism_id": getattr(
+                            key.address.subject, "morphism_id", None
+                        ),
+                        "callable": (
+                            owner.display_name
+                            if (owner := session.callable_owners_by_morphism.get(
+                                getattr(
+                                    key.address.subject, "morphism_id", ""
+                                )
+                            )) is not None
+                            else body_labels.get(getattr(
+                                key.address.subject,
+                                "body_morphism_id",
+                                None,
+                            ))
+                        ),
+                        "executions": production_counts.get(key, 0),
+                    }
+                    for key in component.members
+                ],
+            }
+            for component in sorted(
+                (
+                    component for component in components
+                    if session.scheduler.graph.is_recursive(component)
+                ),
+                key=lambda item: (-len(item.members), item.id),
+            )[:5]
+        ]
         production_execution_count = sum(production_counts.values())
         repeated_production_count = sum(
             count - 1
@@ -862,6 +914,7 @@ def successor_archway_call_edge_result(
             "demand_node_count": len(session.scheduler.graph.nodes),
             "scc_count": len(components),
             "recursive_scc_count": recursive_components,
+            "recursive_scc_details": recursive_component_details,
             "largest_scc_size": component_sizes[0] if component_sizes else 0,
             "scc_size_histogram": dict(sorted(Counter(
                 component_sizes
