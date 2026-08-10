@@ -660,14 +660,14 @@ def successor_archway_call_edge_result(
             edge.caller.display_name
             if edge.caller is not None
             else edge.caller_module,
-            edge.target.display_name,
+            _successor_pycg_target_name(edge.target.display_name),
         )
         for edge in session.semantic_call_edges()
         if edge.caller is not None or edge.caller_module is not None
     }
 
     return SuccessorEdgeResult(
-        edges=frozenset(edges),
+        edges=frozenset(_inline_synthetic_frame_edges(edges)),
         root_demands=1,
         cache_hits=int(forward.cache_hit),
         production_events=len(forward.events),
@@ -960,7 +960,20 @@ def _is_synthetic_implementation_target(name: str) -> bool:
         "<builtin-method>.set.add",
         "<builtin-method>.dict.__setitem__",
         "<**PyDict**>.update",
+        "<builtin>.staticmethod",
     }
+
+
+def _successor_pycg_target_name(name: str) -> str:
+    """Translate semantic boundary names into PyCG's display vocabulary."""
+
+    for semantic, pycg in (
+        ("<builtin>.str.", "<**PyStr**>."),
+        ("<builtin>.dict.", "<**PyDict**>."),
+    ):
+        if name.startswith(semantic):
+            return pycg + name.removeprefix(semantic)
+    return name
 
 
 def _callee_display_name(
