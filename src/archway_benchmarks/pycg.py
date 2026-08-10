@@ -748,6 +748,20 @@ def successor_archway_call_edge_result(
                 family_counts.get(address.family, 0) + 1
             )
         production_counts = session.scheduler.production_counts
+        hottest_productions = [
+            {
+                "address_id": key.address.id,
+                "family": key.address.family,
+                "subject": key.address.subject.canonical_data(),
+                "context": key.address.context,
+                "provider_id": key.provider_id,
+                "executions": executions,
+            }
+            for key, executions in sorted(
+                production_counts.items(),
+                key=lambda item: (-item[1], item[0].id),
+            )[:20]
+        ]
         hottest_transfers = sorted(
             (
                 {
@@ -826,6 +840,7 @@ def successor_archway_call_edge_result(
                 for count in production_counts.values()
                 if count > 1
             ),
+            "hottest_productions": hottest_productions,
             "hottest_transfers": hottest_transfers,
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
