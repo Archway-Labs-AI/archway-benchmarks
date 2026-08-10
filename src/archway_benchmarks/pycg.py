@@ -731,6 +731,14 @@ def successor_archway_call_edge_result(
     analysis_started = time.perf_counter()
     include_callable_bodies = case.suite == "macro"
     stop_sampling = threading.Event()
+    root_labels = {
+        address.id: f"module:{name}"
+        for name, address in session.module_roots.items()
+    }
+    root_labels.update({
+        address.id: f"callable:{name}"
+        for name, address in session.callable_roots.items()
+    })
 
     def current_evidence(*, phase: str) -> dict[str, object]:
         snapshot = session.store.snapshot()
@@ -744,6 +752,8 @@ def successor_archway_call_edge_result(
             kind.value: count
             for kind, count in session.scheduler.event_counts.items()
         }
+        query_progress = session.scheduler.query_progress
+        completed_root_seconds = query_progress["completed_root_seconds"]
         try:
             components = session.scheduler.graph.components()
             recursive_components = sum(
@@ -766,6 +776,19 @@ def successor_archway_call_edge_result(
                 if include_callable_bodies else "all_modules"
             ),
             "root_demand_count": scheduler_event_counts.get("root_demand", 0),
+            "active_root": (
+                root_labels.get(query_progress["active_root_id"],
+                                query_progress["active_root_id"])
+            ),
+            "active_root_seconds": query_progress["active_root_seconds"],
+            "completed_root_count": query_progress["completed_root_count"],
+            "completed_root_seconds": [
+                {
+                    "root": root_labels.get(root_id, root_id),
+                    "seconds": seconds,
+                }
+                for root_id, seconds in completed_root_seconds
+            ],
             "invocation_context_counts": session.invocation_context_counts(),
             "invocation_admission_counts": (
                 session.invocation_admission_counts()
