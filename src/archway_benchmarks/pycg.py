@@ -630,7 +630,7 @@ def successor_archway_call_edge_result(
     *,
     engine_root: Path,
 ) -> SuccessorEdgeResult:
-    """Run the narrow Stage 5 vertical without a source-derived index."""
+    """Project one persistent diagram-only reduced-product program session."""
 
     if not engine_root.exists():
         raise FileNotFoundError(f"engine root not found: {engine_root}")
@@ -638,82 +638,43 @@ def successor_archway_call_edge_result(
     if engine_text not in sys.path:
         sys.path.insert(0, engine_text)
 
-    from sd_core.analysis.base import core_access as ca
-    from sd_core.analysis.diagram_analysis import DiagramCatalog
-    from sd_core.analysis.diagram_analysis.callable_knowledge import (
-        InvocationTarget,
-    )
-    from sd_core.analysis.diagram_analysis.callable_vertical import (
-        open_callable_target_session,
-    )
-    from sd_core.analysis.diagram_analysis.functor import diagram_morphism_id
-    from sd_core.core import StructuralKind
+    from sd_core.analysis.diagram_analysis import open_hybrid_program_session
     from sd_core.tooling.harness import ProgramResult
 
     sources = _load_case_sources(case)
-    if len(sources) != 1:
-        raise ValueError(
-            "initial successor PyCG adapter supports one translated module"
-        )
-    module_name, _source = next(iter(sources.items()))
-    morphism = ProgramResult.from_sources(sources).modules[module_name].morphism
-    catalog = DiagramCatalog(morphism)
-    session = open_callable_target_session(morphism)
-    query = session.demand_all_targets()
-
-    definitions = {
-        diagram_morphism_id(box): box
-        for box in catalog.atomic_boxes(StructuralKind.ABSTRACT)
+    program = ProgramResult.from_sources(sources)
+    modules = {
+        name: translation.morphism
+        for name, translation in program.modules.items()
     }
-    lambda_ids = tuple(sorted(
+    entry_module = "main" if "main" in modules else min(modules)
+    session = open_hybrid_program_session(
+        modules,
+        entry_module,
+        record_events=False,
+    )
+    topology_before = session.scheduler.graph.topology_generation
+    forward = session.run_forward()
+    edges = {
         (
-            definition_id for definition_id, box in definitions.items()
-            if ca.box_tag(box).detail == "<lambda>"
-        ),
-        key=lambda definition_id: _successor_definition_sort_key(
-            catalog, definition_id
-        ),
-    ))
-    edges: set[Edge] = set()
-    for run in query.runs:
-        for target in run.result.value:
-            if not isinstance(target, InvocationTarget):
-                continue
-            definition_id = target.callable_value.definition_morphism_id
-            definition = definitions.get(definition_id)
-            if definition is None:
-                continue
-            anchor = catalog.source_anchor(definition_id)
-            projected_module = (
-                ".".join(anchor.module.parts) if anchor.module else module_name
-            )
-            detail = ca.box_tag(definition).detail
-            if detail == "<lambda>":
-                local_name = f"<lambda{lambda_ids.index(definition_id) + 1}>"
-            else:
-                local_name = detail
-            edges.add((module_name, f"{projected_module}.{local_name}"))
+            edge.caller.display_name
+            if edge.caller is not None
+            else edge.caller_module,
+            edge.target.display_name,
+        )
+        for edge in session.semantic_call_edges()
+        if edge.caller is not None or edge.caller_module is not None
+    }
 
     return SuccessorEdgeResult(
         edges=frozenset(edges),
-        root_demands=len(query.roots),
-        cache_hits=query.cache_hits,
-        production_events=len(query.events),
-        knowledge_deltas=len(query.knowledge_deltas),
+        root_demands=1,
+        cache_hits=int(forward.cache_hit),
+        production_events=len(forward.events),
+        knowledge_deltas=len(forward.knowledge_deltas),
         topology_growth=(
-            query.topology_generation_after - query.topology_generation_before
+            session.scheduler.graph.topology_generation - topology_before
         ),
-    )
-
-
-def _successor_definition_sort_key(catalog, definition_id: str):
-    anchor = catalog.source_anchor(definition_id)
-    position = anchor.position
-    return (
-        tuple(anchor.module.parts) if anchor.module else (),
-        position.row if position else -1,
-        position.col if position else -1,
-        definition_id,
     )
 
 
