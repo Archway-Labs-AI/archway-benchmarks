@@ -264,6 +264,40 @@ def test_run_archway_pycg_logs_case_progress_to_stderr(
     assert "predicted_edges=1" in stderr
 
 
+def test_run_archway_pycg_selects_named_cases(
+    tmp_path: Path,
+    monkeypatch,
+):
+    _write_case(tmp_path, "direct_calls", "first", {"main": ["main.f"]})
+    _write_case(tmp_path, "direct_calls", "second", {"main": ["main.f"]})
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.archway_call_edges",
+        lambda *args, **kwargs: {("main", "main.f")},
+    )
+
+    result = run_archway_pycg(
+        corpus_root=tmp_path,
+        engine_root=tmp_path,
+        edge_provider="legacy",
+        case_names=("direct_calls/second",),
+    )
+
+    assert [case.suite_path for case in result.cases] == [
+        "direct_calls/second"
+    ]
+
+
+def test_run_archway_pycg_rejects_unknown_named_case(tmp_path: Path) -> None:
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+
+    with pytest.raises(ValueError, match="unknown PyCG cases"):
+        run_archway_pycg(
+            corpus_root=tmp_path,
+            engine_root=tmp_path,
+            case_names=("missing",),
+        )
+
+
 def test_run_archway_pycg_forwards_callable_root_activation(
     tmp_path: Path,
     monkeypatch,

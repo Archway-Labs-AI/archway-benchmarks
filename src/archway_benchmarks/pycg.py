@@ -410,6 +410,7 @@ def run_archway_pycg(
     engine_root: Path,
     suite: str = "micro",
     limit: int | None = None,
+    case_names: tuple[str, ...] = (),
     include_diagnostic_name_hints: bool = False,
     analysis_product: str = "standalone",
     callable_root_activation: str = "off",
@@ -419,7 +420,17 @@ def run_archway_pycg(
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
+    if case_names and limit is not None:
+        raise ValueError("--case and --limit are mutually exclusive")
     cases = load_cases(corpus_root, suite=suite, limit=limit)
+    if case_names:
+        requested = set(case_names)
+        cases = tuple(
+            case for case in cases if case.suite_path in requested
+        )
+        missing = requested - {case.suite_path for case in cases}
+        if missing:
+            raise ValueError(f"unknown PyCG cases: {sorted(missing)}")
     started = time.perf_counter()
     results: list[PyCGCaseResult] = []
     total = EdgeScore(0, 0, 0)
@@ -1182,6 +1193,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine-root", required=True)
     parser.add_argument("--suite", choices=("micro", "macro"), default="micro")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument(
+        "--case",
+        action="append",
+        default=[],
+        help="Run one named case. Repeat to select multiple cases.",
+    )
     parser.add_argument("--output", default=None)
     parser.add_argument(
         "--case-timeout-seconds",
@@ -1244,6 +1261,7 @@ def main(argv: list[str] | None = None) -> int:
         engine_root=Path(args.engine_root),
         suite=args.suite,
         limit=args.limit,
+        case_names=tuple(args.case),
         include_diagnostic_name_hints=args.include_diagnostic_name_hints,
         analysis_product=args.analysis_product,
         callable_root_activation=args.callable_root_activation,
