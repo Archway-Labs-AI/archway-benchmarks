@@ -26,6 +26,7 @@ import resource
 import sys
 import threading
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Iterable, Literal, Mapping
@@ -797,11 +798,34 @@ def successor_archway_call_edge_result(
         except RuntimeError:
             components = ()
             recursive_components = 0
+        component_sizes = sorted(
+            (len(component.members) for component in components),
+            reverse=True,
+        )
+        production_execution_count = sum(production_counts.values())
+        repeated_production_count = sum(
+            count - 1
+            for count in production_counts.values()
+            if count > 1
+        )
+        module_names = sorted(modules)
+        callable_root_names = sorted(session.callable_roots)
         return {
             "phase": phase,
             "source_module_count": len(sources),
             "translated_module_count": len(modules),
-            "module_roots": sorted(modules),
+            "module_roots": module_names,
+            "module_closure": {
+                "policy": "translated-corpus-program",
+                "count": len(module_names),
+                "modules": module_names,
+            },
+            "root_inventory": {
+                "module_count": len(session.module_roots),
+                "module_names": sorted(session.module_roots),
+                "callable_body_count": len(callable_root_names),
+                "callable_body_names": callable_root_names,
+            },
             "callable_body_root_count": (
                 len(session.callable_roots) if include_callable_bodies else 0
             ),
@@ -838,6 +862,10 @@ def successor_archway_call_edge_result(
             "demand_node_count": len(session.scheduler.graph.nodes),
             "scc_count": len(components),
             "recursive_scc_count": recursive_components,
+            "largest_scc_size": component_sizes[0] if component_sizes else 0,
+            "scc_size_histogram": dict(sorted(Counter(
+                component_sizes
+            ).items())),
             "topology_generation": (
                 session.scheduler.graph.topology_generation
             ),
@@ -846,10 +874,11 @@ def successor_archway_call_edge_result(
                 scheduler_event_counts.items()
             )),
             "unique_production_count": len(production_counts),
-            "repeated_production_count": sum(
-                count - 1
-                for count in production_counts.values()
-                if count > 1
+            "production_execution_count": production_execution_count,
+            "repeated_production_count": repeated_production_count,
+            "repeated_production_ratio": (
+                repeated_production_count / production_execution_count
+                if production_execution_count else 0.0
             ),
             "hottest_productions": hottest_productions,
             "hottest_transfers": hottest_transfers,
@@ -860,6 +889,20 @@ def successor_archway_call_edge_result(
                 "ModuleSemanticSummary", 0
             ),
             "summary_cache_hit_count": session.scheduler.summary_cache_hits,
+            "summary_reuse": {
+                "cache_hit_count": session.scheduler.summary_cache_hits,
+                "module_export_summary_count": family_counts.get(
+                    "ModuleExportSummary", 0
+                ),
+                "module_semantic_summary_count": family_counts.get(
+                    "ModuleSemanticSummary", 0
+                ),
+                "registered_invocation_summary_count": (
+                    session.invocation_context_counts().get(
+                        "summary_registered", 0
+                    )
+                ),
+            },
             "knowledge_commit_counts": session.store.commit_counts,
             "translation_seconds": translation_seconds,
             "analysis_seconds": time.perf_counter() - analysis_started,

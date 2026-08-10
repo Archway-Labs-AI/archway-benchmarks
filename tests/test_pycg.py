@@ -91,6 +91,17 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.evidence["root_demand_count"] == 1
     assert result.evidence["resolved_fact_count"] > 0
     assert "invocation_input_growth_counts" in result.evidence
+    assert result.evidence["module_closure"] == {
+        "policy": "translated-corpus-program",
+        "count": 1,
+        "modules": ["main"],
+    }
+    assert result.evidence["root_inventory"]["module_names"] == ["main"]
+    assert result.evidence["production_execution_count"] >= (
+        result.evidence["unique_production_count"]
+    )
+    assert result.evidence["largest_scc_size"] >= 1
+    assert "summary_reuse" in result.evidence
     assert result.evidence["trace_events_enabled"] is False
     assert result.evidence["peak_rss_bytes"] > 0
 
