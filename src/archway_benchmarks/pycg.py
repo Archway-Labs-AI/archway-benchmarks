@@ -711,12 +711,8 @@ def successor_archway_call_edge_result(
     }
     components = session.scheduler.graph.components()
     recursive_components = sum(
-        1
+        session.scheduler.graph.is_recursive(component)
         for component in components
-        if len(component.members) > 1 or any(
-            member in session.scheduler.graph.node(member).prerequisites
-            for member in component.members
-        )
     )
     evidence = {
         "source_module_count": len(sources),
