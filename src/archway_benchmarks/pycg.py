@@ -835,6 +835,9 @@ def successor_archway_call_edge_result(
             (len(component.members) for component in components),
             reverse=True,
         )
+        nodes_by_key = {
+            node.key: node for node in session.scheduler.graph.nodes
+        }
         recursive_component_details = [
             {
                 "component_id": component.id,
@@ -843,6 +846,21 @@ def successor_archway_call_edge_result(
                     {
                         "family": key.address.family,
                         "address_id": key.address.id,
+                        "provider_id": key.provider_id,
+                        "context": key.address.context,
+                        "projection": key.address.projection,
+                        "prerequisites": [
+                            {
+                                "family": prerequisite.family,
+                                "address_id": prerequisite.id,
+                                "context": prerequisite.context,
+                                "projection": prerequisite.projection,
+                            }
+                            for prerequisite in sorted(
+                                nodes_by_key[key].prerequisites,
+                                key=lambda item: item.id,
+                            )
+                        ],
                         "morphism_id": getattr(
                             key.address.subject, "morphism_id", None
                         ),
