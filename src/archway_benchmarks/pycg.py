@@ -1177,10 +1177,25 @@ def successor_archway_call_edge_result(
         """Return a bounded live sample without traversing retained facts."""
 
         production_counts = session.scheduler.production_counts
+        production_seconds = session.scheduler.production_seconds
         production_execution_count = sum(production_counts.values())
         repeated_production_count = sum(
             count - 1 for count in production_counts.values() if count > 1
         )
+        executions_by_family: Counter[str] = Counter()
+        repeats_by_family: Counter[str] = Counter()
+        seconds_by_family: Counter[str] = Counter()
+        executions_by_provider: Counter[str] = Counter()
+        for key, count in production_counts.items():
+            executions_by_family[key.address.family] += count
+            repeats_by_family[key.address.family] += max(0, count - 1)
+            executions_by_provider[key.provider_id] += count
+        for key, seconds in production_seconds.items():
+            seconds_by_family[key.address.family] += seconds
+
+        def top_counts(values: Counter[str]) -> dict[str, int | float]:
+            return dict(values.most_common(20))
+
         evidence: dict[str, object] = {
             "phase": "analysis",
             "evidence_detail": "live-aggregate",
@@ -1195,6 +1210,14 @@ def successor_archway_call_edge_result(
             "repeated_production_ratio": (
                 repeated_production_count / production_execution_count
                 if production_execution_count else 0.0
+            ),
+            "production_executions_by_family": top_counts(
+                executions_by_family
+            ),
+            "production_repeats_by_family": top_counts(repeats_by_family),
+            "production_seconds_by_family": top_counts(seconds_by_family),
+            "production_executions_by_provider": top_counts(
+                executions_by_provider
             ),
             "transfer_operation_counts": dict(sorted(
                 session.scheduler.transfer_operation_counts.items()
