@@ -1112,6 +1112,9 @@ def successor_archway_call_edge_result(
             "scheduler_event_counts": dict(sorted(
                 scheduler_event_counts.items()
             )),
+            "invalidation_reason_counts": dict(sorted(
+                session.scheduler.invalidation_reason_counts.items()
+            )),
             "unique_production_count": len(production_counts),
             "production_execution_count": production_execution_count,
             "production_value_change_count": sum(
@@ -1222,6 +1225,9 @@ def successor_archway_call_edge_result(
             "scheduler_event_counts": dict(sorted(
                 (kind.value, count)
                 for kind, count in session.scheduler.event_counts.items()
+            )),
+            "invalidation_reason_counts": dict(sorted(
+                session.scheduler.invalidation_reason_counts.items()
             )),
             "unique_production_count": len(production_counts),
             "production_execution_count": production_execution_count,
