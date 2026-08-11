@@ -1162,7 +1162,10 @@ def successor_archway_call_edge_result(
             evidence["sampling_profile"] = sampling_profile.jsonable(top=50)
         return evidence
 
-    progress_sample_seconds = 10.0 if sampling_rate_hz is not None else 30.0
+    # Cheap aggregate progress is part of the case-timeout contract, independent
+    # of whether statistical stack sampling is enabled.  Keeping one cadence
+    # makes bounded profiled and unprofiled checkpoints directly comparable.
+    progress_sample_seconds = 10.0
 
     def current_progress_evidence() -> dict[str, object]:
         """Return a bounded live sample without traversing retained facts."""
