@@ -793,8 +793,9 @@ def successor_archway_call_edge_result(
             )
 
         def callable_for(key) -> str | None:
-            owner = session.callable_owners_by_morphism.get(
-                getattr(key.address.subject, "morphism_id", "")
+            owner = session.callable_owner_for(
+                key.address.context,
+                getattr(key.address.subject, "morphism_id", ""),
             )
             if owner is not None:
                 return owner.display_name
@@ -934,7 +935,8 @@ def successor_archway_call_edge_result(
                         ),
                         "callable": (
                             owner.display_name
-                            if (owner := session.callable_owners_by_morphism.get(
+                            if (owner := session.callable_owner_for(
+                                key.address.context,
                                 getattr(
                                     key.address.subject, "morphism_id", ""
                                 )
