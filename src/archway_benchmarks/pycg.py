@@ -780,20 +780,51 @@ def successor_archway_call_edge_result(
                 key=lambda item: item[0],
             ))
 
+        boundaries_by_definition = {
+            boundary.definition_morphism_id: boundary
+            for boundary in session.callable_boundaries_by_body.values()
+        }
+
+        def invocation_request_for(key):
+            registry = session.invocation_registry
+            return (
+                registry.requests.get(key.address)
+                if registry is not None else None
+            )
+
+        def callable_for(key) -> str | None:
+            owner = session.callable_owners_by_morphism.get(
+                getattr(key.address.subject, "morphism_id", "")
+            )
+            if owner is not None:
+                return owner.display_name
+            body_id = getattr(
+                key.address.subject, "body_morphism_id", None
+            )
+            if body_id in body_labels:
+                return body_labels[body_id]
+            request = invocation_request_for(key)
+            if request is None:
+                return None
+            boundary = boundaries_by_definition.get(
+                request.value.definition_morphism_id
+            )
+            return boundary.display_name if boundary is not None else None
+
+        def callable_value_for(key) -> dict[str, object] | None:
+            request = invocation_request_for(key)
+            return (
+                dict(request.value.canonical_data())
+                if request is not None else None
+            )
+
         hottest_productions = [
             {
                 "address_id": key.address.id,
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
-                "callable": (
-                    owner.display_name
-                    if (owner := session.callable_owners_by_morphism.get(
-                        getattr(key.address.subject, "morphism_id", "")
-                    )) is not None
-                    else body_labels.get(getattr(
-                        key.address.subject, "body_morphism_id", None
-                    ))
-                ),
+                "callable": callable_for(key),
+                "callable_value": callable_value_for(key),
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "executions": executions,
@@ -811,15 +842,8 @@ def successor_archway_call_edge_result(
                 "address_id": key.address.id,
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
-                "callable": (
-                    owner.display_name
-                    if (owner := session.callable_owners_by_morphism.get(
-                        getattr(key.address.subject, "morphism_id", "")
-                    )) is not None
-                    else body_labels.get(getattr(
-                        key.address.subject, "body_morphism_id", None
-                    ))
-                ),
+                "callable": callable_for(key),
+                "callable_value": callable_value_for(key),
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "seconds": seconds,
