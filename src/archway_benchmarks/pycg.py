@@ -867,6 +867,23 @@ def successor_archway_call_edge_result(
             ),
             key=lambda item: (-item["visits"], item["morphism_id"], item["operation"]),
         )[:20]
+        hottest_transfer_seconds = sorted(
+            (
+                {
+                    "morphism_id": morphism_id,
+                    "operation": operation,
+                    "seconds": seconds,
+                    "visits": session.scheduler.transfer_counts.get(
+                        (morphism_id, operation), 0
+                    ),
+                }
+                for (morphism_id, operation), seconds
+                in session.scheduler.transfer_seconds.items()
+            ),
+            key=lambda item: (
+                -item["seconds"], item["morphism_id"], item["operation"]
+            ),
+        )[:20]
         scheduler_event_counts = {
             kind.value: count
             for kind, count in session.scheduler.event_counts.items()
@@ -1043,6 +1060,7 @@ def successor_archway_call_edge_result(
             "hottest_productions": hottest_productions,
             "slowest_productions": slowest_productions,
             "hottest_transfers": hottest_transfers,
+            "hottest_transfer_seconds": hottest_transfer_seconds,
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
             ),
