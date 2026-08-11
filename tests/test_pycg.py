@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import signal
 import time
 from pathlib import Path
 
@@ -427,6 +428,36 @@ def test_successor_timeout_retains_latest_progress_evidence(
         "phase": "analysis",
         "resolved_fact_count": 17,
     }
+
+
+def test_timeout_kills_worker_that_ignores_termination(
+    tmp_path: Path,
+    monkeypatch,
+):
+    if "fork" not in multiprocessing.get_all_start_methods():
+        pytest.skip("timeout test requires fork multiprocessing support")
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+
+    def uncooperative_archway_call_edges(*args, **kwargs):
+        signal.signal(signal.SIGTERM, signal.SIG_IGN)
+        time.sleep(10)
+        return {("main", "main.f")}
+
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.archway_call_edges",
+        uncooperative_archway_call_edges,
+    )
+
+    started = time.monotonic()
+    result = run_archway_pycg(
+        corpus_root=tmp_path,
+        engine_root=tmp_path,
+        case_timeout_seconds=0.05,
+        edge_provider="legacy",
+    )
+
+    assert time.monotonic() - started < 2
+    assert result.cases[0].status == "timeout"
 
 
 def test_successor_error_retains_terminal_evidence(

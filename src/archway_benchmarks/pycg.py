@@ -608,8 +608,7 @@ def _archway_call_edges_with_timeout(
     while True:
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            process.terminate()
-            process.join()
+            _stop_case_worker(process)
             raise PyCGCaseTimeoutError(
                 f"case exceeded timeout of {case_timeout_seconds:.3f}s",
                 latest_evidence,
@@ -631,6 +630,26 @@ def _archway_call_edges_with_timeout(
             return payload
         error, evidence = payload
         raise PyCGCaseExecutionError(error, evidence or latest_evidence)
+
+
+def _stop_case_worker(
+    process: multiprocessing.Process,
+    *,
+    terminate_grace_seconds: float = 0.5,
+    kill_grace_seconds: float = 1.0,
+) -> None:
+    """Stop a timed-out worker without turning a case bound into an unbounded wait."""
+
+    process.terminate()
+    process.join(timeout=terminate_grace_seconds)
+    if not process.is_alive():
+        return
+    process.kill()
+    process.join(timeout=kill_grace_seconds)
+    if process.is_alive():
+        raise RuntimeError(
+            "timed-out case worker remained alive after terminate and kill"
+        )
 
 
 def _multiprocessing_context() -> multiprocessing.context.BaseContext:
