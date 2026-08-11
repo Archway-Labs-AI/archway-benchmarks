@@ -19,6 +19,7 @@ semantic call targets.
 from __future__ import annotations
 
 import argparse
+from contextlib import nullcontext
 import json
 import multiprocessing
 import queue
@@ -432,9 +433,15 @@ def run_archway_pycg(
     edge_provider: EdgeProvider = "successor",
     successor_record_events: bool = False,
     successor_summarize_callee_results: bool = False,
+    successor_sampling_rate_hz: float | None = None,
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
+    if (
+        successor_sampling_rate_hz is not None
+        and successor_sampling_rate_hz <= 0
+    ):
+        raise ValueError("--successor-sampling-rate-hz must be positive")
     if case_names and limit is not None:
         raise ValueError("--case and --limit are mutually exclusive")
     cases = load_cases(corpus_root, suite=suite, limit=limit)
@@ -475,6 +482,7 @@ def run_archway_pycg(
                 successor_summarize_callee_results=(
                     successor_summarize_callee_results
                 ),
+                successor_sampling_rate_hz=successor_sampling_rate_hz,
             )
             if isinstance(produced, SuccessorEdgeResult):
                 predicted = set(produced.edges)
@@ -558,6 +566,7 @@ def _archway_call_edges_with_timeout(
     edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
+    successor_sampling_rate_hz: float | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
     if case_timeout_seconds is None:
         return _produce_archway_call_edges(
@@ -571,6 +580,7 @@ def _archway_call_edges_with_timeout(
             successor_summarize_callee_results=(
                 successor_summarize_callee_results
             ),
+            successor_sampling_rate_hz=successor_sampling_rate_hz,
         )
     if case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -589,6 +599,7 @@ def _archway_call_edges_with_timeout(
             edge_provider,
             successor_record_events,
             successor_summarize_callee_results,
+            successor_sampling_rate_hz,
         ),
     )
     process.start()
@@ -639,6 +650,7 @@ def _archway_call_edges_worker(
     edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
+    successor_sampling_rate_hz: float | None = None,
 ) -> None:
     try:
         predicted = _produce_archway_call_edges(
@@ -652,6 +664,7 @@ def _archway_call_edges_worker(
             successor_summarize_callee_results=(
                 successor_summarize_callee_results
             ),
+            successor_sampling_rate_hz=successor_sampling_rate_hz,
             successor_progress=(
                 lambda evidence: result_queue.put(("progress", evidence))
             ),
@@ -675,6 +688,7 @@ def _produce_archway_call_edges(
     edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
+    successor_sampling_rate_hz: float | None = None,
     successor_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
     if edge_provider == "successor":
@@ -684,6 +698,7 @@ def _produce_archway_call_edges(
             record_events=successor_record_events,
             progress=successor_progress,
             summarize_callee_results=successor_summarize_callee_results,
+            sampling_rate_hz=successor_sampling_rate_hz,
         )
     if edge_provider == "coordinated":
         return coordinated_archway_call_edges(case, engine_root=engine_root)
@@ -717,6 +732,7 @@ def successor_archway_call_edge_result(
     record_events: bool = False,
     progress: Callable[[dict[str, object]], None] | None = None,
     summarize_callee_results: bool = False,
+    sampling_rate_hz: float | None = None,
 ) -> SuccessorEdgeResult:
     """Project one persistent diagram-only reduced-product program session."""
 
@@ -728,6 +744,7 @@ def successor_archway_call_edge_result(
 
     from sd_core.analysis.diagram_analysis import open_hybrid_program_session
     from sd_core.tooling.harness import ProgramResult
+    from sd_core.tooling.sampling_profile import SamplingProfiler
 
     started = time.perf_counter()
     sources = _load_case_sources(case)
@@ -1137,11 +1154,17 @@ def successor_archway_call_edge_result(
         progress(current_evidence(phase="session_opened"))
         sampler = threading.Thread(target=sample_progress, daemon=True)
         sampler.start()
+    sampling_profile = None
+    profile_context = (
+        SamplingProfiler(rate_hz=sampling_rate_hz, project_marker="/sd_core/")
+        if sampling_rate_hz is not None else nullcontext()
+    )
     try:
-        forward = session.run_semantic_call_graph(
-            include_callable_bodies=include_callable_bodies,
-            summarize_callee_results=summarize_callee_results,
-        )
+        with profile_context as sampling_profile:
+            forward = session.run_semantic_call_graph(
+                include_callable_bodies=include_callable_bodies,
+                summarize_callee_results=summarize_callee_results,
+            )
     except Exception as exc:
         evidence = current_evidence(phase="error")
         if progress is not None:
@@ -1200,6 +1223,8 @@ def successor_archway_call_edge_result(
         "pycg_projection_lineage_count": len(projection_lineage),
         "pycg_projected_edge_count": len(projected_edges),
     })
+    if sampling_profile is not None:
+        evidence["sampling_profile"] = sampling_profile.jsonable(top=50)
     if progress is not None:
         progress(evidence)
     return SuccessorEdgeResult(
@@ -1815,6 +1840,15 @@ def main(argv: list[str] | None = None) -> int:
             "from whole-program callable roots."
         ),
     )
+    parser.add_argument(
+        "--successor-sampling-rate-hz",
+        type=float,
+        default=None,
+        help=(
+            "Collect a low-overhead aggregate Python stack sample profile at "
+            "the requested frequency. Disabled by default."
+        ),
+    )
     args = parser.parse_args(argv)
 
     result = run_archway_pycg(
@@ -1832,6 +1866,7 @@ def main(argv: list[str] | None = None) -> int:
         successor_summarize_callee_results=(
             args.successor_summarize_callee_results
         ),
+        successor_sampling_rate_hz=args.successor_sampling_rate_hz,
     )
     payload = result.to_jsonable()
     text = json.dumps(payload, indent=2, sort_keys=True)
