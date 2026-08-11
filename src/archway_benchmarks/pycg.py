@@ -1037,6 +1037,9 @@ def successor_archway_call_edge_result(
             "invocation_admission_counts": (
                 session.invocation_admission_counts()
             ),
+            "invocation_summary_telemetry": (
+                session.invocation_summary_telemetry()
+            ),
             "deferred_materialization_counts": (
                 session.deferred_materialization_counts()
             ),
