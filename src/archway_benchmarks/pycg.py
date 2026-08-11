@@ -1124,6 +1124,7 @@ def successor_archway_call_edge_result(
         if sampler is not None:
             sampler.join(timeout=1.0)
     analysis_seconds = time.perf_counter() - analysis_started
+    semantic_edges = session.semantic_call_edges()
     edges = {
         (
             edge.caller.display_name
@@ -1131,9 +1132,26 @@ def successor_archway_call_edge_result(
             else edge.caller_module,
             _successor_pycg_target_name(edge.target.display_name),
         )
-        for edge in session.semantic_call_edges()
+        for edge in semantic_edges
         if edge.caller is not None or edge.caller_module is not None
     }
+    projected_edges, projection_lineage = (
+        _inline_synthetic_frame_edges_with_evidence(edges)
+    )
+
+    semantic_edge_evidence = tuple(sorted(
+        (
+            _successor_semantic_edge_evidence(edge)
+            for edge in semantic_edges
+            if edge.caller is not None or edge.caller_module is not None
+        ),
+        key=lambda item: (
+            tuple(item["projected_edge"]),
+            str(item["caller_context"]),
+            str(item["callsite_morphism_id"]),
+            str(item["invocation_id"]),
+        ),
+    ))
 
     evidence = current_evidence(phase="complete")
     evidence.update({
@@ -1141,11 +1159,17 @@ def successor_archway_call_edge_result(
         "retained_production_event_count": len(forward.events),
         "knowledge_delta_count": len(forward.knowledge_deltas),
         "analysis_seconds": analysis_seconds,
+        "semantic_call_edge_evidence": semantic_edge_evidence,
+        "semantic_call_edge_evidence_count": len(semantic_edge_evidence),
+        "semantic_direct_edge_count": len(edges),
+        "pycg_projection_lineage": projection_lineage,
+        "pycg_projection_lineage_count": len(projection_lineage),
+        "pycg_projected_edge_count": len(projected_edges),
     })
     if progress is not None:
         progress(evidence)
     return SuccessorEdgeResult(
-        edges=frozenset(_inline_synthetic_frame_edges(edges)),
+        edges=frozenset(projected_edges),
         root_demands=len(forward.roots),
         cache_hits=forward.cache_hits,
         production_events=len(forward.events),
@@ -1155,6 +1179,58 @@ def successor_archway_call_edge_result(
         ),
         evidence=evidence,
     )
+
+
+def _successor_semantic_edge_evidence(edge) -> dict[str, object]:
+    """Serialize one contextual edge without consulting source or AST data."""
+
+    caller = (
+        edge.caller.display_name
+        if edge.caller is not None else edge.caller_module
+    )
+    semantic_target = edge.target.display_name
+    projected_target = _successor_pycg_target_name(semantic_target)
+    anchor = edge.callsite_anchor
+    module = (
+        ".".join(anchor.module.parts)
+        if anchor is not None and anchor.module is not None else None
+    )
+    position = anchor.position if anchor is not None else None
+    invocation_data = edge.invocation.canonical_data()
+    invocation_context = getattr(edge.invocation, "context", None)
+    invocation_id = (
+        invocation_context.id
+        if invocation_context is not None
+        else (
+            f"{edge.invocation.caller_context}:"
+            f"{edge.invocation.callsite_morphism_id}:"
+            f"{edge.invocation.policy_id}"
+        )
+    )
+    return {
+        "semantic_edge": [caller, semantic_target],
+        "projected_edge": [caller, projected_target],
+        "caller_context": edge.caller_context,
+        "caller_kind": (
+            type(edge.caller).__name__
+            if edge.caller is not None else "module"
+        ),
+        "callsite_morphism_id": edge.callsite_morphism_id,
+        "source_module": module,
+        "source_position": (
+            {
+                "line": position.row,
+                "column": position.col,
+                "end_line": position.end_row,
+                "end_column": position.end_col,
+            }
+            if position is not None else None
+        ),
+        "target_kind": type(edge.target).__name__,
+        "invocation_kind": type(edge.invocation).__name__,
+        "invocation_id": invocation_id,
+        "invocation": dict(invocation_data),
+    }
 
 
 def coordinated_archway_call_edges(
@@ -1390,6 +1466,15 @@ def _inline_synthetic_frame_edges(
     that were not present in the semantic readout.
     """
 
+    projected, _lineage = _inline_synthetic_frame_edges_with_evidence(edges)
+    return projected
+
+
+def _inline_synthetic_frame_edges_with_evidence(
+    edges: Iterable[tuple[str, str]],
+) -> tuple[set[tuple[str, str]], tuple[dict[str, object], ...]]:
+    """Return the PyCG display projection and explicit edge lineage."""
+
     edge_set = set(edges)
     synthetic_parents: dict[str, set[str]] = {}
     for caller, callee in edge_set:
@@ -1411,17 +1496,41 @@ def _inline_synthetic_frame_edges(
         return resolved
 
     projected: set[tuple[str, str]] = set()
+    lineage: list[dict[str, object]] = []
     for caller, callee in edge_set:
         caller_is_synthetic = _is_synthetic_frame(caller)
         callee_is_synthetic = _is_synthetic_frame(callee)
         if callee_is_synthetic or _is_synthetic_implementation_target(callee):
+            lineage.append({
+                "action": "omit_synthetic_target",
+                "input_edge": [caller, callee],
+                "output_edge": None,
+            })
             continue
         if caller_is_synthetic:
             for parent in source_parents(caller):
                 projected.add((parent, callee))
+                lineage.append({
+                    "action": "attribute_synthetic_caller",
+                    "input_edge": [caller, callee],
+                    "output_edge": [parent, callee],
+                    "synthetic_caller": caller,
+                })
             continue
         projected.add((caller, callee))
-    return projected
+        lineage.append({
+            "action": "retain",
+            "input_edge": [caller, callee],
+            "output_edge": [caller, callee],
+        })
+    return projected, tuple(sorted(
+        lineage,
+        key=lambda item: (
+            str(item["action"]),
+            tuple(item["input_edge"]),
+            tuple(item["output_edge"] or ()),
+        ),
+    ))
 
 
 def _is_synthetic_frame(name: str) -> bool:

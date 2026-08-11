@@ -113,6 +113,22 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
         result.evidence["unique_production_count"]
     )
     assert result.evidence["largest_scc_size"] >= 1
+    assert result.evidence["semantic_call_edge_evidence_count"] >= 1
+    lambda_edges = [
+        item
+        for item in result.evidence["semantic_call_edge_evidence"]
+        if item["projected_edge"] == ["main", "main.<lambda1>"]
+    ]
+    assert lambda_edges
+    assert lambda_edges[0]["source_module"] == "main"
+    assert lambda_edges[0]["source_position"] == {
+        "line": 2,
+        "column": 0,
+        "end_line": 2,
+        "end_column": 4,
+    }
+    assert lambda_edges[0]["callsite_morphism_id"].startswith("sid:v1:box:")
+    assert result.evidence["pycg_projection_lineage_count"] >= 1
     assert "summary_reuse" in result.evidence
     assert result.evidence["trace_events_enabled"] is False
     assert result.evidence["peak_rss_bytes"] > 0
