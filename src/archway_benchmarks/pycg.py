@@ -1115,15 +1115,18 @@ def successor_archway_call_edge_result(
             "analysis_seconds": time.perf_counter() - analysis_started,
             "total_provider_seconds": time.perf_counter() - started,
             "trace_events_enabled": record_events,
+            "progress_sample_seconds": 30.0,
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 * (1024 if sys.platform.startswith("linux") else 1)
             ),
         }
 
+    progress_sample_seconds = 30.0
+
     def sample_progress() -> None:
         assert progress is not None
-        while not stop_sampling.wait(5.0):
+        while not stop_sampling.wait(progress_sample_seconds):
             try:
                 progress(current_evidence(phase="analysis"))
             except Exception:
