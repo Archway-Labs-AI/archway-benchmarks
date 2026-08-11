@@ -1135,7 +1135,7 @@ def successor_archway_call_edge_result(
         sampler = threading.Thread(target=sample_progress, daemon=True)
         sampler.start()
     try:
-        forward = session.run_analysis_roots(
+        forward = session.run_semantic_call_graph(
             include_callable_bodies=include_callable_bodies,
             summarize_callee_results=summarize_callee_results,
         )
@@ -1184,7 +1184,9 @@ def successor_archway_call_edge_result(
 
     evidence = current_evidence(phase="complete")
     evidence.update({
-        "root_demand_count": len(forward.roots),
+        "root_demand_count": (
+            len(forward.roots) if hasattr(forward, "roots") else 1
+        ),
         "retained_production_event_count": len(forward.events),
         "knowledge_delta_count": len(forward.knowledge_deltas),
         "analysis_seconds": analysis_seconds,
@@ -1199,8 +1201,14 @@ def successor_archway_call_edge_result(
         progress(evidence)
     return SuccessorEdgeResult(
         edges=frozenset(projected_edges),
-        root_demands=len(forward.roots),
-        cache_hits=forward.cache_hits,
+        root_demands=(
+            len(forward.roots) if hasattr(forward, "roots") else 1
+        ),
+        cache_hits=(
+            forward.cache_hits
+            if hasattr(forward, "cache_hits")
+            else int(forward.cache_hit)
+        ),
         production_events=len(forward.events),
         knowledge_deltas=len(forward.knowledge_deltas),
         topology_growth=(

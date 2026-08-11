@@ -263,7 +263,9 @@ def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
         "provenance_unmapped|assignments/forward|return": 1
     }
     assert audit.forward_events > 0
-    assert audit.knowledge_deltas == 1
+    # Root status, morphism state, and the requested observation are separate
+    # causal knowledge commits in the current scheduler.
+    assert audit.knowledge_deltas == 3
     assert audit.resolved_facts > 1
 
 
@@ -286,7 +288,7 @@ def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
 
     assert audit.exact == 1
     assert audit.forward_events == 0
-    assert audit.knowledge_deltas == 1
+    assert audit.knowledge_deltas == 3
     assert audit.resolved_facts > 1
     assert progress == [(1, 1)]
 
@@ -310,7 +312,9 @@ def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
     assert audit.targeted_roots == 1
     assert audit.targeted_cache_hits == 0
     assert audit.targeted_events == 0
-    assert audit.targeted_knowledge_deltas == 1
+    # The targeted body demand adds its root/input/output fact batches to the
+    # already-open persistent session.
+    assert audit.targeted_knowledge_deltas == 4
     assert audit.targeted_topology_changes > 0
 
 
