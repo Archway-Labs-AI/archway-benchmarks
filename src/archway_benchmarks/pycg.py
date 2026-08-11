@@ -763,6 +763,7 @@ def successor_archway_call_edge_result(
                 family_counts.get(address.family, 0) + 1
             )
         production_counts = session.scheduler.production_counts
+        production_seconds = session.scheduler.production_seconds
         production_change_counts = session.scheduler.production_change_counts
         production_growth_counts = (
             session.scheduler.production_growth_coordinate_counts
@@ -796,11 +797,37 @@ def successor_archway_call_edge_result(
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "executions": executions,
+                "seconds": production_seconds.get(key, 0.0),
                 "value_changes": production_change_counts.get(key, 0),
                 "growth_coordinates": growth_for(key),
             }
             for key, executions in sorted(
                 production_counts.items(),
+                key=lambda item: (-item[1], item[0].id),
+            )[:20]
+        ]
+        slowest_productions = [
+            {
+                "address_id": key.address.id,
+                "family": key.address.family,
+                "subject": key.address.subject.canonical_data(),
+                "callable": (
+                    owner.display_name
+                    if (owner := session.callable_owners_by_morphism.get(
+                        getattr(key.address.subject, "morphism_id", "")
+                    )) is not None
+                    else body_labels.get(getattr(
+                        key.address.subject, "body_morphism_id", None
+                    ))
+                ),
+                "context": key.address.context,
+                "provider_id": key.provider_id,
+                "seconds": seconds,
+                "executions": production_counts.get(key, 0),
+                "value_changes": production_change_counts.get(key, 0),
+            }
+            for key, seconds in sorted(
+                production_seconds.items(),
                 key=lambda item: (-item[1], item[0].id),
             )[:20]
         ]
@@ -990,6 +1017,7 @@ def successor_archway_call_edge_result(
                 if production_execution_count else 0.0
             ),
             "hottest_productions": hottest_productions,
+            "slowest_productions": slowest_productions,
             "hottest_transfers": hottest_transfers,
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
