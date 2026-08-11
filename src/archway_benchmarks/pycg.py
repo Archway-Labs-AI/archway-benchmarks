@@ -1126,6 +1126,12 @@ def successor_archway_call_edge_result(
             "slowest_productions": slowest_productions,
             "hottest_transfers": hottest_transfers,
             "hottest_transfer_seconds": hottest_transfer_seconds,
+            "transfer_operation_counts": dict(sorted(
+                session.scheduler.transfer_operation_counts.items()
+            )),
+            "transfer_operation_seconds": dict(sorted(
+                session.scheduler.transfer_operation_seconds.items()
+            )),
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
             ),
@@ -1190,6 +1196,12 @@ def successor_archway_call_edge_result(
                 repeated_production_count / production_execution_count
                 if production_execution_count else 0.0
             ),
+            "transfer_operation_counts": dict(sorted(
+                session.scheduler.transfer_operation_counts.items()
+            )),
+            "transfer_operation_seconds": dict(sorted(
+                session.scheduler.transfer_operation_seconds.items()
+            )),
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 * (1024 if sys.platform.startswith("linux") else 1)
