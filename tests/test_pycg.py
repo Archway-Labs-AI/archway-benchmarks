@@ -41,6 +41,9 @@ def test_successor_projects_semantic_container_method_names() -> None:
     assert _successor_pycg_target_name(
         "<builtin>.set.add"
     ) == "<**PySet**>.add"
+    assert _successor_pycg_target_name(
+        "<builtin>.file.read"
+    ) == "<**PyFile**>.read"
 
 
 def _write_case(root: Path, category: str, name: str, callgraph: dict) -> Path:
