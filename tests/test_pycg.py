@@ -483,6 +483,33 @@ def test_run_archway_pycg_uses_successor_provider_by_default(
     assert result.to_jsonable()["edge_provider"] == "successor"
 
 
+def test_run_archway_pycg_forwards_successor_callee_summary_policy(
+    tmp_path: Path,
+    monkeypatch,
+):
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+    observed = []
+
+    def fake_successor(*args, **kwargs):
+        observed.append(kwargs["summarize_callee_results"])
+        return SuccessorEdgeResult(
+            frozenset({("main", "main.f")}), 1, 0, 0, 0, 0
+        )
+
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.successor_archway_call_edge_result",
+        fake_successor,
+    )
+
+    run_archway_pycg(
+        corpus_root=tmp_path,
+        engine_root=tmp_path,
+        successor_summarize_callee_results=True,
+    )
+
+    assert observed == [True]
+
+
 def test_root_package_init_receives_nonempty_module_name(tmp_path: Path):
     package_root = tmp_path / "relative_case"
     package_root.mkdir()
