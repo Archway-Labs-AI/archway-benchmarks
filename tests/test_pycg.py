@@ -127,6 +127,7 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
         "end_line": 2,
         "end_column": 4,
     }
+    assert lambda_edges[0]["source_line"] == "x(1)"
     assert lambda_edges[0]["callsite_morphism_id"].startswith("sid:v1:box:")
     assert result.evidence["pycg_projection_lineage_count"] >= 1
     assert "summary_reuse" in result.evidence

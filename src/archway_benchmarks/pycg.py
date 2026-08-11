@@ -1141,7 +1141,9 @@ def successor_archway_call_edge_result(
 
     semantic_edge_evidence = tuple(sorted(
         (
-            _successor_semantic_edge_evidence(edge)
+            _attach_source_line(
+                _successor_semantic_edge_evidence(edge), sources
+            )
             for edge in semantic_edges
             if edge.caller is not None or edge.caller_module is not None
         ),
@@ -1230,6 +1232,33 @@ def _successor_semantic_edge_evidence(edge) -> dict[str, object]:
         "invocation_kind": type(edge.invocation).__name__,
         "invocation_id": invocation_id,
         "invocation": dict(invocation_data),
+    }
+
+
+def _attach_source_line(
+    evidence: dict[str, object], sources: dict[str, str]
+) -> dict[str, object]:
+    """Attach corpus text for review without feeding source into analysis.
+
+    Semantic edge production is complete before this diagnostic adapter runs.
+    The excerpt is deliberately a single physical line: enough to inspect most
+    callsites while keeping fully instrumented framework artifacts bounded.
+    """
+
+    module = evidence.get("source_module")
+    position = evidence.get("source_position")
+    if not isinstance(module, str) or not isinstance(position, dict):
+        return evidence
+    line = position.get("line")
+    source = sources.get(module)
+    if not isinstance(line, int) or line < 1 or source is None:
+        return evidence
+    lines = source.splitlines()
+    if line > len(lines):
+        return evidence
+    return {
+        **evidence,
+        "source_line": lines[line - 1],
     }
 
 
