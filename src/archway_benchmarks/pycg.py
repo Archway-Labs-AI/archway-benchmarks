@@ -727,6 +727,9 @@ def successor_archway_call_edge_result(
         modules,
         entry_module,
         record_events=record_events,
+        possible_entry_modules=(
+            frozenset(modules) if case.suite == "macro" else None
+        ),
     )
     topology_before = session.scheduler.graph.topology_generation
     analysis_started = time.perf_counter()
@@ -990,7 +993,7 @@ def successor_archway_call_edge_result(
                 len(session.callable_roots) if include_callable_bodies else 0
             ),
             "root_policy": (
-                "all_modules_and_callable_bodies"
+                "all_modules_possible_entries_and_callable_bodies"
                 if include_callable_bodies else "all_modules"
             ),
             "root_demand_count": scheduler_event_counts.get("root_demand", 0),
