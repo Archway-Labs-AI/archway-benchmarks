@@ -790,6 +790,7 @@ def successor_archway_call_edge_result(
         for name, address in session.callable_roots.items()
         if (body_id := getattr(address.subject, "body_morphism_id", None))
     }
+    sampling_profile = None
 
     def current_evidence(*, phase: str) -> dict[str, object]:
         snapshot = session.store.snapshot()
@@ -1006,7 +1007,7 @@ def successor_archway_call_edge_result(
         )
         module_names = sorted(modules)
         callable_root_names = sorted(session.callable_roots)
-        return {
+        evidence = {
             "phase": phase,
             "source_module_count": len(sources),
             "translated_module_count": len(modules),
@@ -1132,29 +1133,68 @@ def successor_archway_call_edge_result(
             "analysis_seconds": time.perf_counter() - analysis_started,
             "total_provider_seconds": time.perf_counter() - started,
             "trace_events_enabled": record_events,
-            "progress_sample_seconds": 30.0,
+            "progress_sample_seconds": progress_sample_seconds,
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 * (1024 if sys.platform.startswith("linux") else 1)
             ),
         }
+        if sampling_profile is not None:
+            evidence["sampling_profile"] = sampling_profile.jsonable(top=50)
+        return evidence
 
-    progress_sample_seconds = 30.0
+    progress_sample_seconds = 10.0 if sampling_rate_hz is not None else 30.0
+
+    def current_progress_evidence() -> dict[str, object]:
+        """Return a bounded live sample without traversing retained facts."""
+
+        production_counts = session.scheduler.production_counts
+        production_execution_count = sum(production_counts.values())
+        repeated_production_count = sum(
+            count - 1 for count in production_counts.values() if count > 1
+        )
+        evidence: dict[str, object] = {
+            "phase": "analysis",
+            "evidence_detail": "live-aggregate",
+            "analysis_seconds": time.perf_counter() - analysis_started,
+            "demand_node_count": len(session.scheduler.graph.nodes),
+            "topology_generation": (
+                session.scheduler.graph.topology_generation
+            ),
+            "unique_production_count": len(production_counts),
+            "production_execution_count": production_execution_count,
+            "repeated_production_count": repeated_production_count,
+            "repeated_production_ratio": (
+                repeated_production_count / production_execution_count
+                if production_execution_count else 0.0
+            ),
+            "peak_rss_bytes": (
+                resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+                * (1024 if sys.platform.startswith("linux") else 1)
+            ),
+        }
+        if sampling_profile is not None:
+            evidence["sampling_profile"] = sampling_profile.jsonable(top=50)
+        return evidence
 
     def sample_progress() -> None:
         assert progress is not None
         while not stop_sampling.wait(progress_sample_seconds):
             try:
-                progress(current_evidence(phase="analysis"))
-            except Exception:
-                continue
+                progress(current_progress_evidence())
+            except Exception as exc:
+                progress({
+                    "phase": "progress_error",
+                    "evidence_detail": "live-aggregate",
+                    "analysis_seconds": time.perf_counter() - analysis_started,
+                    "error": f"{type(exc).__name__}: {exc}",
+                })
 
     sampler = None
     if progress is not None:
         progress(current_evidence(phase="session_opened"))
         sampler = threading.Thread(target=sample_progress, daemon=True)
         sampler.start()
-    sampling_profile = None
     profile_context = (
         SamplingProfiler(rate_hz=sampling_rate_hz, project_marker="/sd_core/")
         if sampling_rate_hz is not None else nullcontext()
