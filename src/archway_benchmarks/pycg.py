@@ -1394,6 +1394,10 @@ def successor_archway_call_edge_result(
             "morphism_transfer_reuse_counts": (
                 session.morphism_transfer_reuse_counts()
             ),
+            "invocation_context_counts": session.invocation_context_counts(),
+            "deferred_materialization_counts": (
+                session.deferred_materialization_counts()
+            ),
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 * (1024 if sys.platform.startswith("linux") else 1)
