@@ -631,7 +631,9 @@ def _archway_call_edges_with_timeout(
                 except queue.Empty:
                     break
                 if status == "progress":
-                    latest_evidence.update(payload)
+                    latest_evidence = _merge_progress_evidence(
+                        latest_evidence, payload
+                    )
             raise PyCGCaseTimeoutError(
                 f"case exceeded timeout of {case_timeout_seconds:.3f}s",
                 latest_evidence,
@@ -649,13 +651,32 @@ def _archway_call_edges_with_timeout(
             # Progress messages intentionally have different costs and
             # cadences.  Preserve the most recent expensive checkpoint when a
             # later cheap aggregate sample arrives.
-            latest_evidence.update(payload)
+            latest_evidence = _merge_progress_evidence(
+                latest_evidence, payload
+            )
             continue
         process.join()
         if status == "ok":
             return payload
         error, evidence = payload
         raise PyCGCaseExecutionError(error, evidence or latest_evidence)
+
+
+def _merge_progress_evidence(
+    current: Mapping[str, object],
+    incoming: Mapping[str, object],
+) -> dict[str, object]:
+    """Retain checkpoints without presenting an older phase as live data."""
+
+    if (
+        current
+        and incoming.get("phase") is not None
+        and incoming.get("phase") != current.get("phase")
+    ):
+        return dict(incoming)
+    merged = dict(current)
+    merged.update(incoming)
+    return merged
 
 
 def _stop_case_worker(

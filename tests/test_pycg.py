@@ -443,6 +443,45 @@ def test_successor_timeout_retains_latest_progress_evidence(
     }
 
 
+def test_successor_timeout_does_not_merge_stale_session_fields(
+    tmp_path: Path,
+    monkeypatch,
+):
+    if "fork" not in multiprocessing.get_all_start_methods():
+        pytest.skip("timeout test requires fork multiprocessing support")
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+
+    def slow_successor(*args, progress=None, **kwargs):
+        assert progress is not None
+        progress({
+            "phase": "session_opened",
+            "resolved_fact_count": 0,
+            "invocation_context_counts": {"precise": 0},
+        })
+        progress({
+            "phase": "analysis",
+            "demand_node_count": 23,
+        })
+        time.sleep(1)
+
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.successor_archway_call_edge_result",
+        slow_successor,
+    )
+
+    result = run_archway_pycg(
+        corpus_root=tmp_path,
+        engine_root=tmp_path,
+        case_timeout_seconds=0.1,
+        edge_provider="successor",
+    )
+
+    assert result.cases[0].analysis_evidence == {
+        "phase": "analysis",
+        "demand_node_count": 23,
+    }
+
+
 def test_timeout_kills_worker_that_ignores_termination(
     tmp_path: Path,
     monkeypatch,
