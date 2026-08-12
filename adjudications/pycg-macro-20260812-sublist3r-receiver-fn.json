@@ -1,0 +1,25 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "sublist3r:receiver-type-paired-misses:v1",
+      "residual_ids": [
+        "pycg-residual:v1:e19d4b5757f40055ab45d61dddf411e6c87d3dba7df5f6e758c25979006113a1",
+        "pycg-residual:v1:c63b2c8bbb16ca10062f75c1916cf1bf191ad2c3fa6965fac38e94408ebaab7c",
+        "pycg-residual:v1:0b1bef75bc699416aec8f503e53e4491df9816a6af109e714b0ca15b240a0385",
+        "pycg-residual:v1:b30346f58a7eddfb10a90bdb5627ca509e970afcbdc70b6538ca27ddb1ac8b9a",
+        "pycg-residual:v1:1df1d6d4f6b8407df2f2bc819e118ff2efeb0231f25ec2b358cba6793c6cb731",
+        "pycg-residual:v1:2f5e15bf2bfa02878a7734c1bad432965dc4f4f16800f32b2609e46609cf8ace",
+        "pycg-residual:v1:90f61c055c272797e8b9b0eeef2a1c113bd2934d7102dafce9a1313401cd6bfe"
+      ],
+      "disposition": "archway_precision_gap",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway misses the source-visible Queue.get or requests.Session.get target at each exact member. Every miss pairs with an unsound dict.get edge at the same receiver family, identifying reduced-product receiver-type pollution rather than adapter mismatch.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "review:sublist3r-fp-fn-receiver-pairs:2026-08-12"
+      ]
+    }
+  ]
+}
