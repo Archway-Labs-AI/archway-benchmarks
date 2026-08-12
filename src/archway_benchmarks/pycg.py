@@ -30,7 +30,7 @@ import time
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Iterable, Literal, Mapping
+from typing import Any, Callable, Iterable, Literal, Mapping
 
 Edge = tuple[str, str]
 EdgeProvider = Literal["successor", "coordinated", "legacy"]
@@ -890,17 +890,16 @@ def successor_archway_call_edge_result(
         production_growth_counts = (
             session.scheduler.production_growth_coordinate_counts
         )
+        growth_by_production: dict[object, dict[str, int]] = {}
+        for (production, coordinate), count in (
+            production_growth_counts.items()
+        ):
+            growth_by_production.setdefault(production, {})[
+                coordinate
+            ] = count
 
         def growth_for(key) -> dict[str, int]:
-            return dict(sorted(
-                (
-                    (coordinate, count)
-                    for (production, coordinate), count
-                    in production_growth_counts.items()
-                    if production == key
-                ),
-                key=lambda item: item[0],
-            ))
+            return dict(sorted(growth_by_production.get(key, {}).items()))
 
         boundaries_by_definition = {
             boundary.definition_morphism_id: boundary
@@ -1033,10 +1032,19 @@ def successor_archway_call_edge_result(
         nodes_by_key = {
             node.key: node for node in session.scheduler.graph.nodes
         }
-        recursive_component_details = [
-            {
+        def recursive_component_detail(component) -> dict[str, object]:
+            member_limit = 100
+            sampled_members = component.members[:member_limit]
+            return {
                 "component_id": component.id,
                 "size": len(component.members),
+                "member_family_counts": dict(sorted(Counter(
+                    key.address.family for key in component.members
+                ).items())),
+                "members_truncated": (
+                    len(component.members) > member_limit
+                ),
+                "retained_member_count": len(sampled_members),
                 "members": [
                     {
                         "family": key.address.family,
@@ -1077,9 +1085,12 @@ def successor_archway_call_edge_result(
                         "value_changes": production_change_counts.get(key, 0),
                         "growth_coordinates": growth_for(key),
                     }
-                    for key in component.members
+                    for key in sampled_members
                 ],
             }
+
+        recursive_component_details = [
+            recursive_component_detail(component)
             for component in sorted(
                 (
                     component for component in components
@@ -1563,6 +1574,7 @@ def successor_archway_call_edge_result(
         if sampler is not None:
             sampler.join(timeout=1.0)
     analysis_seconds = time.perf_counter() - analysis_started
+    semantic_projection_started = time.perf_counter()
     semantic_edges = session.semantic_call_edges()
     edges = {
         (
@@ -1577,22 +1589,69 @@ def successor_archway_call_edge_result(
     projected_edges, projection_lineage = (
         _inline_synthetic_frame_edges_with_evidence(edges)
     )
+    semantic_projection_seconds = (
+        time.perf_counter() - semantic_projection_started
+    )
 
-    semantic_edge_evidence = tuple(sorted(
-        (
-            _attach_source_line(
-                _successor_semantic_edge_evidence(edge), sources
+    # A framework may reach the same semantic callsite through thousands of
+    # abstract invocation contexts.  Serializing every occurrence recursively
+    # canonicalizes the same callable/context payload and can cost more than
+    # the analysis itself.  Retain one complete diagnostic record per semantic
+    # callsite/target relation and count the contextual multiplicity.  The
+    # scheduler's fact graph remains the authoritative full-context evidence;
+    # this is only a bounded completed-run projection of that graph.
+    semantic_evidence_started = time.perf_counter()
+    semantic_edge_groups: dict[
+        tuple[str, str, str], tuple[Any, int, tuple[str, ...]]
+    ] = {}
+    for edge in semantic_edges:
+        caller = (
+            edge.caller.display_name
+            if edge.caller is not None else edge.caller_module
+        )
+        if caller is None:
+            continue
+        key = (
+            caller,
+            edge.target.display_name,
+            edge.callsite_morphism_id,
+        )
+        existing = semantic_edge_groups.get(key)
+        if existing is None:
+            semantic_edge_groups[key] = (
+                edge, 1, (edge.caller_context,)
             )
-            for edge in semantic_edges
-            if edge.caller is not None or edge.caller_module is not None
-        ),
-        key=lambda item: (
-            tuple(item["projected_edge"]),
-            str(item["caller_context"]),
-            str(item["callsite_morphism_id"]),
-            str(item["invocation_id"]),
-        ),
-    ))
+            continue
+        representative, occurrence_count, context_samples = existing
+        if (
+            edge.caller_context,
+            type(edge.invocation).__name__,
+        ) < (
+            representative.caller_context,
+            type(representative.invocation).__name__,
+        ):
+            representative = edge
+        context_samples = tuple(sorted({
+            *context_samples, edge.caller_context,
+        })[:3])
+        semantic_edge_groups[key] = (
+            representative, occurrence_count + 1, context_samples
+        )
+    semantic_edge_evidence_rows: list[dict[str, object]] = []
+    for key in sorted(semantic_edge_groups):
+        (
+            representative,
+            occurrence_count,
+            context_samples,
+        ) = semantic_edge_groups[key]
+        row = _attach_source_line(
+            _successor_semantic_edge_evidence(representative), sources
+        )
+        row["contextual_occurrence_count"] = occurrence_count
+        row["caller_context_samples"] = list(context_samples)
+        semantic_edge_evidence_rows.append(row)
+    semantic_edge_evidence = tuple(semantic_edge_evidence_rows)
+    semantic_evidence_seconds = time.perf_counter() - semantic_evidence_started
 
     evidence = current_evidence(phase="complete")
     evidence.update({
@@ -1602,8 +1661,14 @@ def successor_archway_call_edge_result(
         "retained_production_event_count": len(forward.events),
         "knowledge_delta_count": len(forward.knowledge_deltas),
         "analysis_seconds": analysis_seconds,
+        "semantic_projection_seconds": semantic_projection_seconds,
+        "semantic_evidence_seconds": semantic_evidence_seconds,
         "semantic_call_edge_evidence": semantic_edge_evidence,
         "semantic_call_edge_evidence_count": len(semantic_edge_evidence),
+        "semantic_call_edge_occurrence_count": len(semantic_edges),
+        "semantic_call_edge_contexts_collapsed": (
+            len(semantic_edges) - len(semantic_edge_evidence)
+        ),
         "semantic_direct_edge_count": len(edges),
         "pycg_projection_lineage": projection_lineage,
         "pycg_projection_lineage_count": len(projection_lineage),

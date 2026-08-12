@@ -140,6 +140,49 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.evidence["peak_rss_bytes"] > 0
 
 
+def test_successor_completed_evidence_collapses_repeated_contexts_per_callsite(
+    tmp_path: Path,
+) -> None:
+    case_root = _write_case(
+        tmp_path,
+        "functions",
+        "contextual_reuse",
+        {
+            "main": ["main.invoke", "main.target"],
+            "main.invoke": ["main.target"],
+            "main.target": [],
+        },
+    )
+    (case_root / "main.py").write_text(
+        "def target():\n"
+        "    return 1\n"
+        "def invoke(callback):\n"
+        "    return callback()\n"
+        "invoke(target)\n"
+        "invoke(target)\n",
+        encoding="utf-8",
+    )
+    (case,) = load_cases(tmp_path)
+    engine_root = Path(__file__).parents[2] / "engine"
+
+    result = successor_archway_call_edge_result(
+        case, engine_root=engine_root.resolve()
+    )
+
+    invoke_target = next(
+        item
+        for item in result.evidence["semantic_call_edge_evidence"]
+        if item["projected_edge"] == ["main.invoke", "main.target"]
+    )
+    assert invoke_target["contextual_occurrence_count"] == 2
+    assert len(invoke_target["caller_context_samples"]) == 2
+    assert result.evidence["semantic_call_edge_occurrence_count"] > (
+        result.evidence["semantic_call_edge_evidence_count"]
+    )
+    assert result.evidence["semantic_call_edge_contexts_collapsed"] >= 1
+    assert result.evidence["semantic_evidence_seconds"] >= 0
+
+
 def test_score_adjacency_lists_preserves_official_duplicate_recall_denominator():
     score = score_adjacency_lists(
         {"main": ["main.f", "main.f", "main.g"]},
