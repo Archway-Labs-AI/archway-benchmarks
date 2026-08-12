@@ -434,6 +434,7 @@ def run_archway_pycg(
     successor_record_events: bool = False,
     successor_summarize_callee_results: bool = False,
     successor_sampling_rate_hz: float | None = None,
+    successor_partial_graph_checkpoint_seconds: float | None = None,
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -442,6 +443,13 @@ def run_archway_pycg(
         and successor_sampling_rate_hz <= 0
     ):
         raise ValueError("--successor-sampling-rate-hz must be positive")
+    if (
+        successor_partial_graph_checkpoint_seconds is not None
+        and successor_partial_graph_checkpoint_seconds <= 0
+    ):
+        raise ValueError(
+            "--successor-partial-graph-checkpoint-seconds must be positive"
+        )
     if case_names and limit is not None:
         raise ValueError("--case and --limit are mutually exclusive")
     cases = load_cases(corpus_root, suite=suite, limit=limit)
@@ -483,6 +491,9 @@ def run_archway_pycg(
                     successor_summarize_callee_results
                 ),
                 successor_sampling_rate_hz=successor_sampling_rate_hz,
+                successor_partial_graph_checkpoint_seconds=(
+                    successor_partial_graph_checkpoint_seconds
+                ),
             )
             if isinstance(produced, SuccessorEdgeResult):
                 predicted = set(produced.edges)
@@ -567,6 +578,7 @@ def _archway_call_edges_with_timeout(
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
+    successor_partial_graph_checkpoint_seconds: float | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
     if case_timeout_seconds is None:
         return _produce_archway_call_edges(
@@ -581,6 +593,9 @@ def _archway_call_edges_with_timeout(
                 successor_summarize_callee_results
             ),
             successor_sampling_rate_hz=successor_sampling_rate_hz,
+            successor_partial_graph_checkpoint_seconds=(
+                successor_partial_graph_checkpoint_seconds
+            ),
         )
     if case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -600,6 +615,7 @@ def _archway_call_edges_with_timeout(
             successor_record_events,
             successor_summarize_callee_results,
             successor_sampling_rate_hz,
+            successor_partial_graph_checkpoint_seconds,
         ),
     )
     process.start()
@@ -623,7 +639,10 @@ def _archway_call_edges_with_timeout(
                 f"exitcode={process.exitcode}"
             )
         if status == "progress":
-            latest_evidence = payload
+            # Progress messages intentionally have different costs and
+            # cadences.  Preserve the most recent expensive checkpoint when a
+            # later cheap aggregate sample arrives.
+            latest_evidence.update(payload)
             continue
         process.join()
         if status == "ok":
@@ -670,6 +689,7 @@ def _archway_call_edges_worker(
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
+    successor_partial_graph_checkpoint_seconds: float | None = None,
 ) -> None:
     try:
         predicted = _produce_archway_call_edges(
@@ -684,6 +704,9 @@ def _archway_call_edges_worker(
                 successor_summarize_callee_results
             ),
             successor_sampling_rate_hz=successor_sampling_rate_hz,
+            successor_partial_graph_checkpoint_seconds=(
+                successor_partial_graph_checkpoint_seconds
+            ),
             successor_progress=(
                 lambda evidence: result_queue.put(("progress", evidence))
             ),
@@ -708,6 +731,7 @@ def _produce_archway_call_edges(
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
+    successor_partial_graph_checkpoint_seconds: float | None = None,
     successor_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
     if edge_provider == "successor":
@@ -718,6 +742,9 @@ def _produce_archway_call_edges(
             progress=successor_progress,
             summarize_callee_results=successor_summarize_callee_results,
             sampling_rate_hz=successor_sampling_rate_hz,
+            partial_graph_checkpoint_seconds=(
+                successor_partial_graph_checkpoint_seconds
+            ),
         )
     if edge_provider == "coordinated":
         return coordinated_archway_call_edges(case, engine_root=engine_root)
@@ -752,6 +779,7 @@ def successor_archway_call_edge_result(
     progress: Callable[[dict[str, object]], None] | None = None,
     summarize_callee_results: bool = False,
     sampling_rate_hz: float | None = None,
+    partial_graph_checkpoint_seconds: float | None = None,
 ) -> SuccessorEdgeResult:
     """Project one persistent diagram-only reduced-product program session."""
 
@@ -1176,6 +1204,47 @@ def successor_archway_call_edge_result(
     # makes bounded profiled and unprofiled checkpoints directly comparable.
     progress_sample_seconds = 10.0
 
+    def current_partial_graph_evidence() -> dict[str, object]:
+        """Project a diagnostic graph without claiming scheduler convergence."""
+
+        projection_started = time.perf_counter()
+        semantic_edges = session.semantic_call_edges()
+        direct_edges = {
+            (
+                edge.caller.display_name
+                if edge.caller is not None
+                else edge.caller_module,
+                _successor_pycg_target_name(edge.target.display_name),
+            )
+            for edge in semantic_edges
+            if edge.caller is not None or edge.caller_module is not None
+        }
+        projected_edges, _lineage = _inline_synthetic_frame_edges_with_evidence(
+            direct_edges
+        )
+        score = score_adjacency_lists(case.expected, projected_edges)
+        expected_edges = set(case.expected_edges)
+        return {
+            "partial_semantic_graph": {
+                "converged": False,
+                "analysis_seconds": time.perf_counter() - analysis_started,
+                "projection_seconds": time.perf_counter() - projection_started,
+                "semantic_direct_edge_count": len(direct_edges),
+                "pycg_projected_edge_count": len(projected_edges),
+                "score": score.to_jsonable(),
+                "predicted_edges": [
+                    list(edge) for edge in sorted(projected_edges)
+                ],
+                "missing_edges": [
+                    list(edge)
+                    for edge in sorted(expected_edges - projected_edges)
+                ],
+                "extra_edges": [
+                    list(edge) for edge in sorted(projected_edges - expected_edges)
+                ],
+            }
+        }
+
     def current_progress_evidence() -> dict[str, object]:
         """Return a bounded live sample without traversing retained facts."""
 
@@ -1261,9 +1330,19 @@ def successor_archway_call_edge_result(
 
     def sample_progress() -> None:
         assert progress is not None
+        last_partial_graph_checkpoint = analysis_started
         while not stop_sampling.wait(progress_sample_seconds):
             try:
-                progress(current_progress_evidence())
+                evidence = current_progress_evidence()
+                now = time.perf_counter()
+                if (
+                    partial_graph_checkpoint_seconds is not None
+                    and now - last_partial_graph_checkpoint
+                    >= partial_graph_checkpoint_seconds
+                ):
+                    evidence.update(current_partial_graph_evidence())
+                    last_partial_graph_checkpoint = now
+                progress(evidence)
             except Exception as exc:
                 progress({
                     "phase": "progress_error",
@@ -1971,6 +2050,16 @@ def main(argv: list[str] | None = None) -> int:
             "the requested frequency. Disabled by default."
         ),
     )
+    parser.add_argument(
+        "--successor-partial-graph-checkpoint-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Periodically project and score a non-converged semantic graph "
+            "during timeout-isolated successor runs. Disabled by default "
+            "because projection has measurable cost."
+        ),
+    )
     args = parser.parse_args(argv)
 
     result = run_archway_pycg(
@@ -1989,6 +2078,9 @@ def main(argv: list[str] | None = None) -> int:
             args.successor_summarize_callee_results
         ),
         successor_sampling_rate_hz=args.successor_sampling_rate_hz,
+        successor_partial_graph_checkpoint_seconds=(
+            args.successor_partial_graph_checkpoint_seconds
+        ),
     )
     payload = result.to_jsonable()
     text = json.dumps(payload, indent=2, sort_keys=True)

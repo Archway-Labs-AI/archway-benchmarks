@@ -408,7 +408,15 @@ def test_successor_timeout_retains_latest_progress_evidence(
 
     def slow_successor(*args, progress=None, **kwargs):
         assert progress is not None
-        progress({"phase": "analysis", "resolved_fact_count": 17})
+        progress({
+            "phase": "analysis",
+            "resolved_fact_count": 17,
+            "partial_semantic_graph": {
+                "converged": False,
+                "pycg_projected_edge_count": 1,
+            },
+        })
+        progress({"phase": "analysis", "demand_node_count": 23})
         time.sleep(1)
 
     monkeypatch.setattr(
@@ -427,6 +435,11 @@ def test_successor_timeout_retains_latest_progress_evidence(
     assert result.cases[0].analysis_evidence == {
         "phase": "analysis",
         "resolved_fact_count": 17,
+        "demand_node_count": 23,
+        "partial_semantic_graph": {
+            "converged": False,
+            "pycg_projected_edge_count": 1,
+        },
     }
 
 
