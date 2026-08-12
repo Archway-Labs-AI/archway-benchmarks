@@ -20,11 +20,42 @@ from archway_benchmarks.pycg import (
     expected_edges_from_callgraph,
     load_cases,
     load_macro_cases,
+    normalize_edges_for_pycg_scoring,
     run_archway_pycg,
     score_adjacency_lists,
     score_edges,
     successor_archway_call_edge_result,
 )
+
+
+def test_pycg_scoring_normalization_is_unique_and_auditable() -> None:
+    semantic = {
+        ("pkg.render", "re.Pattern.sub"),
+        ("pkg.data", "<builtin>.collections.namedtuple"),
+        ("pkg.keep", "custom.target"),
+    }
+    expected = {
+        ("pkg.render", "re.sub"),
+        ("pkg.data", "collections.namedtuple"),
+        ("pkg.keep", "custom.target"),
+    }
+
+    scored, lineage = normalize_edges_for_pycg_scoring(semantic, expected)
+
+    assert scored == expected
+    assert {tuple(row["semantic_edge"]) for row in lineage} == {
+        ("pkg.render", "re.Pattern.sub"),
+        ("pkg.data", "<builtin>.collections.namedtuple"),
+    }
+
+
+def test_pycg_scoring_normalization_does_not_guess_without_expected_alias() -> None:
+    semantic = {("pkg.render", "re.Pattern.sub")}
+
+    scored, lineage = normalize_edges_for_pycg_scoring(semantic, set())
+
+    assert scored == semantic
+    assert lineage == ()
 
 
 def test_write_json_artifact_creates_missing_storage_namespace(tmp_path: Path) -> None:
