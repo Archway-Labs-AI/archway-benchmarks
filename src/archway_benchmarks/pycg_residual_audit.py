@@ -117,8 +117,23 @@ def _adjudications(manifest: Mapping[str, Any] | None) -> dict[str, Mapping[str,
     entries = manifest.get("entries", [])
     if not isinstance(entries, list):
         raise ValueError("adjudication entries must be a list")
+    expanded = list(entries)
+    groups = manifest.get("groups", [])
+    if not isinstance(groups, list):
+        raise ValueError("adjudication groups must be a list")
+    for group in groups:
+        if not isinstance(group, Mapping):
+            raise ValueError("adjudication group must be an object")
+        identities = group.get("residual_ids")
+        if not isinstance(identities, list) or not identities:
+            raise ValueError("adjudication group lacks residual_ids")
+        shared = {
+            key: value for key, value in group.items()
+            if key not in {"group_id", "residual_ids"}
+        }
+        expanded.extend({"residual_id": identity, **shared} for identity in identities)
     indexed: dict[str, Mapping[str, Any]] = {}
-    for entry in entries:
+    for entry in expanded:
         if not isinstance(entry, Mapping):
             raise ValueError("adjudication entry must be an object")
         identity = entry.get("residual_id")
@@ -300,14 +315,17 @@ def main(argv: list[str] | None = None) -> int:
     manifest = None
     if args.adjudications is not None:
         entries: list[object] = []
+        groups: list[object] = []
         for path in args.adjudications:
             item = json.loads(path.read_text(encoding="utf-8"))
             if item.get("schema") != "archway.pycg.residual-adjudications.v1":
                 raise ValueError(f"unsupported adjudication schema: {path}")
             entries.extend(item.get("entries", []))
+            groups.extend(item.get("groups", []))
         manifest = {
             "schema": "archway.pycg.residual-adjudications.v1",
             "entries": entries,
+            "groups": groups,
         }
     audit = audit_run(run, adjudication_manifest=manifest)
     payload = json.dumps(audit, indent=2, sort_keys=True) + "\n"

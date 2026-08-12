@@ -109,3 +109,26 @@ def test_review_manifest_rejects_stale_or_unsubstantiated_entries() -> None:
                 "evidence_refs": ["trace:1"],
             }],
         })
+
+
+def test_review_manifest_expands_exact_residual_groups() -> None:
+    identity = residual_id(
+        "sample", "false_positive", ("pkg.main.f", "pkg.main.extra")
+    )
+    result = audit_run(_run(), adjudication_manifest={
+        "schema": "archway.pycg.residual-adjudications.v1",
+        "entries": [],
+        "groups": [{
+            "group_id": "group:source-visible-extras",
+            "residual_ids": [identity],
+            "disposition": "semantically_valid_extra",
+            "reviewer": "reviewer@example",
+            "rationale": "Every exact member has a reviewed direct callsite.",
+            "evidence_refs": ["review:source-visible-extras"],
+        }],
+    })
+
+    assert result["review_disposition_counts"] == {
+        "pending": 2,
+        "semantically_valid_extra": 1,
+    }

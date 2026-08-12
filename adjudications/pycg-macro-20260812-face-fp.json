@@ -1,0 +1,63 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "face:source-visible-semantic-extras:v1",
+      "residual_ids": [
+        "pycg-residual:v1:4953dea9c4da2efec23e17559b791272a7262624dd1c2b9bf4e3866fb8fc5f77",
+        "pycg-residual:v1:2758e5f2508a1f27dc949c39f14ba19070a2b5c793eebf60594e6c8098181f87",
+        "pycg-residual:v1:e7b6a65c53229d4bdb2eaee6f466ef3c594733f35bc12a5a71f0bbda82844077",
+        "pycg-residual:v1:6810dc59483b8aba9446f1cacad0589540baa4ebad0a2f370a97dd0ce9e9df43",
+        "pycg-residual:v1:4251803f4ac8170dcb5236078a5bd3866dee2a2996609b82f469235aff3d3c63",
+        "pycg-residual:v1:7be654c5697d2576a7710b641d4045f156da405a06972316c0aa3737d7e72d36",
+        "pycg-residual:v1:e22bfe6e33de1049c9b76156a3ac79efd9bfb64cbf61463b33e640dcb505ce72",
+        "pycg-residual:v1:10812d8c7bcb3099ada9b2c777168248d5dbe5ae2cd4ddc79676efd523c8af35",
+        "pycg-residual:v1:a298827fa862150ba336e8a6569ecd898214c974a37bbc9131ed25b90ce90d8d",
+        "pycg-residual:v1:7cbdcec9c77e63e0b10658b23d6372ea0b8ddad1d33097f4dc0f7959b626bdc8",
+        "pycg-residual:v1:e0b8475a6bdef5fd869248bc8f769a84372810aee91b01c08ca5605d98623904",
+        "pycg-residual:v1:04fc9948e5e62b703fbaa730807bfe1e07e8994d2879ecda0e9100bbc38356e4",
+        "pycg-residual:v1:726c53f235ddf5f32980866526acc850305804e58e58720050eb31e2a9124271",
+        "pycg-residual:v1:2a8e8dee4c52992d09ee62d41bb74dd778c4438ba3b4fbf29d11e7db1d6ea2c8",
+        "pycg-residual:v1:3f2f73bdaa3194e13952df559be0f596a0177f05759d566eb9f16c5c19016e80",
+        "pycg-residual:v1:0a91dc65ea1fa3b2ef584290ebb97c4220dd77cc507e2cfb0c9fc3614381682c",
+        "pycg-residual:v1:b49d418f9351754dfea3052f83832194794991774cb30d15ba00d09cba017621",
+        "pycg-residual:v1:55f58f2b9f4ba08a9557888925a6d2c44608498217e91ff1b0024446b904136e",
+        "pycg-residual:v1:4303a356a1b6d5c00bc5b0206196b104125ab6ff0a927b409a4b219d9a64f3a7",
+        "pycg-residual:v1:69962a32bffe340d6620bcc7b1f0b135c62d900b4b3209caac915600292645b6",
+        "pycg-residual:v1:fbc54910170d41a815caba5c61acac83ca076ba45c2a4415cccb8d520a4e7f9a",
+        "pycg-residual:v1:8ef11680a4ef4cef63a69030e15e7c6fcc063a61c231c30b315858abbe1d31b7",
+        "pycg-residual:v1:8cb66df8119adbbacfbdd27a55fc5a94ed982a2f1fbb5aab7ece9a20720f24bd",
+        "pycg-residual:v1:631ac32b8a679e9b18103ab736b66f3309db430cd45d477ba77130b0ca0feec8",
+        "pycg-residual:v1:d96a4ca6ac3d5dd5548d349ae6ee6f705ed7af0e01393b7a13b35dd17b01f389",
+        "pycg-residual:v1:f91304d85ee630423da6617cb48d00efa141190c1384dfff66491087294bc761",
+        "pycg-residual:v1:4c69266d7dd468e83520f1a2e7c026a33b4ba348d84c5356c8082b2d24d40705",
+        "pycg-residual:v1:5a891ba1889e4e56817b0f9a91c9972968d4da8a12ddd6538fe935c1c6665376",
+        "pycg-residual:v1:730c728586268273c78368f5ead1442974f85607280bf22ebedbcc7450924c98",
+        "pycg-residual:v1:a81ae47f39cc7805f83a7534d1097ff52d7db7790eac6f24f030b704d408d736",
+        "pycg-residual:v1:47ed9e2346ddc470124ee646621a3c47d737497a3b638491d966c0ff8e65ed44",
+        "pycg-residual:v1:6f6d05ec9c794720abd679fd052d1aeff5efaaa774fb2fa263f1b1e2b60fa69b",
+        "pycg-residual:v1:4361cca5cc87540acb88dbd10cf53fefda5e6029dd2aa10abf78d57303a790f7",
+        "pycg-residual:v1:97d89237b1b896097dc4ebed8e6dece768cf9f14b9413e533ba437ef119451b5",
+        "pycg-residual:v1:fe2360b140a4f17231d38c270a301d70757e4d723de27158347f63ceb9c27019",
+        "pycg-residual:v1:18912087a2cd7cccf3eecf2d2f749696166de7a47bfd3c7bd6a5bc495bf96132",
+        "pycg-residual:v1:36c4ae6e6fbe09e197187ec92f8ef95c3a791e65f5ab446409348673e07fdd03",
+        "pycg-residual:v1:7741ee22d1241d751b3fdc824703efb1d36d51960f50d9c9f5f4a5e4e9f31115",
+        "pycg-residual:v1:83542c57a6ee5cf98ba32617926accd37e8e8312e75be8939ff235e1b4195f13",
+        "pycg-residual:v1:d295f5f1c4db010b499c9ce14c6304580d06926d690ddbc10655b8f00e5f1a61",
+        "pycg-residual:v1:4b7ea3cda836c42b1c179ea436cb39bf2c566ab3bc1aa201c16d32db2752169f",
+        "pycg-residual:v1:2079b7ce826d857482a4f55f6f7c37e8f064f13a600e1cd8da96a90d031bad18",
+        "pycg-residual:v1:22b58235d345f5bc1801665aa1d0e6bcc3b6f4af458d07a66a057012510da799",
+        "pycg-residual:v1:3a25c51ae8dd294283459c62f2abcf516e8de9578e3a71092f3d2f1e2a6a328b"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Every exact member has retained semantic evidence at a reviewed source-visible callsite. Targets are direct builtin/container operations, resolved external receiver methods, context-manager protocol calls, decorator calls, or the three callable alternatives admitted by the transform jitter collection. PyCG omits or coarsens these calls; suppressing them would make the semantic graph less truthful.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md",
+        "review:face-source-visible-semantic-extras:2026-08-12"
+      ]
+    }
+  ]
+}
