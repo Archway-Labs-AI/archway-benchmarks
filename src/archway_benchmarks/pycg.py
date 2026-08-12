@@ -1400,7 +1400,11 @@ def successor_archway_call_edge_result(
         evidence: dict[str, object] = {
             "phase": "analysis",
             "evidence_detail": "live-aggregate",
+            "source_loading_seconds": source_loading_seconds,
+            "translation_seconds": translation_seconds,
+            "session_construction_seconds": session_construction_seconds,
             "analysis_seconds": time.perf_counter() - analysis_started,
+            "total_provider_seconds": time.perf_counter() - started,
             "demand_node_count": session.scheduler.graph.node_count,
             "topology_generation": (
                 session.scheduler.graph.topology_generation
