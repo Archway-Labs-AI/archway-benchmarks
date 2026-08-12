@@ -1095,12 +1095,26 @@ def successor_archway_call_edge_result(
             ),
             "active_root_seconds": query_progress["active_root_seconds"],
             "completed_root_count": query_progress["completed_root_count"],
+            "completed_root_seconds_total": query_progress[
+                "completed_root_seconds_total"
+            ],
+            "completed_root_history_truncated": query_progress[
+                "completed_root_history_truncated"
+            ],
             "completed_root_seconds": [
                 {
                     "root": root_labels.get(root_id, root_id),
                     "seconds": seconds,
                 }
                 for root_id, seconds in completed_root_seconds
+            ],
+            "slowest_completed_roots": [
+                {
+                    "root": root_labels.get(root_id, root_id),
+                    "seconds": seconds,
+                }
+                for root_id, seconds
+                in query_progress["slowest_completed_roots"]
             ],
             "invocation_context_counts": session.invocation_context_counts(),
             "invocation_input_growth_counts": (
@@ -1266,6 +1280,7 @@ def successor_archway_call_edge_result(
         repeated_production_count = int(
             production["repeated_production_count"]
         )
+        query_progress = session.scheduler.query_progress
 
         def top_counts(values: Counter[str]) -> dict[str, int | float]:
             return dict(values.most_common(20))
@@ -1293,7 +1308,34 @@ def successor_archway_call_edge_result(
             "scc_incremental_refresh_count": (
                 session.scheduler.graph.component_incremental_refresh_count
             ),
-            "query_progress": session.scheduler.query_progress,
+            "active_root": root_labels.get(
+                query_progress["active_root_id"],
+                query_progress["active_root_id"],
+            ),
+            "active_root_seconds": query_progress["active_root_seconds"],
+            "completed_root_count": query_progress["completed_root_count"],
+            "completed_root_seconds_total": query_progress[
+                "completed_root_seconds_total"
+            ],
+            "completed_root_history_truncated": query_progress[
+                "completed_root_history_truncated"
+            ],
+            "completed_root_seconds": [
+                {
+                    "root": root_labels.get(root_id, root_id),
+                    "seconds": seconds,
+                }
+                for root_id, seconds
+                in query_progress["completed_root_seconds"]
+            ],
+            "slowest_completed_roots": [
+                {
+                    "root": root_labels.get(root_id, root_id),
+                    "seconds": seconds,
+                }
+                for root_id, seconds
+                in query_progress["slowest_completed_roots"]
+            ],
             "scheduler_event_counts": dict(sorted(
                 (kind.value, count)
                 for kind, count in session.scheduler.event_counts.items()
