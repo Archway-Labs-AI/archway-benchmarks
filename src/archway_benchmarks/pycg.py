@@ -1329,6 +1329,56 @@ def successor_archway_call_edge_result(
             production["repeated_production_count"]
         )
         query_progress = session.scheduler.query_progress
+        production_counts = session.scheduler.production_counts
+        production_seconds = session.scheduler.production_seconds
+
+        summaries = (
+            session.invocation_registry.callable_summaries
+            if session.invocation_registry is not None else None
+        )
+        hottest_callable_applications: list[dict[str, object]] = []
+        if summaries is not None:
+            for address, spec in summaries.applications.items():
+                providers = session.scheduler.graph.providers(address)
+                executions = sum(
+                    production_counts.get(provider, 0)
+                    for provider in providers
+                )
+                if not executions:
+                    continue
+                prerequisites = {
+                    prerequisite
+                    for provider in providers
+                    for prerequisite in session.scheduler.graph.node(
+                        provider
+                    ).prerequisites
+                }
+                hottest_callable_applications.append({
+                    "address_id": address.id,
+                    "callable": body_labels.get(
+                        spec.callable_value.body_morphism_id
+                    ),
+                    "body_morphism_id": (
+                        spec.callable_value.body_morphism_id
+                    ),
+                    "input_pattern_id": address.subject.input_pattern_id,
+                    "executions": executions,
+                    "seconds": sum(
+                        production_seconds.get(provider, 0.0)
+                        for provider in providers
+                    ),
+                    "prerequisite_count": len(prerequisites),
+                    "prerequisites_by_family": dict(sorted(Counter(
+                        prerequisite.family
+                        for prerequisite in prerequisites
+                    ).items())),
+                })
+            hottest_callable_applications.sort(
+                key=lambda item: (
+                    -int(item["executions"]), str(item["address_id"])
+                )
+            )
+            del hottest_callable_applications[20:]
 
         def top_counts(values: Counter[str]) -> dict[str, int | float]:
             return dict(values.most_common(20))
@@ -1412,6 +1462,7 @@ def successor_archway_call_edge_result(
             "production_executions_by_provider": top_counts(
                 Counter(production["production_executions_by_provider"])
             ),
+            "hottest_callable_applications": hottest_callable_applications,
             "transfer_operation_counts": dict(sorted(
                 session.scheduler.transfer_operation_counts.items()
             )),
