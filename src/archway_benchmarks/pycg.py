@@ -1117,7 +1117,7 @@ def successor_archway_call_edge_result(
             ),
             "resolved_fact_count": len(snapshot.resolved_facts),
             "fact_family_counts": dict(sorted(family_counts.items())),
-            "demand_node_count": len(session.scheduler.graph.nodes),
+            "demand_node_count": session.scheduler.graph.node_count,
             "scc_count": len(components),
             "recursive_scc_count": recursive_components,
             "recursive_scc_details": recursive_component_details,
@@ -1212,7 +1212,7 @@ def successor_archway_call_edge_result(
     # Cheap aggregate progress is part of the case-timeout contract, independent
     # of whether statistical stack sampling is enabled.  Keeping one cadence
     # makes bounded profiled and unprofiled checkpoints directly comparable.
-    progress_sample_seconds = 10.0
+    progress_sample_seconds = 5.0
 
     def current_partial_graph_evidence() -> dict[str, object]:
         """Project a diagnostic graph without claiming scheduler convergence."""
