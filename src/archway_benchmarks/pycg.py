@@ -1192,6 +1192,9 @@ def successor_archway_call_edge_result(
             "invalidation_reason_counts": dict(sorted(
                 session.scheduler.invalidation_reason_counts.items()
             )),
+            "worklist_schedule_counts": dict(sorted(
+                aggregate_production["worklist_schedule_counts"].items()
+            )),
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
             )),
@@ -1443,6 +1446,9 @@ def successor_archway_call_edge_result(
             )),
             "invalidation_reason_counts": dict(sorted(
                 session.scheduler.invalidation_reason_counts.items()
+            )),
+            "worklist_schedule_counts": dict(sorted(
+                production["worklist_schedule_counts"].items()
             )),
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()

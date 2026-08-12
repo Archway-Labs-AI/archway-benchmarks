@@ -113,6 +113,7 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.evidence["production_execution_count"] >= (
         result.evidence["unique_production_count"]
     )
+    assert result.evidence["worklist_schedule_counts"]
     assert result.evidence["largest_scc_size"] >= 1
     assert result.evidence["semantic_call_edge_evidence_count"] >= 1
     lambda_edges = [
