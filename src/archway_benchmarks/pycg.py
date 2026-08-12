@@ -838,6 +838,7 @@ def successor_archway_call_edge_result(
         modules,
         entry_module,
         record_events=record_events,
+        catalog_observations=False,
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
         ),
