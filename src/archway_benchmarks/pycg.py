@@ -1163,6 +1163,9 @@ def successor_archway_call_edge_result(
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
+            "morphism_transfer_reuse_counts": (
+                session.morphism_transfer_reuse_counts()
+            ),
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
             ),
@@ -1319,6 +1322,9 @@ def successor_archway_call_edge_result(
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
+            "morphism_transfer_reuse_counts": (
+                session.morphism_transfer_reuse_counts()
+            ),
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 * (1024 if sys.platform.startswith("linux") else 1)
