@@ -1743,6 +1743,7 @@ def _successor_semantic_edge_evidence(edge) -> dict[str, object]:
             if position is not None else None
         ),
         "target_kind": type(edge.target).__name__,
+        "evidence_grade": edge.evidence_grade,
         "invocation_kind": type(edge.invocation).__name__,
         "invocation_id": invocation_id,
         "invocation": dict(invocation_data),

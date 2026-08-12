@@ -144,6 +144,7 @@ def audit_case(case: Mapping[str, Any]) -> dict[str, Any]:
                 "source_position": record.get("source_position"),
                 "source_line": record.get("source_line"),
                 "target_kind": record.get("target_kind"),
+                "evidence_grade": record.get("evidence_grade", "semantic"),
                 "invocation_kind": record.get("invocation_kind"),
             }
             for record in records

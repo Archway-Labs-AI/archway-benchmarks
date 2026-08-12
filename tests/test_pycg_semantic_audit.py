@@ -11,6 +11,7 @@ def _record(edge: list[str], line: str, target_kind: str = "CallableBoundary") -
         "source_position": {"line": 2, "column": 4},
         "source_line": line,
         "target_kind": target_kind,
+        "evidence_grade": "semantic",
         "invocation_kind": "CallableInvocationTarget",
     }
 
