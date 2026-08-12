@@ -877,6 +877,9 @@ def successor_archway_call_edge_result(
         production_counts = session.scheduler.production_counts
         production_seconds = session.scheduler.production_seconds
         production_change_counts = session.scheduler.production_change_counts
+        aggregate_production = (
+            session.scheduler.aggregate_production_telemetry
+        )
         production_growth_counts = (
             session.scheduler.production_growth_coordinate_counts
         )
@@ -1199,6 +1202,26 @@ def successor_archway_call_edge_result(
                 repeated_production_count / production_execution_count
                 if production_execution_count else 0.0
             ),
+            # These bounded aggregates are maintained on the scheduler hot
+            # path even when detailed events are disabled.  Retain them in a
+            # completed artifact as well as in timeout progress evidence so a
+            # successful long run does not require a second profiling run to
+            # attribute convergence cost.
+            "production_executions_by_family": dict(sorted(
+                aggregate_production[
+                    "production_executions_by_family"
+                ].items()
+            )),
+            "production_repeats_by_family": dict(sorted(
+                aggregate_production[
+                    "production_repeats_by_family"
+                ].items()
+            )),
+            "production_seconds_by_family": dict(sorted(
+                aggregate_production[
+                    "production_seconds_by_family"
+                ].items()
+            )),
             "hottest_productions": hottest_productions,
             "slowest_productions": slowest_productions,
             "hottest_transfers": hottest_transfers,
