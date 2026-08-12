@@ -822,7 +822,9 @@ def successor_archway_call_edge_result(
     from sd_core.tooling.sampling_profile import SamplingProfiler
 
     started = time.perf_counter()
+    source_loading_started = time.perf_counter()
     sources = _load_case_sources(case)
+    source_loading_seconds = time.perf_counter() - source_loading_started
     translation_started = time.perf_counter()
     program = ProgramResult.from_sources(sources)
     translation_seconds = time.perf_counter() - translation_started
@@ -831,6 +833,7 @@ def successor_archway_call_edge_result(
         for name, translation in program.modules.items()
     }
     entry_module = "main" if "main" in modules else min(modules)
+    session_construction_started = time.perf_counter()
     session = open_hybrid_program_session(
         modules,
         entry_module,
@@ -838,6 +841,9 @@ def successor_archway_call_edge_result(
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
         ),
+    )
+    session_construction_seconds = (
+        time.perf_counter() - session_construction_started
     )
     topology_before = session.scheduler.graph.topology_generation
     analysis_started = time.perf_counter()
@@ -1263,7 +1269,9 @@ def successor_archway_call_edge_result(
                 ),
             },
             "knowledge_commit_counts": session.store.commit_counts,
+            "source_loading_seconds": source_loading_seconds,
             "translation_seconds": translation_seconds,
+            "session_construction_seconds": session_construction_seconds,
             "analysis_seconds": time.perf_counter() - analysis_started,
             "total_provider_seconds": time.perf_counter() - started,
             "trace_events_enabled": record_events,

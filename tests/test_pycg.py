@@ -134,6 +134,9 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.evidence["pycg_projection_lineage_count"] >= 1
     assert "summary_reuse" in result.evidence
     assert result.evidence["trace_events_enabled"] is False
+    assert result.evidence["source_loading_seconds"] >= 0
+    assert result.evidence["translation_seconds"] >= 0
+    assert result.evidence["session_construction_seconds"] >= 0
     assert result.evidence["peak_rss_bytes"] > 0
 
 
