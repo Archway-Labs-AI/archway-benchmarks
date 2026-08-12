@@ -293,14 +293,22 @@ def audit_run(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("result", type=Path)
-    parser.add_argument("--adjudications", type=Path)
+    parser.add_argument("--adjudications", type=Path, nargs="+")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     run = json.loads(args.result.read_text(encoding="utf-8"))
-    manifest = (
-        json.loads(args.adjudications.read_text(encoding="utf-8"))
-        if args.adjudications is not None else None
-    )
+    manifest = None
+    if args.adjudications is not None:
+        entries: list[object] = []
+        for path in args.adjudications:
+            item = json.loads(path.read_text(encoding="utf-8"))
+            if item.get("schema") != "archway.pycg.residual-adjudications.v1":
+                raise ValueError(f"unsupported adjudication schema: {path}")
+            entries.extend(item.get("entries", []))
+        manifest = {
+            "schema": "archway.pycg.residual-adjudications.v1",
+            "entries": entries,
+        }
     audit = audit_run(run, adjudication_manifest=manifest)
     payload = json.dumps(audit, indent=2, sort_keys=True) + "\n"
     if args.output is None:
