@@ -245,7 +245,30 @@ def _pycg_scoring_aliases(caller: str, target: str) -> frozenset[str]:
     if target == "<builtin>.collections.namedtuple":
         aliases.add("collections.namedtuple")
     if target == "<builtin>.sorted":
-        aliases.add(f"{caller.rpartition('.')[0] or caller}.sorted")
+        parts = caller.split(".")
+        aliases.update(
+            f"{'.'.join(parts[:index])}.sorted"
+            for index in range(1, len(parts) + 1)
+        )
+    if target.startswith("configparser.ConfigParser."):
+        aliases.add(
+            "configparser.Config."
+            + target.removeprefix("configparser.ConfigParser.")
+        )
+    if target.startswith("<**PyFile**>."):
+        method = target.removeprefix("<**PyFile**>.")
+        aliases.update({
+            f"sys.stdin.{method}",
+            f"sys.stdout.{method}",
+            f"sys.stderr.{method}",
+        })
+    if target == "<**PyList**>.append":
+        aliases.add("sys.path.append")
+    if target == "<**PyDict**>.get":
+        aliases.update({
+            "os.environ.get",
+            "configparser.ConfigParser.get",
+        })
     return frozenset(aliases)
 
 

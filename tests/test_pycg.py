@@ -58,6 +58,19 @@ def test_pycg_scoring_normalization_does_not_guess_without_expected_alias() -> N
     assert lineage == ()
 
 
+def test_pycg_scoring_normalization_requires_unique_stream_alias() -> None:
+    semantic = {("pkg.render", "<**PyFile**>.write")}
+    ambiguous = {
+        ("pkg.render", "sys.stdout.write"),
+        ("pkg.render", "sys.stderr.write"),
+    }
+
+    scored, lineage = normalize_edges_for_pycg_scoring(semantic, ambiguous)
+
+    assert scored == semantic
+    assert lineage == ()
+
+
 def test_write_json_artifact_creates_missing_storage_namespace(tmp_path: Path) -> None:
     output = tmp_path / "external-store" / "runs" / "result.json"
 
