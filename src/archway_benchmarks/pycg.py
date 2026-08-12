@@ -1751,6 +1751,7 @@ def _successor_semantic_edge_evidence(edge) -> dict[str, object]:
             if edge.caller is not None else "module"
         ),
         "callsite_morphism_id": edge.callsite_morphism_id,
+        "callsite_operation": edge.callsite_operation,
         "source_module": module,
         "source_position": (
             {
