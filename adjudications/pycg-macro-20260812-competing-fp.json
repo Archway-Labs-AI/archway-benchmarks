@@ -1,0 +1,32 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "macro:valid-target-competition:v1",
+      "residual_ids": [
+        "pycg-residual:v1:8a0c03eb9e129ce1743f7420f324597fde18305aa4c9f7e73914cb76dee6efe1",
+        "pycg-residual:v1:4c005728cb736e76cc8c40cb8e550e00ea65ded8cc9d52e8348c8f5fe21f78a0",
+        "pycg-residual:v1:554fdd9a69f8448bcfe45b05e375ffb39791459cb4cc82512eb38696cb48e43d",
+        "pycg-residual:v1:c9460c435a1210c804528bcd04697e3fa996d96d954a1eb9df91daa1b7a75246",
+        "pycg-residual:v1:42c2f1f5da466a7964fadd04e06d98211f240a98cc1fdc36c9a0c2b934c358df",
+        "pycg-residual:v1:e812cb5155daa2643cf82dd34016ca7efe9213ce053871079787c0b20023edd0",
+        "pycg-residual:v1:527214ca9a01ac291683627b31dae2b2f4a4d8b47a3e98f18babea0f17c07174",
+        "pycg-residual:v1:64ed3cdabda012f71a3c67eb945f2f7b44be3862c1c01155baff81a09c2ebd62",
+        "pycg-residual:v1:f6febd1f32d32d1c76b802422597df93e0f4698da9d4ed1d4c072445ec6a1ca8",
+        "pycg-residual:v1:018c5ac8523675ff5f8b058f06db7b580a1ae881cf3ce834d2bf2b2c90acb030",
+        "pycg-residual:v1:6d87372e232691c94310b32813ba1ec360804790cbf7d328477d351ab5981b29",
+        "pycg-residual:v1:8f5b39ae0d86b194315b77a149c52185006ef61dbfb0b126768d32ab7ef1739f",
+        "pycg-residual:v1:7719c2df9d59d4b94151e92b1d4813b096784eb48fc131ee07c918e17e213642",
+        "pycg-residual:v1:0a081d167f652e668f84cc685e417292f8f53e16b891643a44e98d1901c49699"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Each exact member is a retained callsite target that competes with a PyCG-expected target but remains semantically possible or directly required: Python 2/3 map/filter alternatives, their invoked lambda callbacks, dynamic _add_action dispatch, or the direct builtin print call inside Command.print. Choosing only the benchmark target would encode an unstated runtime convention or discard a real call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "review:macro-target-competition:2026-08-12"
+      ]
+    }
+  ]
+}
