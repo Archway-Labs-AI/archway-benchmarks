@@ -625,6 +625,13 @@ def _archway_call_edges_with_timeout(
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             _stop_case_worker(process)
+            while True:
+                try:
+                    status, payload = result_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if status == "progress":
+                    latest_evidence.update(payload)
             raise PyCGCaseTimeoutError(
                 f"case exceeded timeout of {case_timeout_seconds:.3f}s",
                 latest_evidence,
@@ -1251,6 +1258,7 @@ def successor_archway_call_edge_result(
     def current_progress_evidence() -> dict[str, object]:
         """Return a bounded live sample without traversing retained facts."""
 
+        collection_started = time.perf_counter()
         production_counts = session.scheduler.production_counts
         production_seconds = session.scheduler.production_seconds
         production_execution_count = sum(production_counts.values())
@@ -1332,6 +1340,9 @@ def successor_archway_call_edge_result(
         }
         if sampling_profile is not None:
             evidence["sampling_profile"] = sampling_profile.jsonable(top=50)
+        evidence["diagnostic_collection_seconds"] = (
+            time.perf_counter() - collection_started
+        )
         return evidence
 
     def sample_progress() -> None:
