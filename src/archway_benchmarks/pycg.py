@@ -897,11 +897,15 @@ def successor_archway_call_edge_result(
             for boundary in session.callable_boundaries_by_body.values()
         }
 
-        def invocation_request_for(key):
+        def callable_application_for(key):
             registry = session.invocation_registry
-            return (
-                registry.requests.get(key.address)
+            summaries = (
+                registry.callable_summaries
                 if registry is not None else None
+            )
+            return (
+                summaries.applications.get(key.address)
+                if summaries is not None else None
             )
 
         def callable_for(key) -> str | None:
@@ -916,19 +920,19 @@ def successor_archway_call_edge_result(
             )
             if body_id in body_labels:
                 return body_labels[body_id]
-            request = invocation_request_for(key)
-            if request is None:
+            application = callable_application_for(key)
+            if application is None:
                 return None
             boundary = boundaries_by_definition.get(
-                request.value.definition_morphism_id
+                application.callable_value.definition_morphism_id
             )
             return boundary.display_name if boundary is not None else None
 
         def callable_value_for(key) -> dict[str, object] | None:
-            request = invocation_request_for(key)
+            application = callable_application_for(key)
             return (
-                dict(request.value.canonical_data())
-                if request is not None else None
+                dict(application.callable_value.canonical_data())
+                if application is not None else None
             )
 
         hottest_productions = [
