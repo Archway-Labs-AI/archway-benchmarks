@@ -1274,7 +1274,7 @@ def successor_archway_call_edge_result(
             "phase": "analysis",
             "evidence_detail": "live-aggregate",
             "analysis_seconds": time.perf_counter() - analysis_started,
-            "demand_node_count": len(session.scheduler.graph.nodes),
+            "demand_node_count": session.scheduler.graph.node_count,
             "topology_generation": (
                 session.scheduler.graph.topology_generation
             ),
@@ -1293,6 +1293,7 @@ def successor_archway_call_edge_result(
             "scc_incremental_refresh_count": (
                 session.scheduler.graph.component_incremental_refresh_count
             ),
+            "query_progress": session.scheduler.query_progress,
             "scheduler_event_counts": dict(sorted(
                 (kind.value, count)
                 for kind, count in session.scheduler.event_counts.items()
