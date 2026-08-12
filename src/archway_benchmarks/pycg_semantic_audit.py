@@ -26,6 +26,7 @@ class ExtraEdgeAudit:
     evidence_status: str
     semantic_category: str
     source_relationship: str
+    evidence_grade: str
     callsite_count: int
     callsites: tuple[dict[str, Any], ...]
     target_competition: str
@@ -38,6 +39,7 @@ class ExtraEdgeAudit:
             "evidence_status": self.evidence_status,
             "semantic_category": self.semantic_category,
             "source_relationship": self.source_relationship,
+            "evidence_grade": self.evidence_grade,
             "callsite_count": self.callsite_count,
             "callsites": list(self.callsites),
             "target_competition": self.target_competition,
@@ -86,6 +88,15 @@ def _source_relationship(callee: str, records: list[Mapping[str, Any]]) -> str:
     if records:
         return "diagram_resolved_indirectly"
     return "no_contextual_evidence"
+
+
+def _evidence_grade(records: list[Mapping[str, Any]]) -> str:
+    grades = {str(record.get("evidence_grade", "semantic")) for record in records}
+    if grades == {"capability_candidate"}:
+        return "capability_candidate"
+    if "semantic" in grades:
+        return "semantic"
+    return "unknown"
 
 
 def audit_case(case: Mapping[str, Any]) -> dict[str, Any]:
@@ -174,6 +185,7 @@ def audit_case(case: Mapping[str, Any]) -> dict[str, Any]:
                 evidence_status=evidence_status,
                 semantic_category=_semantic_category(edge[1], records),
                 source_relationship=_source_relationship(edge[1], records),
+                evidence_grade=_evidence_grade(records),
                 callsite_count=len({item.get("callsite_morphism_id") for item in records}),
                 callsites=callsites,
                 target_competition=target_competition,
@@ -186,6 +198,7 @@ def audit_case(case: Mapping[str, Any]) -> dict[str, Any]:
     category_counts = Counter(item.semantic_category for item in audits)
     relationship_counts = Counter(item.source_relationship for item in audits)
     competition_counts = Counter(item.target_competition for item in audits)
+    grade_counts = Counter(item.evidence_grade for item in audits)
     return {
         "suite_path": case.get("suite_path"),
         "raw_extra_count": len(audits),
@@ -193,6 +206,7 @@ def audit_case(case: Mapping[str, Any]) -> dict[str, Any]:
         "semantic_category_counts": dict(sorted(category_counts.items())),
         "source_relationship_counts": dict(sorted(relationship_counts.items())),
         "target_competition_counts": dict(sorted(competition_counts.items())),
+        "evidence_grade_counts": dict(sorted(grade_counts.items())),
         "edges": [item.to_jsonable() for item in audits],
     }
 
@@ -203,11 +217,13 @@ def audit_run(run: Mapping[str, Any]) -> dict[str, Any]:
     category_counts: Counter[str] = Counter()
     relationship_counts: Counter[str] = Counter()
     competition_counts: Counter[str] = Counter()
+    grade_counts: Counter[str] = Counter()
     for case in cases:
         evidence_counts.update(case["evidence_status_counts"])
         category_counts.update(case["semantic_category_counts"])
         relationship_counts.update(case["source_relationship_counts"])
         competition_counts.update(case["target_competition_counts"])
+        grade_counts.update(case["evidence_grade_counts"])
     return {
         "schema": "archway.pycg.semantic-extra-audit.v1",
         "suite": run.get("suite"),
@@ -217,6 +233,7 @@ def audit_run(run: Mapping[str, Any]) -> dict[str, Any]:
         "semantic_category_counts": dict(sorted(category_counts.items())),
         "source_relationship_counts": dict(sorted(relationship_counts.items())),
         "target_competition_counts": dict(sorted(competition_counts.items())),
+        "evidence_grade_counts": dict(sorted(grade_counts.items())),
         "adjudication_policy": {
             "default_disposition": "review_required",
             "note": "Evidence categories do not change raw scores or assert semantic correctness.",
@@ -234,12 +251,14 @@ def audit_runs(runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     category_counts: Counter[str] = Counter()
     relationship_counts: Counter[str] = Counter()
     competition_counts: Counter[str] = Counter()
+    grade_counts: Counter[str] = Counter()
     score_counts: Counter[str] = Counter()
     for item in audited:
         evidence_counts.update(item["evidence_status_counts"])
         category_counts.update(item["semantic_category_counts"])
         relationship_counts.update(item["source_relationship_counts"])
         competition_counts.update(item["target_competition_counts"])
+        grade_counts.update(item["evidence_grade_counts"])
         item_score = item.get("raw_score") or {}
         score_counts.update(
             {
@@ -268,6 +287,7 @@ def audit_runs(runs: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
         "semantic_category_counts": dict(sorted(category_counts.items())),
         "source_relationship_counts": dict(sorted(relationship_counts.items())),
         "target_competition_counts": dict(sorted(competition_counts.items())),
+        "evidence_grade_counts": dict(sorted(grade_counts.items())),
         "adjudication_policy": {
             "default_disposition": "review_required",
             "note": "Evidence categories do not change raw scores or assert semantic correctness.",

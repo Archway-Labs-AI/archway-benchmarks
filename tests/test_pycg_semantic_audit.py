@@ -63,6 +63,7 @@ def test_audit_preserves_raw_score_and_requires_adjudication() -> None:
         "implicit_protocol_call": 1,
         "project_or_resolved_object_call": 1,
     }
+    assert audit["evidence_grade_counts"] == {"semantic": 3}
     assert all(
         edge["disposition"] == "review_required"
         for edge in audit["cases"][0]["edges"]
