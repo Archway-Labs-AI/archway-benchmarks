@@ -123,7 +123,11 @@ def main() -> None:
         if (
             not args.no_resume
             and isinstance(existing, dict)
-            and existing.get("status") in {"complete", "partial"}
+            # A partial repository retains useful checkpointed predictions,
+            # but it has not satisfied the full-run contract.  Resume must
+            # retry it in the same persistent per-repository session rather
+            # than silently treating missing roots as complete.
+            and existing.get("status") == "complete"
             and (predictions_root / repo_name).is_dir()
         ):
             print(f"ARCHWAY_TYPYBENCH skip {index}/{len(repos)} {repo_name}", flush=True)
