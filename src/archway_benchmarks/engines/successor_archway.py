@@ -165,18 +165,42 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
                 continue
             mapped.append((requested, candidates))
 
-        missing_addresses = tuple(sorted({
-            item.address
-            for _requested, candidates in mapped
-            for item in candidates
-            if (
-                (fact := result.session.store.resolved(item.address)) is None
-                or not fact.value
-            )
-        }, key=lambda address: address.id))
-        if missing_addresses:
+        demanded_addresses = set()
+        missing_addresses = _unresolved_query_addresses(
+            result.session, mapped
+        )
+        while new_addresses := tuple(
+            address for address in missing_addresses
+            if address not in demanded_addresses
+        ):
+            demanded_addresses.update(new_addresses)
             result.targeted_runs.append(
-                result.session.observe(missing_addresses)
+                result.session.observe(tuple(sorted(
+                    new_addresses, key=lambda address: address.id
+                )))
+            )
+            # Targeted refinement may discover a context-specific instance
+            # of an observation template (most notably a callable-summary
+            # application) while the fallback address that triggered the
+            # demand correctly remains open.  Re-read the session catalog so
+            # the query consumes the knowledge produced by that demand wave
+            # instead of freezing its pre-refinement address set.
+            refined_observations = result.session.type_observations()
+            mapped = [
+                (
+                    requested,
+                    _map_observations(
+                        refined_observations, requested.location
+                    )
+                    or _map_container_path(
+                        result.session, requested.location
+                    )
+                    or candidates,
+                )
+                for requested, candidates in mapped
+            ]
+            missing_addresses = _unresolved_query_addresses(
+                result.session, mapped
             )
 
         for requested, candidates in mapped:
@@ -215,6 +239,24 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
                 "forward session emitted no usable type contribution",
             ))
         return predictions
+
+
+def _unresolved_query_addresses(session, mapped):
+    """Return new fact roots only for queries with no usable candidate."""
+
+    unresolved = set()
+    for _requested, candidates in mapped:
+        facts = tuple(
+            session.store.resolved(item.address) for item in candidates
+        )
+        if any(fact is not None and fact.value for fact in facts):
+            continue
+        unresolved.update(
+            item.address
+            for item, fact in zip(candidates, facts, strict=True)
+            if fact is None or not fact.value
+        )
+    return tuple(sorted(unresolved, key=lambda address: address.id))
 
 
 def _map_observations(observations, location: Location):
