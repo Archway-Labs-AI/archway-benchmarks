@@ -22,6 +22,11 @@ def main() -> None:
     parser.add_argument("--sample-rate-hz", type=float)
     parser.add_argument("--sample-body-label")
     parser.add_argument("--record-timings", action="store_true")
+    parser.add_argument(
+        "--production-light",
+        action="store_true",
+        help="disable detailed per-cohort diagnostic attribution",
+    )
     args = parser.parse_args()
     if args.body_timeout is not None and args.body_label is None:
         parser.error("--body-timeout requires --body-label")
@@ -38,7 +43,7 @@ def main() -> None:
         sample_rate_hz=args.sample_rate_hz,
         sample_body_label=args.sample_body_label,
         record_timings=args.record_timings,
-        diagnostic_details=True,
+        diagnostic_details=not args.production_light,
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}

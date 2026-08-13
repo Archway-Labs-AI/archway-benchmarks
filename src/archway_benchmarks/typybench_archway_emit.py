@@ -479,8 +479,13 @@ try:
         # persistent session.  This preserves shared knowledge and affected-
         # region convergence while avoiding both one scheduler drain per body
         # and the enormous topology wave produced by collective admission.
-        # Diagnostic runs retain one root per checkpoint for attribution.
-        checkpoint_size = 1
+        # Admit bounded cohorts into the same persistent scheduler. One root
+        # per drain repeats global stability checks and convergence work for
+        # every signature body; admitting the entire repository at once can
+        # create an unnecessarily large unstable topology wave. Eight roots
+        # preserves frequent durable progress while allowing related demands
+        # to share discovery and SCC convergence.
+        checkpoint_size = 8
         root_batches = tuple(
             signature_roots[index:index + checkpoint_size]
             for index in range(0, len(signature_roots), checkpoint_size)
@@ -546,6 +551,7 @@ try:
                     key=lambda item: (-item[1], item[0]),
                 )[:8],
                 "root_id": root_address.id,
+                "root_ids": [item.id for item in root_batch],
             }
             if diagnostic_details:
                 body_profiles.append(body_profile)
