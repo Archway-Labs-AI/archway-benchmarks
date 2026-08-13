@@ -607,6 +607,9 @@ try:
             "morphism_transfer_reuse": dict(
                 session.morphism_transfer_reuse_counts()
             ),
+            "morphism_transfer_reuse_by_operation": dict(
+                session.morphism_transfer_reuse_by_operation()
+            ),
             "invocation_contexts": dict(
                 session.invocation_context_counts()
             ),

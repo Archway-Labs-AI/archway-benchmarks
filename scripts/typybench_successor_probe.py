@@ -66,6 +66,9 @@ def main() -> None:
         "requested_addresses": summary.get("requested_addresses"),
         "requested_body_roots": summary.get("requested_body_roots"),
         "morphism_transfer_reuse": summary.get("morphism_transfer_reuse"),
+        "morphism_transfer_reuse_by_operation": summary.get(
+            "morphism_transfer_reuse_by_operation"
+        ),
         "invocation_contexts": summary.get("invocation_contexts"),
         "invocation_inputs": summary.get("invocation_inputs"),
         "invocation_admissions": summary.get("invocation_admissions"),
