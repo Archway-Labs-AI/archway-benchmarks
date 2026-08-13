@@ -140,6 +140,7 @@ def emit_archway_predictions(
             runner=runner,
             timeout=timeout,
             checkpoint_roots=checkpoint_roots,
+            diagnostic_details=False,
         )
         seconds_repo_probe = time.monotonic() - probe_started
         for src in files:
@@ -347,6 +348,7 @@ def _run_successor_repo_probe(
     sample_rate_hz: float | None = None,
     sample_body_label: str | None = None,
     record_timings: bool = False,
+    diagnostic_details: bool = True,
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
@@ -383,6 +385,7 @@ callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
 sample_rate_hz = float(sys.argv[7]) or None
 sample_body_label = sys.argv[8] or None
 record_timings = sys.argv[9] == "timings"
+diagnostic_details = sys.argv[10] == "diagnostics"
 
 def module_name(path):
     rel = path.relative_to(root).with_suffix("")
@@ -476,9 +479,16 @@ try:
             body_started = time.monotonic()
             executions_before = session.scheduler.production_execution_count
             topology_before = session.scheduler.graph.topology_generation
-            telemetry_before = session.scheduler.production_family_telemetry
-            families_before = telemetry_before["executions"]
-            family_seconds_before = telemetry_before["seconds"]
+            telemetry_before = (
+                session.scheduler.production_family_telemetry
+                if diagnostic_details else None
+            )
+            families_before = (
+                telemetry_before["executions"] if telemetry_before else {}
+            )
+            family_seconds_before = (
+                telemetry_before["seconds"] if telemetry_before else {}
+            )
             body_id = getattr(root_address.subject, "body_morphism_id", "")
             body_label = body_labels.get(body_id, "?")
             if sample_rate_hz and body_label == sample_body_label:
@@ -493,7 +503,10 @@ try:
                 )
             else:
                 targeted = session.observe((root_address,))
-            telemetry_after = session.scheduler.production_family_telemetry
+            telemetry_after = (
+                session.scheduler.production_family_telemetry
+                if diagnostic_details else {"executions": {}, "seconds": {}}
+            )
             family_deltas = {
                 family: count - families_before.get(family, 0)
                 for family, count in telemetry_after["executions"].items()
@@ -523,7 +536,8 @@ try:
                 )[:8],
                 "root_id": root_address.id,
             }
-            body_profiles.append(body_profile)
+            if diagnostic_details:
+                body_profiles.append(body_profile)
             print(
                 f"ARCHWAY_BODY {index}/{len(signature_roots)} "
                 f"{body_profile['seconds']:.6f} "
@@ -582,6 +596,22 @@ try:
         })
     scheduler_telemetry = dict(session.scheduler.aggregate_production_telemetry)
     scheduler_telemetry.pop("production_executions_by_provider", None)
+    if not diagnostic_details:
+        scheduler_telemetry = {
+            key: scheduler_telemetry[key]
+            for key in (
+                "unique_production_count",
+                "production_execution_count",
+                "repeated_production_count",
+                "component_recompute_count",
+                "component_recompute_seconds",
+                "component_node_visits",
+                "component_edge_visits",
+                "component_incremental_refresh_count",
+                "component_edge_update_telemetry",
+            )
+            if key in scheduler_telemetry
+        }
     out = {
         "ok": True,
         "files": files,
@@ -595,7 +625,10 @@ try:
             "timed_out_body": timed_out_body if not checkpoint_roots else False,
             "forward_events": len(forward.events),
             "targeted_events": len(targeted.events) if targeted is not None else 0,
-            "resolved_facts": len(session.store.snapshot().resolved_facts),
+            "resolved_facts": (
+                len(session.store.snapshot().resolved_facts)
+                if diagnostic_details else None
+            ),
             "translation_failures": translation_failures,
             "phase_seconds": {
                 "translation": translation_seconds,
@@ -606,37 +639,37 @@ try:
             "scheduler": scheduler_telemetry,
             "morphism_transfer_reuse": dict(
                 session.morphism_transfer_reuse_counts()
-            ),
+            ) if diagnostic_details else {},
             "morphism_transfer_reuse_by_operation": dict(
                 session.morphism_transfer_reuse_by_operation()
-            ),
+            ) if diagnostic_details else {},
             "atomic_effect_gaps": dict(
                 session.atomic_effect_gap_counts()
-            ),
+            ) if diagnostic_details else {},
             "morphism_fact_output_barriers": dict(
                 session.morphism_fact_output_barriers()
-            ),
+            ) if diagnostic_details else {},
             "morphism_read_intersections": dict(
                 session.morphism_read_intersections()
-            ),
+            ) if diagnostic_details else {},
             "invocation_contexts": dict(
                 session.invocation_context_counts()
-            ),
+            ) if diagnostic_details else {},
             "invocation_inputs": dict(
                 session.invocation_input_growth_counts()
-            ),
+            ) if diagnostic_details else {},
             "invocation_admissions": dict(
                 session.invocation_admission_counts()
-            ),
+            ) if diagnostic_details else {},
             "sampling_profile": sampling_profile,
             "observation_modules": sorted({
                 item.module.dotted for item in observations
                 if item.module is not None
-            }),
+            }) if diagnostic_details else [],
             "module_plan_observations": {
                 name: [len(plan.observations), len(plan.templates)]
                 for name, plan in session.module_plans.items()
-            },
+            } if diagnostic_details else {},
         },
     }
 except Exception as exc:
@@ -665,6 +698,7 @@ print(json.dumps(out, sort_keys=True))
             str(sample_rate_hz or 0),
             sample_body_label or "",
             "timings" if record_timings else "no-timings",
+            "diagnostics" if diagnostic_details else "compact",
         ]
         try:
             proc = subprocess.Popen(

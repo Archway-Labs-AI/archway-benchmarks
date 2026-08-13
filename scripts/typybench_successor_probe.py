@@ -38,6 +38,7 @@ def main() -> None:
         sample_rate_hz=args.sample_rate_hz,
         sample_body_label=args.sample_body_label,
         record_timings=args.record_timings,
+        diagnostic_details=True,
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}
