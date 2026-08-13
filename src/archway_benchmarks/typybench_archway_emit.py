@@ -343,6 +343,7 @@ def _run_successor_repo_probe(
     body_timeout: int | None = None,
     callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
+    sample_body_label: str | None = None,
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
@@ -352,6 +353,10 @@ def _run_successor_repo_probe(
         raise ValueError("callable_input_exact_limit must be non-negative")
     if sample_rate_hz is not None and sample_rate_hz <= 0:
         raise ValueError("sample_rate_hz must be positive")
+    if sample_body_label is not None and not checkpoint_roots:
+        raise ValueError("sample_body_label requires checkpoint_roots")
+    if sample_body_label is not None and sample_rate_hz is None:
+        raise ValueError("sample_body_label requires sample_rate_hz")
 
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
@@ -373,6 +378,7 @@ requested_body_timeout = int(sys.argv[5]) or None
 exact_limit_arg = int(sys.argv[6])
 callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
 sample_rate_hz = float(sys.argv[7]) or None
+sample_body_label = sys.argv[8] or None
 
 def module_name(path):
     rel = path.relative_to(root).with_suffix("")
@@ -472,8 +478,20 @@ try:
             family_seconds_before = telemetry_before.get(
                 "production_seconds_by_family", {}
             )
-            targeted = session.observe((root_address,))
             body_id = getattr(root_address.subject, "body_morphism_id", "")
+            body_label = body_labels.get(body_id, "?")
+            if sample_rate_hz and body_label == sample_body_label:
+                from sd_core.tooling.sampling_profile import SamplingProfiler
+                with SamplingProfiler(
+                    rate_hz=sample_rate_hz,
+                    project_marker="/sd_core/",
+                ) as profiler:
+                    targeted = session.observe((root_address,))
+                sampling_profile = profiler.jsonable(
+                    top=40, include_stacks=True
+                )
+            else:
+                targeted = session.observe((root_address,))
             telemetry_after = session.scheduler.aggregate_production_telemetry
             family_deltas = {
                 family: count - families_before.get(family, 0)
@@ -491,7 +509,7 @@ try:
             }
             body_profile = {
                 "index": index,
-                "label": body_labels.get(body_id, "?"),
+                "label": body_label,
                 "seconds": time.monotonic() - body_started,
                 "executions": sum(session.scheduler.production_counts.values()) - executions_before,
                 "topology_changes": session.scheduler.graph.topology_generation - topology_before,
@@ -633,6 +651,7 @@ print(json.dumps(out, sort_keys=True))
                 if callable_input_exact_limit is not None else -1
             ),
             str(sample_rate_hz or 0),
+            sample_body_label or "",
         ]
         try:
             proc = subprocess.Popen(

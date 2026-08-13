@@ -20,6 +20,7 @@ def main() -> None:
     parser.add_argument("--body-timeout", type=int)
     parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
+    parser.add_argument("--sample-body-label")
     args = parser.parse_args()
     if args.body_timeout is not None and args.body_label is None:
         parser.error("--body-timeout requires --body-label")
@@ -34,6 +35,7 @@ def main() -> None:
         body_timeout=args.body_timeout,
         callable_input_exact_limit=args.callable_input_exact_limit,
         sample_rate_hz=args.sample_rate_hz,
+        sample_body_label=args.sample_body_label,
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}
