@@ -386,8 +386,39 @@ sample_body_label = sys.argv[8] or None
 record_timings = sys.argv[9] == "timings"
 diagnostic_details = sys.argv[10] == "diagnostics"
 
+def analysis_source_roots():
+    # Respect Python's conventional src layout.  Repository-wide prediction
+    # output still copies every Python file, but the persistent program
+    # session must model importable application modules rather than unrelated
+    # profiling fixtures, examples, and release scripts.  When no src layout
+    # exists, retain root modules and top-level package trees.
+    src = root / "src"
+    if src.is_dir() and any(src.rglob("*.py")):
+        return (src,)
+    package_roots = tuple(sorted(
+        path for path in root.iterdir()
+        if path.is_dir() and (path / "__init__.py").is_file()
+    ))
+    return (root,) if not package_roots else (root, *package_roots)
+
+def analysis_paths():
+    roots = analysis_source_roots()
+    if roots == (root,):
+        return tuple(sorted(root.rglob("*.py")))
+    paths = set(root.glob("*.py"))
+    for source_root in roots:
+        if source_root != root:
+            paths.update(source_root.rglob("*.py"))
+    return tuple(sorted(paths))
+
+source_roots = analysis_source_roots()
+
 def module_name(path):
-    rel = path.relative_to(root).with_suffix("")
+    source_root = next(
+        candidate for candidate in source_roots
+        if candidate == root or path.is_relative_to(candidate)
+    )
+    rel = path.relative_to(source_root).with_suffix("")
     parts = list(rel.parts)
     if parts and parts[-1] == "__init__":
         parts.pop()
@@ -395,7 +426,8 @@ def module_name(path):
 
 try:
     phase_started = time.monotonic()
-    paths = sorted(root.rglob("*.py"))
+    all_paths = sorted(root.rglob("*.py"))
+    paths = analysis_paths()
     by_module = {module_name(path): path for path in paths}
     module_files = {name: str(path.relative_to(root)) for name, path in by_module.items()}
     sources = {name: path.read_text(encoding="utf-8") for name, path in by_module.items()}
@@ -626,7 +658,7 @@ try:
                 signal.alarm(0)
     targeted_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
-    files = {str(path.relative_to(root)): [] for path in paths}
+    files = {str(path.relative_to(root)): [] for path in all_paths}
     for item in session.type_observations():
         module = item.module.dotted if item.module is not None else None
         rel = module_files.get(module)
