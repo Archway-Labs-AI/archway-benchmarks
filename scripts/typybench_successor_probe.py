@@ -21,6 +21,7 @@ def main() -> None:
     parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
     parser.add_argument("--sample-body-label")
+    parser.add_argument("--record-timings", action="store_true")
     args = parser.parse_args()
     if args.body_timeout is not None and args.body_label is None:
         parser.error("--body-timeout requires --body-label")
@@ -36,6 +37,7 @@ def main() -> None:
         callable_input_exact_limit=args.callable_input_exact_limit,
         sample_rate_hz=args.sample_rate_hz,
         sample_body_label=args.sample_body_label,
+        record_timings=args.record_timings,
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}
@@ -105,6 +107,20 @@ def main() -> None:
         "repeated_productions": scheduler.get("repeated_production_count"),
         "affected_selected": worklist.get("affected_component_selected"),
         "topology_restarts": worklist.get("topology_restart"),
+        "component_recompute_count": scheduler.get("component_recompute_count"),
+        "component_recompute_seconds": scheduler.get("component_recompute_seconds"),
+        "component_node_visits": scheduler.get("component_node_visits"),
+        "component_edge_visits": scheduler.get("component_edge_visits"),
+        "component_incremental_refresh_count": scheduler.get(
+            "component_incremental_refresh_count"
+        ),
+        "component_edge_update_telemetry": scheduler.get(
+            "component_edge_update_telemetry"
+        ),
+        "top_transfer_operations": sorted(
+            (scheduler.get("transfer_operation_seconds") or {}).items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:20],
         "top_execution_families": top_families,
         "top_family_seconds": top_family_seconds,
         "top_restart_operations": top_restart_operations,

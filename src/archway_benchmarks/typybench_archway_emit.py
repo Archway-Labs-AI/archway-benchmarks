@@ -344,6 +344,7 @@ def _run_successor_repo_probe(
     callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
     sample_body_label: str | None = None,
+    record_timings: bool = False,
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
@@ -379,6 +380,7 @@ exact_limit_arg = int(sys.argv[6])
 callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
 sample_rate_hz = float(sys.argv[7]) or None
 sample_body_label = sys.argv[8] or None
+record_timings = sys.argv[9] == "timings"
 
 def module_name(path):
     rel = path.relative_to(root).with_suffix("")
@@ -414,6 +416,7 @@ try:
     )
     session = open_hybrid_program_session(
         modules, entry, record_events=False,
+        record_timings=record_timings,
         signature_observations_only=True,
         callable_input_exact_limit=callable_input_exact_limit,
     )
@@ -469,15 +472,11 @@ try:
         body_profiles = []
         for index, root_address in enumerate(signature_roots, 1):
             body_started = time.monotonic()
-            executions_before = sum(session.scheduler.production_counts.values())
+            executions_before = session.scheduler.production_execution_count
             topology_before = session.scheduler.graph.topology_generation
-            telemetry_before = session.scheduler.aggregate_production_telemetry
-            families_before = telemetry_before.get(
-                "production_executions_by_family", {}
-            )
-            family_seconds_before = telemetry_before.get(
-                "production_seconds_by_family", {}
-            )
+            telemetry_before = session.scheduler.production_family_telemetry
+            families_before = telemetry_before["executions"]
+            family_seconds_before = telemetry_before["seconds"]
             body_id = getattr(root_address.subject, "body_morphism_id", "")
             body_label = body_labels.get(body_id, "?")
             if sample_rate_hz and body_label == sample_body_label:
@@ -492,26 +491,25 @@ try:
                 )
             else:
                 targeted = session.observe((root_address,))
-            telemetry_after = session.scheduler.aggregate_production_telemetry
+            telemetry_after = session.scheduler.production_family_telemetry
             family_deltas = {
                 family: count - families_before.get(family, 0)
-                for family, count in telemetry_after.get(
-                    "production_executions_by_family", {}
-                ).items()
+                for family, count in telemetry_after["executions"].items()
                 if count - families_before.get(family, 0) > 0
             }
             family_second_deltas = {
                 family: seconds - family_seconds_before.get(family, 0.0)
-                for family, seconds in telemetry_after.get(
-                    "production_seconds_by_family", {}
-                ).items()
+                for family, seconds in telemetry_after["seconds"].items()
                 if seconds - family_seconds_before.get(family, 0.0) > 0
             }
             body_profile = {
                 "index": index,
                 "label": body_label,
                 "seconds": time.monotonic() - body_started,
-                "executions": sum(session.scheduler.production_counts.values()) - executions_before,
+                "executions": (
+                    session.scheduler.production_execution_count
+                    - executions_before
+                ),
                 "topology_changes": session.scheduler.graph.topology_generation - topology_before,
                 "top_execution_families": sorted(
                     family_deltas.items(),
@@ -664,6 +662,7 @@ print(json.dumps(out, sort_keys=True))
             ),
             str(sample_rate_hz or 0),
             sample_body_label or "",
+            "timings" if record_timings else "no-timings",
         ]
         try:
             proc = subprocess.Popen(
