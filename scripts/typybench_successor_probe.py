@@ -56,6 +56,24 @@ def main() -> None:
         ),
         key=lambda item: (-item[1], item[0]),
     )[:12]
+    top_restart_reasons = sorted(
+        (
+            (key.removeprefix("topology_restart_reason:"), value)
+            for key, value in worklist.items()
+            if key.startswith("topology_restart_reason:")
+        ),
+        key=lambda item: (-item[1], item[0]),
+    )[:12]
+    top_restart_operation_reasons = sorted(
+        (
+            (key.removeprefix(
+                "topology_restart_operation_reason:"
+            ).split("\0", 1), value)
+            for key, value in worklist.items()
+            if key.startswith("topology_restart_operation_reason:")
+        ),
+        key=lambda item: (-item[1], item[0]),
+    )[:20]
     print(json.dumps({
         "ok": result.get("ok"),
         "error": result.get("error"),
@@ -73,6 +91,9 @@ def main() -> None:
         "morphism_fact_output_barriers": summary.get(
             "morphism_fact_output_barriers"
         ),
+        "morphism_read_intersections": summary.get(
+            "morphism_read_intersections"
+        ),
         "invocation_contexts": summary.get("invocation_contexts"),
         "invocation_inputs": summary.get("invocation_inputs"),
         "invocation_admissions": summary.get("invocation_admissions"),
@@ -87,6 +108,8 @@ def main() -> None:
         "top_execution_families": top_families,
         "top_family_seconds": top_family_seconds,
         "top_restart_operations": top_restart_operations,
+        "top_restart_reasons": top_restart_reasons,
+        "top_restart_operation_reasons": top_restart_operation_reasons,
         "trace_tail": result.get("trace_tail"),
     }, sort_keys=True))
 

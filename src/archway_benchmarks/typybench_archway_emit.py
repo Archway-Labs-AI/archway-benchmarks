@@ -616,6 +616,9 @@ try:
             "morphism_fact_output_barriers": dict(
                 session.morphism_fact_output_barriers()
             ),
+            "morphism_read_intersections": dict(
+                session.morphism_read_intersections()
+            ),
             "invocation_contexts": dict(
                 session.invocation_context_counts()
             ),
