@@ -340,12 +340,17 @@ def _run_successor_repo_probe(
     demand_limit: int | None = None,
     checkpoint_roots: bool = False,
     body_label: str | None = None,
+    body_timeout: int | None = None,
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
+
+    if body_timeout is not None and body_label is None:
+        raise ValueError("body_timeout requires body_label")
 
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
 import json
+import signal
 import sys
 import time
 import traceback
@@ -406,7 +411,12 @@ try:
     }, key=lambda address: address.id))
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
     demand_limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    requested = missing[:demand_limit] if demand_limit is not None else missing
+    demand_limit = demand_limit or None
+    requested = (
+        missing
+        if len(sys.argv) > 4
+        else missing[:demand_limit] if demand_limit is not None else missing
+    )
     signature_roots = session.signature_workload_roots(requested)
     body_labels = {
         template.body_morphism_id: (
@@ -417,6 +427,7 @@ try:
         for template in plan.templates
     }
     requested_body_label = sys.argv[4] if len(sys.argv) > 4 else None
+    requested_body_timeout = int(sys.argv[5]) if len(sys.argv) > 5 else None
     if requested_body_label:
         signature_roots = tuple(
             root_address for root_address in signature_roots
@@ -454,7 +465,19 @@ try:
             )
     else:
         body_profiles = []
-        targeted = session.observe_signature_workload(requested) if requested else None
+        timed_out_body = False
+        if requested_body_timeout and signature_roots:
+            def timeout_body(_signum, _frame):
+                raise TimeoutError("diagnostic body cutoff")
+            signal.signal(signal.SIGALRM, timeout_body)
+            signal.alarm(requested_body_timeout)
+        try:
+            targeted = session.observe(signature_roots) if signature_roots else None
+        except TimeoutError:
+            targeted = None
+            timed_out_body = True
+        finally:
+            signal.alarm(0)
     targeted_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
     files = {str(path.relative_to(root)): [] for path in paths}
@@ -487,6 +510,7 @@ try:
             "requested_addresses": len(requested),
             "requested_body_roots": len(signature_roots),
             "body_profiles": body_profiles,
+            "timed_out_body": timed_out_body if not checkpoint_roots else False,
             "forward_events": len(forward.events),
             "targeted_events": len(targeted.events) if targeted is not None else 0,
             "resolved_facts": len(session.store.snapshot().resolved_facts),
@@ -522,12 +546,16 @@ print(json.dumps(out, sort_keys=True))
         cmd = [*runner, f.name, str(Path(source_root).absolute())]
         if demand_limit is not None:
             cmd.append(str(demand_limit))
+        elif body_label is not None or body_timeout is not None:
+            cmd.append("0")
         if checkpoint_roots:
             cmd.append("checkpoint")
         elif body_label is not None:
             cmd.append("collective")
         if body_label is not None:
             cmd.append(body_label)
+        if body_timeout is not None:
+            cmd.append(str(body_timeout))
         try:
             proc = subprocess.Popen(
                 cmd, cwd=engine_worktree, stdout=subprocess.PIPE,

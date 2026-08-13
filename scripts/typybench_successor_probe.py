@@ -17,7 +17,10 @@ def main() -> None:
     parser.add_argument("--demand-limit", type=int)
     parser.add_argument("--checkpoint-roots", action="store_true")
     parser.add_argument("--body-label")
+    parser.add_argument("--body-timeout", type=int)
     args = parser.parse_args()
+    if args.body_timeout is not None and args.body_label is None:
+        parser.error("--body-timeout requires --body-label")
     result = _run_successor_repo_probe(
         engine_worktree=args.engine_worktree,
         source_root=args.source_root,
@@ -26,10 +29,23 @@ def main() -> None:
         demand_limit=args.demand_limit,
         checkpoint_roots=args.checkpoint_roots,
         body_label=args.body_label,
+        body_timeout=args.body_timeout,
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}
     worklist = scheduler.get("worklist_schedule_counts") or {}
+    top_families = sorted(
+        (scheduler.get("production_executions_by_family") or {}).items(),
+        key=lambda item: (-item[1], item[0]),
+    )[:12]
+    top_restart_operations = sorted(
+        (
+            (key.removeprefix("topology_restart_operation:"), value)
+            for key, value in worklist.items()
+            if key.startswith("topology_restart_operation:")
+        ),
+        key=lambda item: (-item[1], item[0]),
+    )[:12]
     print(json.dumps({
         "ok": result.get("ok"),
         "error": result.get("error"),
@@ -40,11 +56,14 @@ def main() -> None:
         "requested_addresses": summary.get("requested_addresses"),
         "requested_body_roots": summary.get("requested_body_roots"),
         "body_profiles": summary.get("body_profiles"),
+        "timed_out_body": summary.get("timed_out_body"),
         "unique_productions": scheduler.get("unique_production_count"),
         "production_executions": scheduler.get("production_execution_count"),
         "repeated_productions": scheduler.get("repeated_production_count"),
         "affected_selected": worklist.get("affected_component_selected"),
         "topology_restarts": worklist.get("topology_restart"),
+        "top_execution_families": top_families,
+        "top_restart_operations": top_restart_operations,
         "trace_tail": result.get("trace_tail"),
     }, sort_keys=True))
 
