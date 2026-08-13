@@ -38,6 +38,10 @@ def main() -> None:
         (scheduler.get("production_executions_by_family") or {}).items(),
         key=lambda item: (-item[1], item[0]),
     )[:12]
+    top_family_seconds = sorted(
+        (scheduler.get("production_seconds_by_family") or {}).items(),
+        key=lambda item: (-item[1], item[0]),
+    )[:12]
     top_restart_operations = sorted(
         (
             (key.removeprefix("topology_restart_operation:"), value)
@@ -63,6 +67,7 @@ def main() -> None:
         "affected_selected": worklist.get("affected_component_selected"),
         "topology_restarts": worklist.get("topology_restart"),
         "top_execution_families": top_families,
+        "top_family_seconds": top_family_seconds,
         "top_restart_operations": top_restart_operations,
         "trace_tail": result.get("trace_tail"),
     }, sort_keys=True))

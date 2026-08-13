@@ -403,12 +403,23 @@ try:
     forward_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE forward {forward_seconds:.6f}", file=sys.stderr, flush=True)
     observations = session.type_observations()
-    missing = tuple(sorted({
-        item.address for item in observations
+    missing_observations = sorted((
+        item for item in observations
         if item.kind in {"parameter", "return"}
         if (session.store.resolved(item.address) is None
             or not session.store.resolved(item.address).value)
-    }, key=lambda address: address.id))
+    ), key=lambda item: (
+        item.module.dotted if item.module else "",
+        item.function or "",
+        item.position.row if item.position else -1,
+        item.position.col if item.position else -1,
+        item.kind,
+        item.name,
+        item.address.context,
+    ))
+    missing = tuple(dict.fromkeys(
+        item.address for item in missing_observations
+    ))
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
     demand_limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
     demand_limit = demand_limit or None
@@ -444,14 +455,44 @@ try:
             body_started = time.monotonic()
             executions_before = sum(session.scheduler.production_counts.values())
             topology_before = session.scheduler.graph.topology_generation
+            telemetry_before = session.scheduler.aggregate_production_telemetry
+            families_before = telemetry_before.get(
+                "production_executions_by_family", {}
+            )
+            family_seconds_before = telemetry_before.get(
+                "production_seconds_by_family", {}
+            )
             targeted = session.observe((root_address,))
             body_id = getattr(root_address.subject, "body_morphism_id", "")
+            telemetry_after = session.scheduler.aggregate_production_telemetry
+            family_deltas = {
+                family: count - families_before.get(family, 0)
+                for family, count in telemetry_after.get(
+                    "production_executions_by_family", {}
+                ).items()
+                if count - families_before.get(family, 0) > 0
+            }
+            family_second_deltas = {
+                family: seconds - family_seconds_before.get(family, 0.0)
+                for family, seconds in telemetry_after.get(
+                    "production_seconds_by_family", {}
+                ).items()
+                if seconds - family_seconds_before.get(family, 0.0) > 0
+            }
             body_profile = {
                 "index": index,
                 "label": body_labels.get(body_id, "?"),
                 "seconds": time.monotonic() - body_started,
                 "executions": sum(session.scheduler.production_counts.values()) - executions_before,
                 "topology_changes": session.scheduler.graph.topology_generation - topology_before,
+                "top_execution_families": sorted(
+                    family_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:8],
+                "top_family_seconds": sorted(
+                    family_second_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:8],
                 "root_id": root_address.id,
             }
             body_profiles.append(body_profile)
