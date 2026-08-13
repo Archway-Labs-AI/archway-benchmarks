@@ -70,6 +70,9 @@ def main() -> None:
             "morphism_transfer_reuse_by_operation"
         ),
         "atomic_effect_gaps": summary.get("atomic_effect_gaps"),
+        "morphism_fact_output_barriers": summary.get(
+            "morphism_fact_output_barriers"
+        ),
         "invocation_contexts": summary.get("invocation_contexts"),
         "invocation_inputs": summary.get("invocation_inputs"),
         "invocation_admissions": summary.get("invocation_admissions"),

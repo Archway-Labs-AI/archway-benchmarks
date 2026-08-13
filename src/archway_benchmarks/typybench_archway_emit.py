@@ -613,6 +613,9 @@ try:
             "atomic_effect_gaps": dict(
                 session.atomic_effect_gap_counts()
             ),
+            "morphism_fact_output_barriers": dict(
+                session.morphism_fact_output_barriers()
+            ),
             "invocation_contexts": dict(
                 session.invocation_context_counts()
             ),
