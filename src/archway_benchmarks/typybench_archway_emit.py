@@ -475,7 +475,18 @@ try:
     if checkpoint_roots:
         targeted = None
         body_profiles = []
-        for index, root_address in enumerate(signature_roots, 1):
+        # Compact corpus runs admit a small batch at a time into the same
+        # persistent session.  This preserves shared knowledge and affected-
+        # region convergence while avoiding both one scheduler drain per body
+        # and the enormous topology wave produced by collective admission.
+        # Diagnostic runs retain one root per checkpoint for attribution.
+        checkpoint_size = 1
+        root_batches = tuple(
+            signature_roots[index:index + checkpoint_size]
+            for index in range(0, len(signature_roots), checkpoint_size)
+        )
+        for index, root_batch in enumerate(root_batches, 1):
+            root_address = root_batch[0]
             body_started = time.monotonic()
             executions_before = session.scheduler.production_execution_count
             topology_before = session.scheduler.graph.topology_generation
@@ -497,12 +508,12 @@ try:
                     rate_hz=sample_rate_hz,
                     project_marker="/sd_core/",
                 ) as profiler:
-                    targeted = session.observe((root_address,))
+                    targeted = session.observe(root_batch)
                 sampling_profile = profiler.jsonable(
                     top=40, include_stacks=True
                 )
             else:
-                targeted = session.observe((root_address,))
+                targeted = session.observe(root_batch)
             telemetry_after = (
                 session.scheduler.production_family_telemetry
                 if diagnostic_details else {"executions": {}, "seconds": {}}
@@ -538,42 +549,58 @@ try:
             }
             if diagnostic_details:
                 body_profiles.append(body_profile)
-            print(
-                f"ARCHWAY_BODY {index}/{len(signature_roots)} "
-                f"{body_profile['seconds']:.6f} "
-                f"exec={body_profile['executions']} "
-                f"topology={body_profile['topology_changes']} "
-                f"{body_profile['label']} {root_address.id}",
-                file=sys.stderr, flush=True,
-            )
+            if diagnostic_details:
+                print(
+                    f"ARCHWAY_BODY {index}/{len(root_batches)} "
+                    f"{body_profile['seconds']:.6f} "
+                    f"exec={body_profile['executions']} "
+                    f"topology={body_profile['topology_changes']} "
+                    f"{body_profile['label']} {root_address.id}",
+                    file=sys.stderr, flush=True,
+                )
     else:
         body_profiles = []
         timed_out_body = False
+        timeout_signal = (
+            signal.SIGVTALRM if sample_rate_hz else signal.SIGALRM
+        )
         if requested_body_timeout and signature_roots:
             def timeout_body(_signum, _frame):
                 raise TimeoutError("diagnostic body cutoff")
-            signal.signal(signal.SIGALRM, timeout_body)
-            signal.alarm(requested_body_timeout)
+            signal.signal(timeout_signal, timeout_body)
+            if sample_rate_hz:
+                signal.setitimer(
+                    signal.ITIMER_VIRTUAL, requested_body_timeout
+                )
+            else:
+                signal.alarm(requested_body_timeout)
         try:
             if sample_rate_hz and signature_roots:
                 from sd_core.tooling.sampling_profile import SamplingProfiler
-                with SamplingProfiler(
+                profiler = SamplingProfiler(
                     rate_hz=sample_rate_hz,
                     project_marker="/sd_core/",
-                ) as profiler:
-                    targeted = session.observe(signature_roots)
-                sampling_profile = profiler.jsonable(
-                    top=40, include_stacks=True
                 )
+                profiler.__enter__()
+                try:
+                    targeted = session.observe(signature_roots)
+                finally:
+                    profiler.__exit__(None, None, None)
+                    sampling_profile = profiler.jsonable(
+                        top=40, include_stacks=True
+                    )
             else:
                 targeted = session.observe(signature_roots) if signature_roots else None
                 sampling_profile = None
         except TimeoutError:
             targeted = None
             timed_out_body = True
-            sampling_profile = None
+            sampling_profile = locals().get("sampling_profile")
         finally:
-            signal.alarm(0)
+            if sample_rate_hz:
+                signal.setitimer(signal.ITIMER_VIRTUAL, 0.0)
+            else:
+                signal.alarm(0)
     targeted_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
     files = {str(path.relative_to(root)): [] for path in paths}

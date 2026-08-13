@@ -43,8 +43,17 @@ def _stats_record(stats, elapsed: float) -> dict[str, object]:
         ),
         None,
     )
+    probe_failure = next((
+        failure for failure in stats.failures
+        if str(failure.get("error", "")).startswith((
+            "TimeoutExpired:", "engine probe failed:",
+        ))
+    ), None)
     return {
-        "status": "complete" if not stats.failures else "partial",
+        "status": (
+            "failed" if probe_failure is not None
+            else "complete" if not stats.failures else "partial"
+        ),
         "elapsed_seconds": elapsed,
         "files_total": stats.files_total,
         "files_analyzed": stats.files_analyzed,
