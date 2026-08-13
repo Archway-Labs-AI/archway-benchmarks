@@ -610,6 +610,9 @@ try:
             "morphism_transfer_reuse_by_operation": dict(
                 session.morphism_transfer_reuse_by_operation()
             ),
+            "atomic_effect_gaps": dict(
+                session.atomic_effect_gap_counts()
+            ),
             "invocation_contexts": dict(
                 session.invocation_context_counts()
             ),
