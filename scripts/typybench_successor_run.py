@@ -1,0 +1,175 @@
+"""Checkpointable multi-repository TypyBench successor emission.
+
+Each repository is analyzed in one isolated persistent reduced-product session.
+The manifest is replaced atomically after every state transition, so an
+interrupted framework-scale run resumes without replaying completed repos.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import time
+from pathlib import Path
+
+from archway_benchmarks.typybench_archway_emit import emit_archway_predictions
+from archway_benchmarks.typybench_harness import (
+    available_repos,
+    untyped_source_root,
+)
+
+
+def _python_file_count(root: Path) -> int:
+    return sum(1 for _path in root.rglob("*.py"))
+
+
+def _write_manifest(path: Path, manifest: dict[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    os.replace(temporary, path)
+
+
+def _stats_record(stats, elapsed: float) -> dict[str, object]:
+    summary = next(
+        (
+            profile.analysis_summary
+            for profile in stats.file_profiles
+            if profile.analysis_summary is not None
+        ),
+        None,
+    )
+    return {
+        "status": "complete" if not stats.failures else "partial",
+        "elapsed_seconds": elapsed,
+        "files_total": stats.files_total,
+        "files_analyzed": stats.files_analyzed,
+        "files_failed": stats.files_failed,
+        "functions_seen": stats.functions_seen,
+        "functions_annotated": stats.functions_annotated,
+        "params_annotated": stats.params_annotated,
+        "returns_annotated": stats.returns_annotated,
+        "failure_count": len(stats.failures),
+        "failures": list(stats.failures[:20]),
+        "analysis_summary": summary,
+    }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("data_root", type=Path)
+    parser.add_argument("output_root", type=Path)
+    parser.add_argument("engine_worktree", type=Path)
+    parser.add_argument("--repo", action="append", dest="repos")
+    parser.add_argument("--timeout-per-repo", type=int, default=900)
+    parser.add_argument("--max-total-seconds", type=int, default=14_400)
+    parser.add_argument("--no-resume", action="store_true")
+    args = parser.parse_args()
+
+    if args.timeout_per_repo <= 0:
+        parser.error("--timeout-per-repo must be positive")
+    if args.max_total_seconds <= 0:
+        parser.error("--max-total-seconds must be positive")
+
+    available = {
+        name for name in available_repos(args.data_root)
+        if _python_file_count(untyped_source_root(name, args.data_root)) > 0
+    }
+    selected = set(args.repos or available)
+    unknown = sorted(selected - available)
+    if unknown:
+        parser.error("unknown repositories: " + ", ".join(unknown))
+
+    repos = sorted(
+        selected,
+        key=lambda name: (
+            _python_file_count(untyped_source_root(name, args.data_root)),
+            name,
+        ),
+    )
+    args.output_root.mkdir(parents=True, exist_ok=True)
+    predictions_root = args.output_root / "predictions"
+    manifest_path = args.output_root / "manifest.json"
+    if manifest_path.exists() and not args.no_resume:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    else:
+        manifest = {
+            "schema": "archway.typybench.successor-run.v1",
+            "created_unix": time.time(),
+            "data_root": str(args.data_root.resolve()),
+            "engine_worktree": str(args.engine_worktree.resolve()),
+            "predictions_root": str(predictions_root.resolve()),
+            "repositories": {},
+        }
+
+    records = manifest.setdefault("repositories", {})
+    assert isinstance(records, dict)
+    run_started = time.monotonic()
+    for index, repo_name in enumerate(repos, 1):
+        existing = records.get(repo_name)
+        if (
+            not args.no_resume
+            and isinstance(existing, dict)
+            and existing.get("status") in {"complete", "partial"}
+            and (predictions_root / repo_name).is_dir()
+        ):
+            print(f"ARCHWAY_TYPYBENCH skip {index}/{len(repos)} {repo_name}", flush=True)
+            continue
+
+        remaining_total = args.max_total_seconds - (
+            time.monotonic() - run_started
+        )
+        if remaining_total <= 0:
+            manifest["run_status"] = "time_budget_exhausted"
+            manifest["updated_unix"] = time.time()
+            _write_manifest(manifest_path, manifest)
+            break
+
+        source_root = untyped_source_root(repo_name, args.data_root)
+        records[repo_name] = {
+            "status": "running",
+            "started_unix": time.time(),
+            "python_files": _python_file_count(source_root),
+        }
+        _write_manifest(manifest_path, manifest)
+        print(f"ARCHWAY_TYPYBENCH start {index}/{len(repos)} {repo_name}", flush=True)
+        started = time.monotonic()
+        try:
+            stats = emit_archway_predictions(
+                repo_name=repo_name,
+                untyped_root=source_root,
+                predictions_root=predictions_root,
+                engine_worktree=args.engine_worktree,
+                timeout=max(
+                    1, min(args.timeout_per_repo, int(remaining_total))
+                ),
+                checkpoint_roots=True,
+            )
+            record = _stats_record(stats, time.monotonic() - started)
+        except Exception as exc:
+            record = {
+                "status": "failed",
+                "elapsed_seconds": time.monotonic() - started,
+                "error": f"{type(exc).__name__}: {exc}",
+            }
+        record["finished_unix"] = time.time()
+        records[repo_name] = record
+        manifest["updated_unix"] = time.time()
+        _write_manifest(manifest_path, manifest)
+        print(
+            f"ARCHWAY_TYPYBENCH {record['status']} {repo_name} "
+            f"{record['elapsed_seconds']:.3f}s",
+            flush=True,
+        )
+    else:
+        manifest["run_status"] = "complete"
+        manifest["updated_unix"] = time.time()
+        _write_manifest(manifest_path, manifest)
+
+
+if __name__ == "__main__":
+    main()

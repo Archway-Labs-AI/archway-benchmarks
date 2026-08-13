@@ -93,6 +93,7 @@ def emit_archway_predictions(
     analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
     type_requirements_assume_closed: bool = False,
+    checkpoint_roots: bool = True,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -138,6 +139,7 @@ def emit_archway_predictions(
             source_root=untyped_root,
             runner=runner,
             timeout=timeout,
+            checkpoint_roots=checkpoint_roots,
         )
         seconds_repo_probe = time.monotonic() - probe_started
         for src in files:
