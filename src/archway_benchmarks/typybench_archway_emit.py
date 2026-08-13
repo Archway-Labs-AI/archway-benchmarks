@@ -341,11 +341,14 @@ def _run_successor_repo_probe(
     checkpoint_roots: bool = False,
     body_label: str | None = None,
     body_timeout: int | None = None,
+    callable_input_exact_limit: int | None = None,
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
     if body_timeout is not None and body_label is None:
         raise ValueError("body_timeout requires body_label")
+    if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
+        raise ValueError("callable_input_exact_limit must be non-negative")
 
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
@@ -360,6 +363,12 @@ from sd_core.analysis.diagram_analysis import open_hybrid_program_session
 from sd_core.tooling.harness import TranslationResult
 
 root = Path(sys.argv[1])
+demand_limit = int(sys.argv[2]) or None
+checkpoint_roots = sys.argv[3] == "checkpoint"
+requested_body_label = sys.argv[4] or None
+requested_body_timeout = int(sys.argv[5]) or None
+exact_limit_arg = int(sys.argv[6])
+callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
 
 def module_name(path):
     rel = path.relative_to(root).with_suffix("")
@@ -396,6 +405,7 @@ try:
     session = open_hybrid_program_session(
         modules, entry, record_events=False,
         signature_observations_only=True,
+        callable_input_exact_limit=callable_input_exact_limit,
     )
     session_open_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
@@ -421,11 +431,9 @@ try:
         item.address for item in missing_observations
     ))
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
-    demand_limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
-    demand_limit = demand_limit or None
     requested = (
         missing
-        if len(sys.argv) > 4
+        if requested_body_label
         else missing[:demand_limit] if demand_limit is not None else missing
     )
     signature_roots = session.signature_workload_roots(requested)
@@ -437,8 +445,6 @@ try:
         for plan in session.module_plans.values()
         for template in plan.templates
     }
-    requested_body_label = sys.argv[4] if len(sys.argv) > 4 else None
-    requested_body_timeout = int(sys.argv[5]) if len(sys.argv) > 5 else None
     if requested_body_label:
         signature_roots = tuple(
             root_address for root_address in signature_roots
@@ -447,7 +453,6 @@ try:
             ) == requested_body_label
         )
     print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
-    checkpoint_roots = len(sys.argv) > 3 and sys.argv[3] == "checkpoint"
     if checkpoint_roots:
         targeted = None
         body_profiles = []
@@ -584,19 +589,19 @@ print(json.dumps(out, sort_keys=True))
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
         f.write(probe)
         f.flush()
-        cmd = [*runner, f.name, str(Path(source_root).absolute())]
-        if demand_limit is not None:
-            cmd.append(str(demand_limit))
-        elif body_label is not None or body_timeout is not None:
-            cmd.append("0")
-        if checkpoint_roots:
-            cmd.append("checkpoint")
-        elif body_label is not None:
-            cmd.append("collective")
-        if body_label is not None:
-            cmd.append(body_label)
-        if body_timeout is not None:
-            cmd.append(str(body_timeout))
+        cmd = [
+            *runner,
+            f.name,
+            str(Path(source_root).absolute()),
+            str(demand_limit or 0),
+            "checkpoint" if checkpoint_roots else "collective",
+            body_label or "",
+            str(body_timeout or 0),
+            str(
+                callable_input_exact_limit
+                if callable_input_exact_limit is not None else -1
+            ),
+        ]
         try:
             proc = subprocess.Popen(
                 cmd, cwd=engine_worktree, stdout=subprocess.PIPE,

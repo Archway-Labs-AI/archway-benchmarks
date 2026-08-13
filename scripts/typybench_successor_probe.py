@@ -18,6 +18,7 @@ def main() -> None:
     parser.add_argument("--checkpoint-roots", action="store_true")
     parser.add_argument("--body-label")
     parser.add_argument("--body-timeout", type=int)
+    parser.add_argument("--callable-input-exact-limit", type=int)
     args = parser.parse_args()
     if args.body_timeout is not None and args.body_label is None:
         parser.error("--body-timeout requires --body-label")
@@ -30,6 +31,7 @@ def main() -> None:
         checkpoint_roots=args.checkpoint_roots,
         body_label=args.body_label,
         body_timeout=args.body_timeout,
+        callable_input_exact_limit=args.callable_input_exact_limit,
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}
