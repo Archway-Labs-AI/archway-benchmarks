@@ -342,6 +342,7 @@ def _run_successor_repo_probe(
     body_label: str | None = None,
     body_timeout: int | None = None,
     callable_input_exact_limit: int | None = None,
+    sample_rate_hz: float | None = None,
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
@@ -349,6 +350,8 @@ def _run_successor_repo_probe(
         raise ValueError("body_timeout requires body_label")
     if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
         raise ValueError("callable_input_exact_limit must be non-negative")
+    if sample_rate_hz is not None and sample_rate_hz <= 0:
+        raise ValueError("sample_rate_hz must be positive")
 
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
@@ -369,6 +372,7 @@ requested_body_label = sys.argv[4] or None
 requested_body_timeout = int(sys.argv[5]) or None
 exact_limit_arg = int(sys.argv[6])
 callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
+sample_rate_hz = float(sys.argv[7]) or None
 
 def module_name(path):
     rel = path.relative_to(root).with_suffix("")
@@ -453,6 +457,7 @@ try:
             ) == requested_body_label
         )
     print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
+    sampling_profile = None
     if checkpoint_roots:
         targeted = None
         body_profiles = []
@@ -518,10 +523,23 @@ try:
             signal.signal(signal.SIGALRM, timeout_body)
             signal.alarm(requested_body_timeout)
         try:
-            targeted = session.observe(signature_roots) if signature_roots else None
+            if sample_rate_hz and signature_roots:
+                from sd_core.tooling.sampling_profile import SamplingProfiler
+                with SamplingProfiler(
+                    rate_hz=sample_rate_hz,
+                    project_marker="/sd_core/",
+                ) as profiler:
+                    targeted = session.observe(signature_roots)
+                sampling_profile = profiler.jsonable(
+                    top=40, include_stacks=True
+                )
+            else:
+                targeted = session.observe(signature_roots) if signature_roots else None
+                sampling_profile = None
         except TimeoutError:
             targeted = None
             timed_out_body = True
+            sampling_profile = None
         finally:
             signal.alarm(0)
     targeted_seconds = time.monotonic() - phase_started
@@ -568,6 +586,19 @@ try:
                 "targeted": targeted_seconds - forward_seconds,
             },
             "scheduler": scheduler_telemetry,
+            "morphism_transfer_reuse": dict(
+                session.morphism_transfer_reuse_counts()
+            ),
+            "invocation_contexts": dict(
+                session.invocation_context_counts()
+            ),
+            "invocation_inputs": dict(
+                session.invocation_input_growth_counts()
+            ),
+            "invocation_admissions": dict(
+                session.invocation_admission_counts()
+            ),
+            "sampling_profile": sampling_profile,
             "observation_modules": sorted({
                 item.module.dotted for item in observations
                 if item.module is not None
@@ -601,6 +632,7 @@ print(json.dumps(out, sort_keys=True))
                 callable_input_exact_limit
                 if callable_input_exact_limit is not None else -1
             ),
+            str(sample_rate_hz or 0),
         ]
         try:
             proc = subprocess.Popen(

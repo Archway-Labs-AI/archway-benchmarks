@@ -19,6 +19,7 @@ def main() -> None:
     parser.add_argument("--body-label")
     parser.add_argument("--body-timeout", type=int)
     parser.add_argument("--callable-input-exact-limit", type=int)
+    parser.add_argument("--sample-rate-hz", type=float)
     args = parser.parse_args()
     if args.body_timeout is not None and args.body_label is None:
         parser.error("--body-timeout requires --body-label")
@@ -32,6 +33,7 @@ def main() -> None:
         body_label=args.body_label,
         body_timeout=args.body_timeout,
         callable_input_exact_limit=args.callable_input_exact_limit,
+        sample_rate_hz=args.sample_rate_hz,
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}
@@ -61,6 +63,11 @@ def main() -> None:
         "signature_demands": summary.get("targeted_addresses"),
         "requested_addresses": summary.get("requested_addresses"),
         "requested_body_roots": summary.get("requested_body_roots"),
+        "morphism_transfer_reuse": summary.get("morphism_transfer_reuse"),
+        "invocation_contexts": summary.get("invocation_contexts"),
+        "invocation_inputs": summary.get("invocation_inputs"),
+        "invocation_admissions": summary.get("invocation_admissions"),
+        "sampling_profile": summary.get("sampling_profile"),
         "body_profiles": summary.get("body_profiles"),
         "timed_out_body": summary.get("timed_out_body"),
         "unique_productions": scheduler.get("unique_production_count"),
