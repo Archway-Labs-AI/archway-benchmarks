@@ -1,10 +1,8 @@
-"""Emit TypyBench annotated-source predictions from a pinned Archway engine.
+"""Emit TypyBench predictions from one persistent successor analysis session.
 
-This is intentionally a narrow bridge: TypyBench scores source trees, while the
-existing benchmark adapters mostly score location maps. The functions here run
-the pinned engine read-only in a subprocess, collect function/parameter/return
-types from the finalized analysis projection, and write syntactically valid
-Python predictions under ``predictions/<repo>/``.
+TypyBench scores annotated source trees.  Archway analysis remains diagram-only;
+the AST is used here solely as a post-analysis output adapter that inserts facts
+already produced by the successor runtime into a copy of the source tree.
 """
 from __future__ import annotations
 
@@ -134,6 +132,14 @@ def emit_archway_predictions(
 
     try:
         started = time.monotonic()
+        probe_started = time.monotonic()
+        repo_record = _run_successor_repo_probe(
+            engine_worktree=Path(engine_worktree),
+            source_root=untyped_root,
+            runner=runner,
+            timeout=timeout,
+        )
+        seconds_repo_probe = time.monotonic() - probe_started
         for src in files:
             file_started = time.monotonic()
             rel = src.relative_to(untyped_root)
@@ -156,19 +162,8 @@ def emit_archway_predictions(
                     profile_writer.write(profile)
                 continue
 
-            probe_started = time.monotonic()
-            record = _run_engine_probe_file(
-                engine_worktree=Path(engine_worktree),
-                source_path=src,
-                module_name=src.stem,
-                runner=runner,
-                timeout=max(1, min(per_file_timeout, int(remaining))),
-                body_summary_consumption=body_summary_consumption,
-                analysis_product=analysis_product,
-                analysis_observation_mode=analysis_observation_mode,
-                type_requirements_assume_closed=type_requirements_assume_closed,
-            )
-            seconds_probe = time.monotonic() - probe_started
+            record = repo_record
+            seconds_probe = seconds_repo_probe
             if not record.get("ok"):
                 err = str(record.get("error", "no engine result"))[:300]
                 failures.append({"file": rel_s, "error": err})
@@ -187,10 +182,33 @@ def emit_archway_predictions(
                     profile_writer.write(profile)
                 continue
 
+            translation_failures = (
+                record.get("analysis_summary", {})
+                .get("translation_failures", {})
+            )
+            if rel_s in translation_failures:
+                err = str(translation_failures[rel_s])[:300]
+                failures.append({"file": rel_s, "error": err})
+                profile = FileProfile(
+                    repo_name=repo_name,
+                    file=rel_s,
+                    status="translation_failed",
+                    seconds_total=round(time.monotonic() - file_started, 6),
+                    seconds_engine_probe=round(seconds_probe, 6),
+                    error=err,
+                    analysis_summary=record.get("analysis_summary"),
+                )
+                file_profiles.append(profile)
+                if profile_writer:
+                    profile_writer.write(profile)
+                continue
+
             files_analyzed += 1
             file_trace = trace.for_file(rel_s) if trace else None
             render_started = time.monotonic()
-            function_types = _function_types(record.get("analysis", {}), trace=file_trace)
+            function_types = _successor_function_types(
+                record.get("files", {}).get(rel_s, []), trace=file_trace
+            )
             seconds_render = time.monotonic() - render_started
             functions_seen += len(function_types)
             raw = src.read_text(encoding="utf-8")
@@ -258,6 +276,278 @@ def emit_archway_predictions(
         file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
     )
+
+
+def _successor_function_types(
+    observations: list[dict[str, Any]], trace: _TraceBuffer | None = None
+) -> dict[tuple[int, str], dict[str, Any]]:
+    """Render compact successor observations into the annotation adapter shape."""
+
+    candidates: dict[tuple[int, str], dict[str, list[str]]] = {}
+    for item in observations:
+        line = item.get("line")
+        kind = item.get("kind")
+        function = item.get("function")
+        if not line or kind not in {"parameter", "return"}:
+            continue
+        if kind == "return":
+            function = function or item.get("name")
+        if not function:
+            continue
+        slot = "return" if kind == "return" else f"param:{item.get('name')}"
+        values = [
+            _successor_annotation(value)
+            for value in item.get("types", [])
+            if value
+        ]
+        candidates.setdefault((int(line), str(function)), {}).setdefault(
+            slot, []
+        ).extend(values)
+
+    rendered: dict[tuple[int, str], dict[str, Any]] = {}
+    for key, slots in candidates.items():
+        params = {
+            slot.removeprefix("param:"): merged
+            for slot, values in slots.items()
+            if slot.startswith("param:") and (merged := _merge_types(values))
+        }
+        ret = _merge_types(slots.get("return", []))
+        rendered[key] = {"params": params, "return": ret}
+        if trace:
+            for slot, values in slots.items():
+                trace.add_slot(
+                    line=key[0], function=key[1], slot=slot,
+                    candidates=[{"successor_types": values}],
+                    merged_annotation=(ret if slot == "return" else params.get(slot.removeprefix("param:"))),
+                )
+    return rendered
+
+
+def _successor_annotation(value: str) -> str:
+    if value == "builtins.NoneType":
+        return "None"
+    if value == "builtins.callable":
+        return "Callable"
+    return value.removeprefix("builtins.")
+
+
+def _run_successor_repo_probe(
+    *,
+    engine_worktree: Path,
+    source_root: Path,
+    runner: tuple[str, ...],
+    timeout: int,
+    demand_limit: int | None = None,
+    checkpoint_roots: bool = False,
+    body_label: str | None = None,
+) -> dict[str, Any]:
+    """Run one successor session for the complete repository source graph."""
+
+    engine_worktree = Path(engine_worktree).resolve()
+    probe = r'''
+import json
+import sys
+import time
+import traceback
+from pathlib import Path
+
+from sd_core.analysis.diagram_analysis import open_hybrid_program_session
+from sd_core.tooling.harness import TranslationResult
+
+root = Path(sys.argv[1])
+
+def module_name(path):
+    rel = path.relative_to(root).with_suffix("")
+    parts = list(rel.parts)
+    if parts and parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts) or "__init__"
+
+try:
+    phase_started = time.monotonic()
+    paths = sorted(root.rglob("*.py"))
+    by_module = {module_name(path): path for path in paths}
+    module_files = {name: str(path.relative_to(root)) for name, path in by_module.items()}
+    sources = {name: path.read_text(encoding="utf-8") for name, path in by_module.items()}
+    modules = {}
+    translation_failures = {}
+    for name, source in sources.items():
+        try:
+            modules[name] = TranslationResult.from_source(
+                source, name=name
+            ).morphism
+        except Exception as exc:
+            translation_failures[module_files[name]] = (
+                f"{type(exc).__name__}: {exc}"
+            )
+    if not modules:
+        raise RuntimeError("no repository module translated successfully")
+    translation_seconds = time.monotonic() - phase_started
+    print(f"ARCHWAY_PHASE translation {translation_seconds:.6f}", file=sys.stderr, flush=True)
+    entry = next(
+        (name for name in ("main", "__main__") if name in modules),
+        min(modules, key=lambda name: (name.count("."), len(name), name)),
+    )
+    session = open_hybrid_program_session(
+        modules, entry, record_events=False,
+        signature_observations_only=True,
+    )
+    session_open_seconds = time.monotonic() - phase_started
+    print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
+    forward = session.run_forward()
+    forward_seconds = time.monotonic() - phase_started
+    print(f"ARCHWAY_PHASE forward {forward_seconds:.6f}", file=sys.stderr, flush=True)
+    observations = session.type_observations()
+    missing = tuple(sorted({
+        item.address for item in observations
+        if item.kind in {"parameter", "return"}
+        if (session.store.resolved(item.address) is None
+            or not session.store.resolved(item.address).value)
+    }, key=lambda address: address.id))
+    print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
+    demand_limit = int(sys.argv[2]) if len(sys.argv) > 2 else None
+    requested = missing[:demand_limit] if demand_limit is not None else missing
+    signature_roots = session.signature_workload_roots(requested)
+    body_labels = {
+        template.body_morphism_id: (
+            f"{template.module.dotted if template.module else '?'}:"
+            f"{template.function or template.name}"
+        )
+        for plan in session.module_plans.values()
+        for template in plan.templates
+    }
+    requested_body_label = sys.argv[4] if len(sys.argv) > 4 else None
+    if requested_body_label:
+        signature_roots = tuple(
+            root_address for root_address in signature_roots
+            if body_labels.get(
+                getattr(root_address.subject, "body_morphism_id", "")
+            ) == requested_body_label
+        )
+    print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
+    checkpoint_roots = len(sys.argv) > 3 and sys.argv[3] == "checkpoint"
+    if checkpoint_roots:
+        targeted = None
+        body_profiles = []
+        for index, root_address in enumerate(signature_roots, 1):
+            body_started = time.monotonic()
+            executions_before = sum(session.scheduler.production_counts.values())
+            topology_before = session.scheduler.graph.topology_generation
+            targeted = session.observe((root_address,))
+            body_id = getattr(root_address.subject, "body_morphism_id", "")
+            body_profile = {
+                "index": index,
+                "label": body_labels.get(body_id, "?"),
+                "seconds": time.monotonic() - body_started,
+                "executions": sum(session.scheduler.production_counts.values()) - executions_before,
+                "topology_changes": session.scheduler.graph.topology_generation - topology_before,
+                "root_id": root_address.id,
+            }
+            body_profiles.append(body_profile)
+            print(
+                f"ARCHWAY_BODY {index}/{len(signature_roots)} "
+                f"{body_profile['seconds']:.6f} "
+                f"exec={body_profile['executions']} "
+                f"topology={body_profile['topology_changes']} "
+                f"{body_profile['label']} {root_address.id}",
+                file=sys.stderr, flush=True,
+            )
+    else:
+        body_profiles = []
+        targeted = session.observe_signature_workload(requested) if requested else None
+    targeted_seconds = time.monotonic() - phase_started
+    print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
+    files = {str(path.relative_to(root)): [] for path in paths}
+    for item in session.type_observations():
+        module = item.module.dotted if item.module is not None else None
+        rel = module_files.get(module)
+        if rel is None and module is not None:
+            matches = [path for name, path in module_files.items()
+                       if module == name or module.endswith("." + name)]
+            rel = matches[0] if len(matches) == 1 else None
+        fact = session.store.resolved(item.address)
+        if rel is None or fact is None or not fact.value:
+            continue
+        files[rel].append({
+            "line": item.position.row if item.position is not None else None,
+            "name": item.name,
+            "kind": item.kind,
+            "function": item.function,
+            "types": sorted(str(value) for value in fact.value),
+        })
+    scheduler_telemetry = dict(session.scheduler.aggregate_production_telemetry)
+    scheduler_telemetry.pop("production_executions_by_provider", None)
+    out = {
+        "ok": True,
+        "files": files,
+        "analysis_summary": {
+            "modules": len(modules),
+            "observations": len(observations),
+            "targeted_addresses": len(missing),
+            "requested_addresses": len(requested),
+            "requested_body_roots": len(signature_roots),
+            "body_profiles": body_profiles,
+            "forward_events": len(forward.events),
+            "targeted_events": len(targeted.events) if targeted is not None else 0,
+            "resolved_facts": len(session.store.snapshot().resolved_facts),
+            "translation_failures": translation_failures,
+            "phase_seconds": {
+                "translation": translation_seconds,
+                "session_open": session_open_seconds - translation_seconds,
+                "forward": forward_seconds - session_open_seconds,
+                "targeted": targeted_seconds - forward_seconds,
+            },
+            "scheduler": scheduler_telemetry,
+            "observation_modules": sorted({
+                item.module.dotted for item in observations
+                if item.module is not None
+            }),
+            "module_plan_observations": {
+                name: [len(plan.observations), len(plan.templates)]
+                for name, plan in session.module_plans.items()
+            },
+        },
+    }
+except Exception as exc:
+    out = {
+        "ok": False,
+        "error": f"{type(exc).__name__}: {exc}",
+        "trace_tail": traceback.format_exc()[-2400:],
+    }
+print(json.dumps(out, sort_keys=True))
+'''
+    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
+        f.write(probe)
+        f.flush()
+        cmd = [*runner, f.name, str(Path(source_root).absolute())]
+        if demand_limit is not None:
+            cmd.append(str(demand_limit))
+        if checkpoint_roots:
+            cmd.append("checkpoint")
+        elif body_label is not None:
+            cmd.append("collective")
+        if body_label is not None:
+            cmd.append(body_label)
+        try:
+            proc = subprocess.Popen(
+                cmd, cwd=engine_worktree, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, text=True,
+                env=_probe_env(engine_worktree), start_new_session=True,
+            )
+            stdout, stderr = proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            _stdout, stderr = proc.communicate()
+            return {"ok": False, "error": f"TimeoutExpired: analysis exceeded {timeout}s", "trace_tail": stderr[-2400:]}
+    if proc.returncode != 0:
+        return {"ok": False, "error": f"engine probe failed: exit={proc.returncode}", "trace_tail": stderr[-2400:]}
+    for line in reversed(stdout.splitlines()):
+        if line.strip().startswith("{"):
+            return json.loads(line)
+    return {"ok": False, "error": "engine probe produced no JSON", "trace_tail": stderr[-2400:]}
 
 
 def _run_engine_probe(

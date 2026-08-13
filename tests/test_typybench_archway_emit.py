@@ -7,10 +7,22 @@ from archway_benchmarks.typybench_archway_emit import (
     _element_type,
     _function_types,
     _run_engine_probe,
+    _successor_function_types,
     capture_runtime_phase_profile_file,
     capture_translation_trace_file,
     emit_archway_predictions,
 )
+
+
+def test_successor_observations_render_function_signatures() -> None:
+    observations = [
+        {"line": 4, "name": "x", "kind": "parameter", "function": "f", "types": ["builtins.int"]},
+        {"line": 4, "name": "f", "kind": "return", "function": None, "types": ["builtins.str"]},
+    ]
+
+    assert _successor_function_types(observations) == {
+        (4, "f"): {"params": {"x": "int"}, "return": "str"}
+    }
 
 
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:
