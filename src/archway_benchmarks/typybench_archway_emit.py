@@ -358,8 +358,6 @@ def _run_successor_repo_probe(
         raise ValueError("callable_input_exact_limit must be non-negative")
     if sample_rate_hz is not None and sample_rate_hz <= 0:
         raise ValueError("sample_rate_hz must be positive")
-    if sample_body_label is not None and not checkpoint_roots:
-        raise ValueError("sample_body_label requires checkpoint_roots")
     if sample_body_label is not None and sample_rate_hz is None:
         raise ValueError("sample_body_label requires sample_rate_hz")
 
@@ -370,6 +368,7 @@ import signal
 import sys
 import time
 import traceback
+from collections import Counter
 from pathlib import Path
 
 from sd_core.analysis.diagram_analysis import open_hybrid_program_session
@@ -448,6 +447,7 @@ try:
     missing = tuple(dict.fromkeys(
         item.address for item in missing_observations
     ))
+    all_signature_roots = session.signature_workload_roots(missing)
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
     requested = (
         missing
@@ -471,6 +471,17 @@ try:
             ) == requested_body_label
         )
     print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
+    if diagnostic_details and len(signature_roots) <= 32:
+        print(
+            "ARCHWAY_ROOTS " + json.dumps([
+                body_labels.get(
+                    getattr(item.subject, "body_morphism_id", ""), "?"
+                )
+                for item in signature_roots
+            ]),
+            file=sys.stderr,
+            flush=True,
+        )
     sampling_profile = None
     if checkpoint_roots:
         targeted = None
@@ -515,7 +526,7 @@ try:
                 ) as profiler:
                     targeted = session.observe(root_batch)
                 sampling_profile = profiler.jsonable(
-                    top=40, include_stacks=True
+                    top=40, include_stacks=diagnostic_details
                 )
             else:
                 targeted = session.observe(root_batch)
@@ -552,6 +563,12 @@ try:
                 )[:8],
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
+                "root_labels": [
+                    body_labels.get(
+                        getattr(item.subject, "body_morphism_id", ""), "?"
+                    )
+                    for item in root_batch
+                ],
             }
             if diagnostic_details:
                 body_profiles.append(body_profile)
@@ -593,7 +610,7 @@ try:
                 finally:
                     profiler.__exit__(None, None, None)
                     sampling_profile = profiler.jsonable(
-                        top=40, include_stacks=True
+                        top=40, include_stacks=diagnostic_details
                     )
             else:
                 targeted = session.observe(signature_roots) if signature_roots else None
@@ -628,6 +645,29 @@ try:
             "types": sorted(str(value) for value in fact.value),
         })
     scheduler_telemetry = dict(session.scheduler.aggregate_production_telemetry)
+    summary_registry = (
+        session.invocation_registry.callable_summaries
+        if session.invocation_registry is not None else None
+    )
+    unresolved_summary_bodies = Counter()
+    if summary_registry is not None:
+        callable_labels = {
+            body_id: f"{boundary.module_name}:{boundary.qualified_name}"
+            for body_id, boundary
+            in session.callable_boundaries_by_body.items()
+        }
+        for application_address, spec in summary_registry.applications.items():
+            if session.store.resolved(application_address) is not None:
+                continue
+            unresolved_summary_bodies[
+                body_labels.get(
+                    spec.callable_value.body_morphism_id,
+                    callable_labels.get(
+                        spec.callable_value.body_morphism_id,
+                        spec.callable_value.body_morphism_id,
+                    ),
+                )
+            ] += 1
     scheduler_telemetry.pop("production_executions_by_provider", None)
     if not diagnostic_details:
         scheduler_telemetry = {
@@ -654,6 +694,7 @@ try:
             "targeted_addresses": len(missing),
             "requested_addresses": len(requested),
             "requested_body_roots": len(signature_roots),
+            "signature_body_roots": len(all_signature_roots),
             "body_profiles": body_profiles,
             "timed_out_body": timed_out_body if not checkpoint_roots else False,
             "forward_events": len(forward.events),
@@ -695,6 +736,9 @@ try:
                 session.invocation_admission_counts()
             ) if diagnostic_details else {},
             "sampling_profile": sampling_profile,
+            "unresolved_summary_bodies": dict(
+                unresolved_summary_bodies.most_common(32)
+            ),
             "observation_modules": sorted({
                 item.module.dotted for item in observations
                 if item.module is not None

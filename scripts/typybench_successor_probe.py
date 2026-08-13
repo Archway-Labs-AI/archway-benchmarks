@@ -91,6 +91,7 @@ def main() -> None:
         "signature_demands": summary.get("targeted_addresses"),
         "requested_addresses": summary.get("requested_addresses"),
         "requested_body_roots": summary.get("requested_body_roots"),
+        "signature_body_roots": summary.get("signature_body_roots"),
         "morphism_transfer_reuse": summary.get("morphism_transfer_reuse"),
         "morphism_transfer_reuse_by_operation": summary.get(
             "morphism_transfer_reuse_by_operation"
@@ -106,6 +107,9 @@ def main() -> None:
         "invocation_inputs": summary.get("invocation_inputs"),
         "invocation_admissions": summary.get("invocation_admissions"),
         "sampling_profile": summary.get("sampling_profile"),
+        "unresolved_summary_bodies": summary.get(
+            "unresolved_summary_bodies"
+        ),
         "body_profiles": summary.get("body_profiles"),
         "timed_out_body": summary.get("timed_out_body"),
         "unique_productions": scheduler.get("unique_production_count"),
