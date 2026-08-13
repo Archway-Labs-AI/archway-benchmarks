@@ -44,6 +44,7 @@ def main() -> None:
         sample_body_label=args.sample_body_label,
         record_timings=args.record_timings,
         diagnostic_details=not args.production_light,
+        collect_predictions=False,
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}

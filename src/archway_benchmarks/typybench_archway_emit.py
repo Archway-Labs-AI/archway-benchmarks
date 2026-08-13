@@ -349,6 +349,7 @@ def _run_successor_repo_probe(
     sample_body_label: str | None = None,
     record_timings: bool = False,
     diagnostic_details: bool = True,
+    collect_predictions: bool = True,
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
@@ -385,6 +386,7 @@ sample_rate_hz = float(sys.argv[7]) or None
 sample_body_label = sys.argv[8] or None
 record_timings = sys.argv[9] == "timings"
 diagnostic_details = sys.argv[10] == "diagnostics"
+collect_predictions = sys.argv[11] == "predictions"
 
 def analysis_source_roots():
     # Respect Python's conventional src layout.  Repository-wide prediction
@@ -616,19 +618,15 @@ try:
     else:
         body_profiles = []
         timed_out_body = False
-        timeout_signal = (
-            signal.SIGVTALRM if sample_rate_hz else signal.SIGALRM
-        )
+        # SamplingProfiler owns ITIMER_VIRTUAL/SIGVTALRM.  Keep the bounded
+        # body cutoff on the independent wall-clock alarm so both diagnostics
+        # remain active when profiling one long-running body.
+        timeout_signal = signal.SIGALRM
         if requested_body_timeout and signature_roots:
             def timeout_body(_signum, _frame):
                 raise TimeoutError("diagnostic body cutoff")
             signal.signal(timeout_signal, timeout_body)
-            if sample_rate_hz:
-                signal.setitimer(
-                    signal.ITIMER_VIRTUAL, requested_body_timeout
-                )
-            else:
-                signal.alarm(requested_body_timeout)
+            signal.alarm(requested_body_timeout)
         try:
             if sample_rate_hz and signature_roots:
                 from sd_core.tooling.sampling_profile import SamplingProfiler
@@ -652,37 +650,67 @@ try:
             timed_out_body = True
             sampling_profile = locals().get("sampling_profile")
         finally:
-            if sample_rate_hz:
-                signal.setitimer(signal.ITIMER_VIRTUAL, 0.0)
-            else:
-                signal.alarm(0)
+            signal.alarm(0)
     targeted_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
-    files = {str(path.relative_to(root)): [] for path in all_paths}
-    for item in session.type_observations():
-        module = item.module.dotted if item.module is not None else None
-        rel = module_files.get(module)
-        if rel is None and module is not None:
-            matches = [path for name, path in module_files.items()
-                       if module == name or module.endswith("." + name)]
-            rel = matches[0] if len(matches) == 1 else None
-        fact = session.store.resolved(item.address)
-        if rel is None or fact is None or not fact.value:
-            continue
-        files[rel].append({
-            "line": item.position.row if item.position is not None else None,
-            "name": item.name,
-            "kind": item.kind,
-            "function": item.function,
-            "types": sorted(str(value) for value in fact.value),
-        })
-    scheduler_telemetry = dict(session.scheduler.aggregate_production_telemetry)
+    files = {}
+    if collect_predictions:
+        files = {str(path.relative_to(root)): [] for path in all_paths}
+        for item in session.type_observations():
+            module = item.module.dotted if item.module is not None else None
+            rel = module_files.get(module)
+            if rel is None and module is not None:
+                matches = [path for name, path in module_files.items()
+                           if module == name or module.endswith("." + name)]
+                rel = matches[0] if len(matches) == 1 else None
+            fact = session.store.resolved(item.address)
+            if rel is None or fact is None or not fact.value:
+                continue
+            files[rel].append({
+                "line": item.position.row if item.position is not None else None,
+                "name": item.name,
+                "kind": item.kind,
+                "function": item.function,
+                "types": sorted(str(value) for value in fact.value),
+            })
+    scheduler_telemetry = (
+        dict(session.scheduler.aggregate_production_telemetry)
+        if diagnostic_details else {
+            "unique_production_count": (
+                session.scheduler.unique_production_count
+            ),
+            "production_execution_count": (
+                session.scheduler.production_execution_count
+            ),
+            "repeated_production_count": (
+                session.scheduler.repeated_production_count
+            ),
+            "component_recompute_count": (
+                session.scheduler.graph.component_recompute_count
+            ),
+            "component_recompute_seconds": (
+                session.scheduler.graph.component_recompute_seconds
+            ),
+            "component_node_visits": (
+                session.scheduler.graph.component_node_visits
+            ),
+            "component_edge_visits": (
+                session.scheduler.graph.component_edge_visits
+            ),
+            "component_incremental_refresh_count": (
+                session.scheduler.graph.component_incremental_refresh_count
+            ),
+            "component_edge_update_telemetry": dict(
+                session.scheduler.graph.component_edge_update_telemetry
+            ),
+        }
+    )
     summary_registry = (
         session.invocation_registry.callable_summaries
         if session.invocation_registry is not None else None
     )
     unresolved_summary_bodies = Counter()
-    if summary_registry is not None:
+    if collect_predictions and summary_registry is not None:
         callable_labels = {
             body_id: f"{boundary.module_name}:{boundary.qualified_name}"
             for body_id, boundary
@@ -701,22 +729,6 @@ try:
                 )
             ] += 1
     scheduler_telemetry.pop("production_executions_by_provider", None)
-    if not diagnostic_details:
-        scheduler_telemetry = {
-            key: scheduler_telemetry[key]
-            for key in (
-                "unique_production_count",
-                "production_execution_count",
-                "repeated_production_count",
-                "component_recompute_count",
-                "component_recompute_seconds",
-                "component_node_visits",
-                "component_edge_visits",
-                "component_incremental_refresh_count",
-                "component_edge_update_telemetry",
-            )
-            if key in scheduler_telemetry
-        }
     out = {
         "ok": True,
         "files": files,
@@ -808,6 +820,7 @@ print(json.dumps(out, sort_keys=True))
             sample_body_label or "",
             "timings" if record_timings else "no-timings",
             "diagnostics" if diagnostic_details else "compact",
+            "predictions" if collect_predictions else "evidence-only",
         ]
         try:
             proc = subprocess.Popen(
