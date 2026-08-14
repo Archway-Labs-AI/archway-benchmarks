@@ -610,17 +610,29 @@ try:
                     for item in root_batch
                 ],
             }
-            if diagnostic_details:
-                body_profiles.append(body_profile)
-            if diagnostic_details:
-                print(
-                    f"ARCHWAY_BODY {index}/{len(root_batches)} "
-                    f"{body_profile['seconds']:.6f} "
-                    f"exec={body_profile['executions']} "
-                    f"topology={body_profile['topology_changes']} "
-                    f"{body_profile['label']} {root_address.id}",
-                    file=sys.stderr, flush=True,
-                )
+            body_profiles.append(
+                body_profile if diagnostic_details else {
+                    "index": index,
+                    "label": body_label,
+                    "seconds": body_profile["seconds"],
+                    "executions": body_profile["executions"],
+                    "topology_changes": body_profile["topology_changes"],
+                }
+            )
+            # One compact line per eight-root cohort is intentionally retained
+            # in production-light runs. It is negligible beside convergence
+            # work and survives a bounded subprocess timeout, unlike the final
+            # JSON summary, so large-repository replay growth remains
+            # diagnosable without enabling detailed tracing.
+            print(
+                f"ARCHWAY_BODY {index}/{len(root_batches)} "
+                f"{body_profile['seconds']:.6f} "
+                f"exec={body_profile['executions']} "
+                f"topology={body_profile['topology_changes']} "
+                f"{body_profile['label']}"
+                + (f" {root_address.id}" if diagnostic_details else ""),
+                file=sys.stderr, flush=True,
+            )
     else:
         body_profiles = []
         timed_out_body = False
