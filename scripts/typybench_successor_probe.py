@@ -16,12 +16,20 @@ def main() -> None:
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--demand-limit", type=int)
     parser.add_argument("--checkpoint-roots", action="store_true")
+    parser.add_argument("--checkpoint-size", type=int, default=8)
+    parser.add_argument("--checkpoint-tail-start", type=int)
+    parser.add_argument("--checkpoint-tail-count", type=int)
     parser.add_argument("--body-label")
     parser.add_argument("--body-timeout", type=int)
     parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
     parser.add_argument("--sample-body-label")
     parser.add_argument("--record-timings", action="store_true")
+    parser.add_argument(
+        "--compact-diagnostics",
+        action="store_true",
+        help="emit bounded top-N diagnostic maps and only the terminal cohorts",
+    )
     parser.add_argument(
         "--production-light",
         action="store_true",
@@ -43,6 +51,9 @@ def main() -> None:
         timeout=args.timeout,
         demand_limit=args.demand_limit,
         checkpoint_roots=args.checkpoint_roots,
+        checkpoint_size=args.checkpoint_size,
+        checkpoint_tail_start=args.checkpoint_tail_start,
+        checkpoint_tail_count=args.checkpoint_tail_count,
         body_label=args.body_label,
         body_timeout=args.body_timeout,
         callable_input_exact_limit=args.callable_input_exact_limit,
@@ -89,6 +100,25 @@ def main() -> None:
         ),
         key=lambda item: (-item[1], item[0]),
     )[:20]
+    def top_counts(value: object, limit: int = 20) -> object:
+        if not args.compact_diagnostics or not isinstance(value, dict):
+            return value
+        return sorted(
+            value.items(), key=lambda item: (-item[1], item[0])
+        )[:limit]
+
+    body_profiles = summary.get("body_profiles") or []
+    if args.compact_diagnostics:
+        body_profiles = [{
+            key: value for key, value in profile.items()
+            if key not in {"root_id", "root_ids"}
+        } for profile in body_profiles[-1:]]
+    sampling_profile = summary.get("sampling_profile")
+    if args.compact_diagnostics and isinstance(sampling_profile, dict):
+        sampling_profile = {
+            key: value for key, value in sampling_profile.items()
+            if key not in {"stacks", "top_stacks"}
+        }
     print(json.dumps({
         "ok": result.get("ok"),
         "error": result.get("error"),
@@ -99,26 +129,35 @@ def main() -> None:
         "requested_addresses": summary.get("requested_addresses"),
         "requested_body_roots": summary.get("requested_body_roots"),
         "signature_body_roots": summary.get("signature_body_roots"),
-        "morphism_transfer_reuse": summary.get("morphism_transfer_reuse"),
-        "morphism_transfer_reuse_by_operation": summary.get(
-            "morphism_transfer_reuse_by_operation"
+        "morphism_transfer_reuse": (
+            None if args.compact_diagnostics
+            else summary.get("morphism_transfer_reuse")
+        ),
+        "morphism_transfer_reuse_by_operation": (
+            None if args.compact_diagnostics else summary.get(
+                "morphism_transfer_reuse_by_operation"
+            )
         ),
         "atomic_effect_gaps": summary.get("atomic_effect_gaps"),
         "morphism_fact_output_barriers": summary.get(
             "morphism_fact_output_barriers"
         ),
-        "morphism_read_intersections": summary.get(
-            "morphism_read_intersections"
+        "morphism_read_intersections": (
+            None if args.compact_diagnostics else summary.get(
+                "morphism_read_intersections"
+            )
         ),
-        "invocation_contexts": summary.get("invocation_contexts"),
-        "invocation_inputs": summary.get("invocation_inputs"),
-        "invocation_admissions": summary.get("invocation_admissions"),
-        "sampling_profile": summary.get("sampling_profile"),
+        "invocation_contexts": top_counts(summary.get("invocation_contexts")),
+        "invocation_inputs": top_counts(summary.get("invocation_inputs")),
+        "invocation_admissions": top_counts(summary.get("invocation_admissions")),
+        "sampling_profile": sampling_profile,
         "unresolved_summary_bodies": summary.get(
             "unresolved_summary_bodies"
         ),
-        "body_profiles": summary.get("body_profiles"),
-        "body_plan": summary.get("body_plan"),
+        "body_profiles": body_profiles,
+        "body_plan": (
+            None if args.compact_diagnostics else summary.get("body_plan")
+        ),
         "timed_out_body": summary.get("timed_out_body"),
         "unique_productions": scheduler.get("unique_production_count"),
         "production_executions": scheduler.get("production_execution_count"),

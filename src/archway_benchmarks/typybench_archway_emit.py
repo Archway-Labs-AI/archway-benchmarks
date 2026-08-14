@@ -401,6 +401,9 @@ def _run_successor_repo_probe(
     timeout: int,
     demand_limit: int | None = None,
     checkpoint_roots: bool = False,
+    checkpoint_size: int = 8,
+    checkpoint_tail_start: int | None = None,
+    checkpoint_tail_count: int | None = None,
     body_label: str | None = None,
     body_timeout: int | None = None,
     callable_input_exact_limit: int | None = None,
@@ -422,6 +425,12 @@ def _run_successor_repo_probe(
         )
     if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
         raise ValueError("callable_input_exact_limit must be non-negative")
+    if checkpoint_size <= 0:
+        raise ValueError("checkpoint_size must be positive")
+    if checkpoint_tail_start is not None and checkpoint_tail_start < 0:
+        raise ValueError("checkpoint_tail_start must be non-negative")
+    if checkpoint_tail_count is not None and checkpoint_tail_count <= 0:
+        raise ValueError("checkpoint_tail_count must be positive")
     if sample_rate_hz is not None and sample_rate_hz <= 0:
         raise ValueError("sample_rate_hz must be positive")
     if sample_body_label is not None and sample_rate_hz is None:
@@ -452,6 +461,9 @@ sample_body_label = sys.argv[8] or None
 record_timings = sys.argv[9] == "timings"
 diagnostic_details = sys.argv[10] == "diagnostics"
 collect_predictions = sys.argv[11] == "predictions"
+checkpoint_size = int(sys.argv[12])
+checkpoint_tail_start = int(sys.argv[13])
+checkpoint_tail_count = int(sys.argv[14])
 
 def analysis_source_roots():
     # Respect Python's conventional src layout.  Repository-wide prediction
@@ -607,10 +619,20 @@ try:
         # create an unnecessarily large unstable topology wave. Eight roots
         # preserves frequent durable progress while allowing related demands
         # to share discovery and SCC convergence.
-        checkpoint_size = 8
-        root_batches = tuple(
+        prefix_end = min(checkpoint_tail_start, len(signature_roots))
+        prefix = tuple(
             signature_roots[index:index + checkpoint_size]
-            for index in range(0, len(signature_roots), checkpoint_size)
+            for index in range(0, prefix_end, checkpoint_size)
+        ) if checkpoint_tail_start >= 0 else ()
+        tail_start = prefix_end if checkpoint_tail_start >= 0 else 0
+        tail_size = 1 if checkpoint_tail_start >= 0 else checkpoint_size
+        tail_end = (
+            min(len(signature_roots), tail_start + checkpoint_tail_count)
+            if checkpoint_tail_count > 0 else len(signature_roots)
+        )
+        root_batches = prefix + tuple(
+            signature_roots[index:index + tail_size]
+            for index in range(tail_start, tail_end, tail_size)
         )
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
@@ -629,6 +651,10 @@ try:
             body_started = time.monotonic()
             executions_before = session.scheduler.production_execution_count
             topology_before = session.scheduler.graph.topology_generation
+            summary_registry = session.invocation_registry.callable_summaries
+            applications_before = frozenset(
+                summary_registry.applications
+            ) if diagnostic_details and summary_registry is not None else frozenset()
             telemetry_before = (
                 session.scheduler.production_family_telemetry
                 if diagnostic_details else None
@@ -701,6 +727,19 @@ try:
                     family_second_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
                 )[:8],
+                "top_new_application_callers": (
+                    Counter(
+                        (
+                            spec.invocation.caller_context,
+                            spec.callable_value.body_morphism_id,
+                        )
+                        for application, spec
+                        in summary_registry.applications.items()
+                        if application not in applications_before
+                    ).most_common(12)
+                    if diagnostic_details and summary_registry is not None
+                    else []
+                ),
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
                 "root_labels": [
@@ -936,6 +975,12 @@ print(json.dumps(out, sort_keys=True))
             "timings" if record_timings else "no-timings",
             "diagnostics" if diagnostic_details else "compact",
             "predictions" if collect_predictions else "evidence-only",
+            str(checkpoint_size),
+            str(
+                checkpoint_tail_start
+                if checkpoint_tail_start is not None else -1
+            ),
+            str(checkpoint_tail_count or 0),
         ]
         try:
             proc = subprocess.Popen(
