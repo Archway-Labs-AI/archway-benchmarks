@@ -540,6 +540,7 @@ try:
         record_timings=record_timings,
         signature_observations_only=True,
         callable_input_exact_limit=callable_input_exact_limit,
+        contextual_summary_evaluation=True,
     )
     session_open_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
@@ -909,6 +910,10 @@ try:
                 "targeted": targeted_seconds - forward_seconds,
             },
             "scheduler": scheduler_telemetry,
+            "production_replay_hotspots": (
+                session.scheduler.production_replay_hotspots()
+                if diagnostic_details else ()
+            ),
             "morphism_transfer_reuse": dict(
                 session.morphism_transfer_reuse_counts()
             ) if diagnostic_details else {},

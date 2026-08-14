@@ -162,6 +162,9 @@ def main() -> None:
         "unique_productions": scheduler.get("unique_production_count"),
         "production_executions": scheduler.get("production_execution_count"),
         "repeated_productions": scheduler.get("repeated_production_count"),
+        "production_replay_hotspots": summary.get(
+            "production_replay_hotspots"
+        ),
         "affected_selected": worklist.get("affected_component_selected"),
         "topology_restarts": worklist.get("topology_restart"),
         "component_recompute_count": scheduler.get("component_recompute_count"),
