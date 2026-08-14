@@ -30,6 +30,7 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
 
     phases: dict[str, float | int] = {}
     body_profiles: list[dict[str, Any]] = []
+    body_plan: list[list[str]] = []
     for line in stderr.splitlines():
         if line.startswith("ARCHWAY_PHASE "):
             parts = line.split(" ", 2)
@@ -44,6 +45,19 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                 )
             except ValueError:
                 continue
+        elif line.startswith("ARCHWAY_BODY_PLAN "):
+            try:
+                candidate = json.loads(
+                    line.removeprefix("ARCHWAY_BODY_PLAN ")
+                )
+            except json.JSONDecodeError:
+                continue
+            if isinstance(candidate, list) and all(
+                isinstance(batch, list)
+                and all(isinstance(item, str) for item in batch)
+                for batch in candidate
+            ):
+                body_plan = candidate
         elif line.startswith("ARCHWAY_BODY "):
             parts = line.split(" ", 5)
             if len(parts) != 6:
@@ -63,7 +77,11 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                 })
             except ValueError:
                 continue
-    return {"phase_progress": phases, "body_profiles": body_profiles}
+    return {
+        "phase_progress": phases,
+        "body_plan": body_plan,
+        "body_profiles": body_profiles,
+    }
 
 
 @dataclass(frozen=True)
@@ -394,8 +412,14 @@ def _run_successor_repo_probe(
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
-    if body_timeout is not None and body_label is None:
-        raise ValueError("body_timeout requires body_label")
+    if (
+        body_timeout is not None
+        and body_label is None
+        and sample_body_label is None
+    ):
+        raise ValueError(
+            "body_timeout requires body_label or sample_body_label"
+        )
     if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
         raise ValueError("callable_input_exact_limit must be non-negative")
     if sample_rate_hz is not None and sample_rate_hz <= 0:
@@ -564,6 +588,12 @@ try:
             flush=True,
         )
     sampling_profile = None
+    timed_out_body = False
+    timeout_signal = signal.SIGALRM
+    if requested_body_timeout:
+        def timeout_body(_signum, _frame):
+            raise TimeoutError("diagnostic body cutoff")
+        signal.signal(timeout_signal, timeout_body)
     if checkpoint_roots:
         targeted = None
         body_profiles = []
@@ -582,6 +612,18 @@ try:
             signature_roots[index:index + checkpoint_size]
             for index in range(0, len(signature_roots), checkpoint_size)
         )
+        print(
+            "ARCHWAY_BODY_PLAN " + json.dumps([[
+                body_labels.get(
+                    getattr(root.subject, "body_morphism_id", ""), "?"
+                )
+                for root in root_batch
+            ]
+                for root_batch in root_batches
+            ], separators=(",", ":")),
+            file=sys.stderr,
+            flush=True,
+        )
         for index, root_batch in enumerate(root_batches, 1):
             root_address = root_batch[0]
             body_started = time.monotonic()
@@ -599,18 +641,35 @@ try:
             )
             body_id = getattr(root_address.subject, "body_morphism_id", "")
             body_label = body_labels.get(body_id, "?")
-            if sample_rate_hz and body_label == sample_body_label:
-                from sd_core.tooling.sampling_profile import SamplingProfiler
-                with SamplingProfiler(
-                    rate_hz=sample_rate_hz,
-                    project_marker="/sd_core/",
-                ) as profiler:
-                    targeted = session.observe(root_batch)
-                sampling_profile = profiler.jsonable(
-                    top=40, include_stacks=diagnostic_details
-                )
-            else:
+            sample_this_body = (
+                sample_rate_hz and body_label == sample_body_label
+            )
+            cutoff_this_body = (
+                requested_body_timeout
+                and body_label in {sample_body_label, requested_body_label}
+            )
+            profiler = None
+            if cutoff_this_body:
+                signal.alarm(requested_body_timeout)
+            try:
+                if sample_this_body:
+                    from sd_core.tooling.sampling_profile import SamplingProfiler
+                    profiler = SamplingProfiler(
+                        rate_hz=sample_rate_hz,
+                        project_marker="/sd_core/",
+                    )
+                    profiler.__enter__()
                 targeted = session.observe(root_batch)
+            except TimeoutError:
+                timed_out_body = True
+                targeted = None
+            finally:
+                signal.alarm(0)
+                if profiler is not None:
+                    profiler.__exit__(None, None, None)
+                    sampling_profile = profiler.jsonable(
+                        top=40, include_stacks=diagnostic_details
+                    )
             telemetry_after = (
                 session.scheduler.production_family_telemetry
                 if diagnostic_details else {"executions": {}, "seconds": {}}
@@ -674,17 +733,14 @@ try:
                 + (f" {root_address.id}" if diagnostic_details else ""),
                 file=sys.stderr, flush=True,
             )
+            if timed_out_body:
+                break
     else:
         body_profiles = []
-        timed_out_body = False
         # SamplingProfiler owns ITIMER_VIRTUAL/SIGVTALRM.  Keep the bounded
         # body cutoff on the independent wall-clock alarm so both diagnostics
         # remain active when profiling one long-running body.
-        timeout_signal = signal.SIGALRM
         if requested_body_timeout and signature_roots:
-            def timeout_body(_signum, _frame):
-                raise TimeoutError("diagnostic body cutoff")
-            signal.signal(timeout_signal, timeout_body)
             signal.alarm(requested_body_timeout)
         try:
             if sample_rate_hz and signature_roots:
@@ -799,7 +855,7 @@ try:
             "requested_body_roots": len(signature_roots),
             "signature_body_roots": len(all_signature_roots),
             "body_profiles": body_profiles,
-            "timed_out_body": timed_out_body if not checkpoint_roots else False,
+            "timed_out_body": timed_out_body,
             "forward_events": len(forward.events),
             "targeted_events": len(targeted.events) if targeted is not None else 0,
             "resolved_facts": (

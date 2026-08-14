@@ -20,6 +20,7 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
         "ARCHWAY_PHASE translation 8.125000\n"
         "ARCHWAY_PHASE signature_demands 3901\n"
         "ARCHWAY_PHASE body_roots 1105\n"
+        'ARCHWAY_BODY_PLAN [["first","second"]]\n'
         "ARCHWAY_BODY 2/139 16.250000 exec=618 topology=5940 "
         "appworld.api_docs:generate_example\n"
     )
@@ -30,6 +31,7 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
             "signature_demands": 3901,
             "body_roots": 1105,
         },
+        "body_plan": [["first", "second"]],
         "body_profiles": [{
             "index": 2,
             "total": 139,

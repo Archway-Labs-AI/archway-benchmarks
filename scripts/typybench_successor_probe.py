@@ -28,8 +28,14 @@ def main() -> None:
         help="disable detailed per-cohort diagnostic attribution",
     )
     args = parser.parse_args()
-    if args.body_timeout is not None and args.body_label is None:
-        parser.error("--body-timeout requires --body-label")
+    if (
+        args.body_timeout is not None
+        and args.body_label is None
+        and args.sample_body_label is None
+    ):
+        parser.error(
+            "--body-timeout requires --body-label or --sample-body-label"
+        )
     result = _run_successor_repo_probe(
         engine_worktree=args.engine_worktree,
         source_root=args.source_root,
@@ -112,6 +118,7 @@ def main() -> None:
             "unresolved_summary_bodies"
         ),
         "body_profiles": summary.get("body_profiles"),
+        "body_plan": summary.get("body_plan"),
         "timed_out_body": summary.get("timed_out_body"),
         "unique_productions": scheduler.get("unique_production_count"),
         "production_executions": scheduler.get("production_execution_count"),
