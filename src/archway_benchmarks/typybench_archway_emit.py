@@ -396,7 +396,10 @@ def analysis_source_roots():
     # exists, retain root modules and top-level package trees.
     src = root / "src"
     if src.is_dir() and any(src.rglob("*.py")):
-        return (src,)
+        # Root-level importable modules (for example ``setup.py``) and the
+        # conventional ``src`` tree are both analysis surfaces. Keep both
+        # roots and let module-name resolution select the most specific one.
+        return (root, src)
     package_roots = tuple(sorted(
         path for path in root.iterdir()
         if path.is_dir() and (path / "__init__.py").is_file()
@@ -416,9 +419,12 @@ def analysis_paths():
 source_roots = analysis_source_roots()
 
 def module_name(path):
-    source_root = next(
-        candidate for candidate in source_roots
-        if candidate == root or path.is_relative_to(candidate)
+    source_root = max(
+        (
+            candidate for candidate in source_roots
+            if path.is_relative_to(candidate)
+        ),
+        key=lambda candidate: len(candidate.parts),
     )
     rel = path.relative_to(source_root).with_suffix("")
     parts = list(rel.parts)
