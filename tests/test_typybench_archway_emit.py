@@ -54,6 +54,43 @@ def test_successor_observations_render_function_signatures() -> None:
     }
 
 
+def test_successor_observations_match_qualified_methods_to_source_name() -> None:
+    observations = [
+        {
+            "line": 4,
+            "name": "enabled",
+            "kind": "parameter",
+            "function": "Environment.__init__",
+            "types": ["builtins.bool"],
+        },
+        {
+            "line": 4,
+            "name": "__init__",
+            "kind": "return",
+            "function": "Environment.__init__",
+            "types": ["builtins.NoneType"],
+        },
+    ]
+
+    function_types = _successor_function_types(observations)
+    assert function_types == {
+        (4, "__init__"): {
+            "params": {"enabled": "bool"},
+            "return": "None",
+        }
+    }
+    annotated, stats = _annotate_source(
+        "class Environment:\n"
+        "    marker = True\n"
+        "\n"
+        "    def __init__(self, enabled):\n"
+        "        self.enabled = enabled\n",
+        function_types,
+    )
+    assert "def __init__(self, enabled: bool) -> None:" in annotated
+    assert stats == {"functions": 1, "params": 1, "returns": 1}
+
+
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:
     source = '''"""module docstring"""
 

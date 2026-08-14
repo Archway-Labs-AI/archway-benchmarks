@@ -356,13 +356,20 @@ def _successor_function_types(
             function = function or item.get("name")
         if not function:
             continue
+        # Successor observations retain the semantic qualified callable name
+        # (for example ``PaperQAEnvironment.__init__``), while the source
+        # annotation adapter addresses a definition by its source-local name
+        # and line.  The line retains the necessary disambiguation; preserving
+        # the qualifier here prevents every method parameter from matching its
+        # FunctionDef.
+        function = str(function).rsplit(".", 1)[-1]
         slot = "return" if kind == "return" else f"param:{item.get('name')}"
         values = [
             _successor_annotation(value)
             for value in item.get("types", [])
             if value
         ]
-        candidates.setdefault((int(line), str(function)), {}).setdefault(
+        candidates.setdefault((int(line), function), {}).setdefault(
             slot, []
         ).extend(values)
 
