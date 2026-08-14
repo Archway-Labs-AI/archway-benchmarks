@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 
@@ -22,6 +23,19 @@ from archway_benchmarks.typybench_harness import (
 
 def _python_file_count(root: Path) -> int:
     return sum(1 for _path in root.rglob("*.py"))
+
+
+def _git_revision(worktree: Path) -> str:
+    """Resolve the immutable revision used by one checkpointed run."""
+
+    completed = subprocess.run(
+        ("git", "-C", str(worktree.resolve()), "rev-parse", "HEAD"),
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    return completed.stdout.strip()
 
 
 def _write_manifest(path: Path, manifest: dict[str, object]) -> None:
@@ -103,14 +117,35 @@ def main() -> None:
     args.output_root.mkdir(parents=True, exist_ok=True)
     predictions_root = args.output_root / "predictions"
     manifest_path = args.output_root / "manifest.json"
+    engine_revision = _git_revision(args.engine_worktree)
+    harness_revision = _git_revision(Path(__file__).resolve().parents[1])
     if manifest_path.exists() and not args.no_resume:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        expected_revisions = {
+            "engine_revision": engine_revision,
+            "harness_revision": harness_revision,
+        }
+        mismatches = {
+            name: (manifest.get(name), expected)
+            for name, expected in expected_revisions.items()
+            if manifest.get(name) != expected
+        }
+        if mismatches:
+            raise RuntimeError(
+                "refusing to resume TypyBench across revisions: "
+                + ", ".join(
+                    f"{name}={actual!r} (current {expected!r})"
+                    for name, (actual, expected) in mismatches.items()
+                )
+            )
     else:
         manifest = {
             "schema": "archway.typybench.successor-run.v1",
             "created_unix": time.time(),
             "data_root": str(args.data_root.resolve()),
             "engine_worktree": str(args.engine_worktree.resolve()),
+            "engine_revision": engine_revision,
+            "harness_revision": harness_revision,
             "predictions_root": str(predictions_root.resolve()),
             "repositories": {},
         }
