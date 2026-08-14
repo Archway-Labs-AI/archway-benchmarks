@@ -6,12 +6,39 @@ from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
     _element_type,
     _function_types,
+    _probe_progress,
     _run_engine_probe,
     _successor_function_types,
     capture_runtime_phase_profile_file,
     capture_translation_trace_file,
     emit_archway_predictions,
 )
+
+
+def test_probe_progress_retains_compact_timeout_evidence() -> None:
+    progress = _probe_progress(
+        "ARCHWAY_PHASE translation 8.125000\n"
+        "ARCHWAY_PHASE signature_demands 3901\n"
+        "ARCHWAY_PHASE body_roots 1105\n"
+        "ARCHWAY_BODY 2/139 16.250000 exec=618 topology=5940 "
+        "appworld.api_docs:generate_example\n"
+    )
+
+    assert progress == {
+        "phase_progress": {
+            "translation": 8.125,
+            "signature_demands": 3901,
+            "body_roots": 1105,
+        },
+        "body_profiles": [{
+            "index": 2,
+            "total": 139,
+            "seconds": 16.25,
+            "executions": 618,
+            "topology_changes": 5940,
+            "label": "appworld.api_docs:generate_example",
+        }],
+    }
 
 
 def test_successor_observations_render_function_signatures() -> None:

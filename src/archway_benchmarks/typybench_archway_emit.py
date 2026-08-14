@@ -25,6 +25,47 @@ _NONE_TYPE_NAMES = {"builtins.NoneType", "NoneType"}
 _TRACE_ENV_VAR = "ARCHWAY_TYPYBENCH_TRACE_JSONL"
 
 
+def _probe_progress(stderr: str) -> dict[str, Any]:
+    """Parse low-overhead phase/cohort evidence from an incomplete probe."""
+
+    phases: dict[str, float | int] = {}
+    body_profiles: list[dict[str, Any]] = []
+    for line in stderr.splitlines():
+        if line.startswith("ARCHWAY_PHASE "):
+            parts = line.split(" ", 2)
+            if len(parts) != 3:
+                continue
+            name, raw_value = parts[1:]
+            try:
+                phases[name] = (
+                    int(raw_value)
+                    if name in {"signature_demands", "body_roots"}
+                    else float(raw_value)
+                )
+            except ValueError:
+                continue
+        elif line.startswith("ARCHWAY_BODY "):
+            parts = line.split(" ", 5)
+            if len(parts) != 6:
+                continue
+            _prefix, position, raw_seconds, raw_exec, raw_topology, label = parts
+            try:
+                index, total = (int(item) for item in position.split("/", 1))
+                body_profiles.append({
+                    "index": index,
+                    "total": total,
+                    "seconds": float(raw_seconds),
+                    "executions": int(raw_exec.removeprefix("exec=")),
+                    "topology_changes": int(
+                        raw_topology.removeprefix("topology=")
+                    ),
+                    "label": label,
+                })
+            except ValueError:
+                continue
+    return {"phase_progress": phases, "body_profiles": body_profiles}
+
+
 @dataclass(frozen=True)
 class FileProfile:
     repo_name: str
@@ -853,9 +894,19 @@ print(json.dumps(out, sort_keys=True))
             except ProcessLookupError:
                 pass
             _stdout, stderr = proc.communicate()
-            return {"ok": False, "error": f"TimeoutExpired: analysis exceeded {timeout}s", "trace_tail": stderr[-2400:]}
+            return {
+                "ok": False,
+                "error": f"TimeoutExpired: analysis exceeded {timeout}s",
+                "trace_tail": stderr[-2400:],
+                "analysis_summary": _probe_progress(stderr),
+            }
     if proc.returncode != 0:
-        return {"ok": False, "error": f"engine probe failed: exit={proc.returncode}", "trace_tail": stderr[-2400:]}
+        return {
+            "ok": False,
+            "error": f"engine probe failed: exit={proc.returncode}",
+            "trace_tail": stderr[-2400:],
+            "analysis_summary": _probe_progress(stderr),
+        }
     for line in reversed(stdout.splitlines()):
         if line.strip().startswith("{"):
             return json.loads(line)
