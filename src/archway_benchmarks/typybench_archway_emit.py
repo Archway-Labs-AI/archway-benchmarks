@@ -786,6 +786,9 @@ try:
             body_started = time.monotonic()
             executions_before = session.scheduler.production_execution_count
             topology_before = session.scheduler.graph.topology_generation
+            edge_telemetry_before = dict(
+                session.scheduler.graph.component_edge_update_telemetry
+            )
             summary_registry = session.invocation_registry.callable_summaries
             applications_before = frozenset(
                 summary_registry.applications
@@ -854,6 +857,12 @@ try:
                     - executions_before
                 ),
                 "topology_changes": session.scheduler.graph.topology_generation - topology_before,
+                "component_edge_updates": {
+                    name: value - edge_telemetry_before.get(name, 0)
+                    for name, value in (
+                        session.scheduler.graph.component_edge_update_telemetry
+                    ).items()
+                },
                 "top_execution_families": sorted(
                     family_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
@@ -895,6 +904,9 @@ try:
                     "seconds": body_profile["seconds"],
                     "executions": body_profile["executions"],
                     "topology_changes": body_profile["topology_changes"],
+                    "component_edge_updates": body_profile[
+                        "component_edge_updates"
+                    ],
                 }
             )
             # One compact line per eight-root cohort is intentionally retained
