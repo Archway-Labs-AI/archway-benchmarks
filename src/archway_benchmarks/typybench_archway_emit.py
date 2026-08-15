@@ -473,7 +473,9 @@ def _successor_variable_types(
         if not line or item.get("kind") != "variable" or not name:
             continue
         if class_fields_only and (
-            item.get("function") is not None or "." not in str(name)
+            item.get("function") is not None
+            or "." not in str(name)
+            or item.get("family") != "ClassFieldTypeOf"
         ):
             continue
         # Class-attribute observations retain their qualified semantic name
@@ -1033,6 +1035,7 @@ try:
                 "line": item.position.row if item.position is not None else None,
                 "name": item.name,
                 "kind": item.kind,
+                "family": item.address.family,
                 "function": item.function,
                 # Retain unresolved catalog entries as explicit missing
                 # evidence.  The source adapter inserts nothing for an empty

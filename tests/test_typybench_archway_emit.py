@@ -267,6 +267,7 @@ def test_repository_emission_can_include_diagram_class_fields_explicitly(
                 "line": 2,
                 "name": "Model.value",
                 "kind": "variable",
+                "family": "ClassFieldTypeOf",
                 "function": None,
                 "types": ["builtins.int"],
             }]},
@@ -287,6 +288,21 @@ def test_repository_emission_can_include_diagram_class_fields_explicitly(
         tmp_path / "predictions" / "demo" / "demo.py"
     ).read_text()
     assert stats.variables_annotated == 1
+
+
+def test_class_field_emission_rejects_ordinary_class_attributes() -> None:
+    observations = [{
+        "line": 2,
+        "name": "Model.cache",
+        "kind": "variable",
+        "family": "ClassAttributeTypeOf",
+        "function": None,
+        "types": ["builtins.dict"],
+    }]
+
+    assert _successor_variable_types(
+        observations, class_fields_only=True
+    ) == {}
 
 
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:

@@ -241,6 +241,12 @@ def main() -> None:
                     1, min(args.timeout_per_repo, int(remaining_total))
                 ),
                 checkpoint_roots=True,
+                # Declarative class transforms (dataclasses, PEP-681-style
+                # model bases) expose constructor types through diagram-owned
+                # ClassFieldTypeOf facts.  Emitting only that semantic family
+                # restores the source surface needed by the official scorer
+                # without annotating arbitrary class attributes.
+                emit_class_field_annotations=True,
             )
             record = _stats_record(stats, time.monotonic() - started)
         except Exception as exc:
