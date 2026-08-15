@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import sys
 
 import pytest
 
@@ -101,3 +102,9 @@ def test_aggregate_scores_weights_repositories_by_observations() -> None:
         "overall_score": pytest.approx(0.36),
         "missing_ratio": pytest.approx(0.37),
     }
+
+
+def test_command_group_returns_child_exit_status() -> None:
+    assert _MODULE._run_command_group(
+        [sys.executable, "-c", "raise SystemExit(7)"], timeout=5
+    ) == 7

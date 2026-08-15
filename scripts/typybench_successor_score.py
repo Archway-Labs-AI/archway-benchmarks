@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -111,6 +112,35 @@ def _aggregate_scores(records: dict[str, object]) -> dict[str, object]:
         "overall_score": weighted("overall_score"),
         "missing_ratio": weighted("missing_ratio"),
     }
+
+
+def _run_command_group(command: list[str], *, timeout: int) -> int:
+    """Run a scorer and terminate its Docker descendants on interruption.
+
+    Upstream ``run.py`` launches Docker below a multiprocessing worker. Killing
+    only the immediate Python process leaves the container orphaned, which can
+    continue mutating the prediction tree after this runner has checkpointed a
+    failure. A dedicated process group gives timeout and Ctrl-C one exact,
+    bounded cleanup target.
+    """
+
+    process = subprocess.Popen(command, start_new_session=True)
+    try:
+        return process.wait(timeout=timeout)
+    except BaseException:
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait()
+        raise
 
 
 def main() -> None:
@@ -218,7 +248,7 @@ def main() -> None:
         _write_json(score_manifest_path, manifest)
         print(f"ARCHWAY_TYPYBENCH_SCORE start {index}/{len(repositories)} {repo_name}", flush=True)
         try:
-            completed = subprocess.run(
+            return_code = _run_command_group(
                 score_command(
                     typybench_root=args.typybench_root,
                     data_path=args.data_root,
@@ -227,11 +257,10 @@ def main() -> None:
                     progress_jsonl=progress_path,
                     log_dir=log_root,
                 ),
-                check=False,
                 timeout=args.timeout_per_repo,
             )
-            if completed.returncode != 0:
-                raise RuntimeError(f"official scorer exited {completed.returncode}")
+            if return_code != 0:
+                raise RuntimeError(f"official scorer exited {return_code}")
             score = _score_values(csv_path)
             record = {
                 "status": "complete",
