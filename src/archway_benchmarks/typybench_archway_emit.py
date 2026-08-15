@@ -156,6 +156,7 @@ def emit_archway_predictions(
     analysis_observation_mode: str = "summary",
     type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
+    emit_variable_annotations: bool = False,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -279,8 +280,11 @@ def emit_archway_predictions(
             function_types = _successor_function_types(
                 record.get("files", {}).get(rel_s, []), trace=file_trace
             )
-            variable_types = _successor_variable_types(
-                record.get("files", {}).get(rel_s, []), trace=file_trace
+            variable_types = (
+                _successor_variable_types(
+                    record.get("files", {}).get(rel_s, []), trace=file_trace
+                )
+                if emit_variable_annotations else {}
             )
             seconds_render = time.monotonic() - render_started
             functions_seen += len(function_types)
@@ -610,7 +614,7 @@ try:
     session = open_hybrid_program_session(
         modules, entry, record_events=False,
         record_timings=record_timings,
-        body_observations_only=True,
+        signature_observations_only=True,
         callable_input_exact_limit=callable_input_exact_limit,
         contextual_summary_evaluation=True,
     )
@@ -622,7 +626,7 @@ try:
     observations = session.type_observations()
     missing_observations = sorted((
         item for item in observations
-        if item.kind in {"parameter", "return", "variable"}
+        if item.kind in {"parameter", "return"}
         if (session.store.resolved(item.address) is None
             or not session.store.resolved(item.address).value)
     ), key=lambda item: (

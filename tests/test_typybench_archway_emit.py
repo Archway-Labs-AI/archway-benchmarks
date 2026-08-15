@@ -181,6 +181,56 @@ def test_successor_variable_observations_annotate_class_and_instance_stores() ->
     }
 
 
+def test_repository_emission_keeps_variable_annotations_opt_in(
+    monkeypatch, tmp_path,
+) -> None:
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "demo.py").write_text("value = 1\n", encoding="utf-8")
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    record = {
+        "ok": True,
+        "files": {
+            "demo.py": [{
+                "line": 1,
+                "name": "value",
+                "kind": "variable",
+                "function": None,
+                "types": ["builtins.int"],
+            }],
+        },
+        "translation_failures": {},
+        "analysis_summary": {},
+    }
+    monkeypatch.setattr(
+        emit_module, "_run_successor_repo_probe", lambda **_kwargs: record
+    )
+
+    default_root = tmp_path / "default"
+    default = emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=default_root,
+        engine_worktree=engine,
+    )
+    opt_in_root = tmp_path / "opt-in"
+    opted_in = emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=opt_in_root,
+        engine_worktree=engine,
+        emit_variable_annotations=True,
+    )
+
+    assert (default_root / "demo" / "demo.py").read_text() == "value = 1\n"
+    assert default.variables_annotated == 0
+    assert "value: int = 1" in (
+        opt_in_root / "demo" / "demo.py"
+    ).read_text()
+    assert opted_in.variables_annotated == 1
+
+
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:
     source = '''"""module docstring"""
 
