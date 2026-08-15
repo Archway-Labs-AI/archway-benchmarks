@@ -14,6 +14,7 @@ for the upstream `target_tools/archway/` translator (byte-identical copy).
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -28,18 +29,18 @@ from archway_benchmarks.types import Annotation, Location, Scores, Snippet
 # Resolved at import time so the package can be installed editable from
 # anywhere; we walk up from this module to the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_DEFAULT_CORPUS = _REPO_ROOT / "extras" / "TypeEvalPy" / "micro-benchmark" / "python_features"
+_TYPEEVALPY_ROOT = Path(os.environ.get(
+    "ARCHWAY_TYPEEVALPY_ROOT",
+    _REPO_ROOT / "extras" / "TypeEvalPy",
+))
+_DEFAULT_CORPUS = _TYPEEVALPY_ROOT / "micro-benchmark" / "python_features"
 _DEFAULT_AUTOGEN_CORPUS = (
-    _REPO_ROOT
-    / "extras"
-    / "TypeEvalPy"
+    _TYPEEVALPY_ROOT
     / "autogen_typeevalpy_benchmark"
     / "python_features"
 )
 _DEFAULT_DEPENDENCY_ROOTS = (
-    _REPO_ROOT
-    / "extras"
-    / "TypeEvalPy"
+    _TYPEEVALPY_ROOT
     / "micro-benchmark-excluded"
     / "typeevalpy_external_module",
 )

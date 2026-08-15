@@ -19,6 +19,7 @@ Both scorers are vendor code; this is reuse, not reimplementation.
 """
 from __future__ import annotations
 
+import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass
@@ -34,7 +35,10 @@ if TYPE_CHECKING:
 
 # Vendor scorer bootstrap.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_VENDOR_SRC = _REPO_ROOT / "extras" / "TypeEvalPy" / "src"
+_VENDOR_SRC = Path(os.environ.get(
+    "ARCHWAY_TYPEEVALPY_ROOT",
+    _REPO_ROOT / "extras" / "TypeEvalPy",
+)) / "src"
 _VENDOR_RA = _VENDOR_SRC / "result_analyzer"
 for p in (_VENDOR_SRC, _VENDOR_RA):
     if str(p) not in sys.path:
