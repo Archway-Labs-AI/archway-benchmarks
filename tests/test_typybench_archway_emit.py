@@ -331,6 +331,28 @@ async def g(items, **kwargs):
     assert stats == {"functions": 2, "params": 4, "returns": 2, "variables": 0}
 
 
+def test_annotate_source_uses_existing_import_spelling_for_semantic_types() -> None:
+    source = (
+        "from paperqa.types import DocDetails\n"
+        "from paperqa import settings as config\n\n"
+        "def select(item):\n"
+        "    return item\n"
+    )
+    function_types = {
+        (4, "select"): {
+            "params": {
+                "item": "list[paperqa.types.DocDetails]",
+            },
+            "return": "paperqa.settings.Settings",
+        },
+    }
+
+    annotated, _stats = _annotate_source(source, function_types)
+
+    ast.parse(annotated)
+    assert "def select(item: list[DocDetails]) -> config.Settings:" in annotated
+
+
 def test_annotate_source_preserves_existing_annotations() -> None:
     source = "def f(x: str) -> str:\n    return x\n"
     function_types = {(1, "f"): {"params": {"x": "int"}, "return": "int"}}

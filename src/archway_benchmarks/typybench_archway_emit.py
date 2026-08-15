@@ -9,6 +9,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import re
 import signal
 import shutil
 import subprocess
@@ -2082,10 +2083,12 @@ class _Annotator(ast.NodeTransformer):
         self,
         function_types: dict[tuple[int, str], dict[str, Any]],
         variable_types: dict[tuple[int, str], str] | None = None,
+        annotation_aliases: dict[str, str] | None = None,
         trace: _TraceBuffer | None = None,
     ) -> None:
         self.function_types = function_types
         self.variable_types = variable_types or {}
+        self.annotation_aliases = annotation_aliases or {}
         self.stats = {
             "functions": 0,
             "params": 0,
@@ -2117,6 +2120,9 @@ class _Annotator(ast.NodeTransformer):
         annotation = self.variable_types.get((node.lineno, name))
         if annotation is None:
             return node
+        annotation = _localize_annotation(
+            annotation, self.annotation_aliases
+        )
         rendered = _parse_annotation(annotation)
         self.stats["variables"] += 1
         imports = _typing_import_names({"variable": annotation})
@@ -2165,10 +2171,13 @@ class _Annotator(ast.NodeTransformer):
                 continue
             slot = f"param:{arg.arg}"
             if arg.annotation is None:
-                arg.annotation = _parse_annotation(params[arg.arg])
+                localized = _localize_annotation(
+                    params[arg.arg], self.annotation_aliases
+                )
+                arg.annotation = _parse_annotation(localized)
                 self.stats["params"] += 1
                 changed = True
-                self._mark_trace(node, slot, True, "inserted", params[arg.arg])
+                self._mark_trace(node, slot, True, "inserted", localized)
             else:
                 self._mark_trace(
                     node, slot, False, "existing annotation preserved", ast.unparse(arg.annotation)
@@ -2184,20 +2193,24 @@ class _Annotator(ast.NodeTransformer):
                 continue
             slot = f"param:{arg.arg}"
             if arg.annotation is None:
-                arg.annotation = _parse_annotation(params[arg.arg])
+                localized = _localize_annotation(
+                    params[arg.arg], self.annotation_aliases
+                )
+                arg.annotation = _parse_annotation(localized)
                 self.stats["params"] += 1
                 changed = True
-                self._mark_trace(node, slot, True, "inserted", params[arg.arg])
+                self._mark_trace(node, slot, True, "inserted", localized)
             else:
                 self._mark_trace(
                     node, slot, False, "existing annotation preserved", ast.unparse(arg.annotation)
                 )
         ret = info.get("return")
         if ret and node.returns is None:
-            node.returns = _parse_annotation(ret)
+            localized = _localize_annotation(ret, self.annotation_aliases)
+            node.returns = _parse_annotation(localized)
             self.stats["returns"] += 1
             changed = True
-            self._mark_trace(node, "return", True, "inserted", ret)
+            self._mark_trace(node, "return", True, "inserted", localized)
         elif ret and node.returns is not None:
             self._mark_trace(
                 node, "return", False, "existing annotation preserved", ast.unparse(node.returns)
@@ -2286,6 +2299,39 @@ def _parse_annotation(value: str) -> ast.expr:
     return ast.parse(value, mode="eval").body
 
 
+def _annotation_aliases(tree: ast.Module) -> dict[str, str]:
+    """Map canonical analysis names to spellings already valid in a file."""
+
+    aliases: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+            for imported in node.names:
+                if imported.name == "*":
+                    continue
+                aliases[f"{node.module}.{imported.name}"] = (
+                    imported.asname or imported.name
+                )
+        elif isinstance(node, ast.Import):
+            for imported in node.names:
+                if imported.asname:
+                    aliases[imported.name] = imported.asname
+    return aliases
+
+
+def _localize_annotation(value: str, aliases: dict[str, str]) -> str:
+    """Render canonical fact names through the source file's import surface."""
+
+    for canonical, local in sorted(
+        aliases.items(), key=lambda item: len(item[0]), reverse=True
+    ):
+        value = re.sub(
+            rf"(?<![\w.]){re.escape(canonical)}(?!\w)",
+            local,
+            value,
+        )
+    return value
+
+
 def _annotate_source(
     source: str,
     function_types: dict[tuple[int, str], dict[str, Any]],
@@ -2296,6 +2342,7 @@ def _annotate_source(
     annotator = _Annotator(
         function_types,
         variable_types=variable_types,
+        annotation_aliases=_annotation_aliases(tree),
         trace=trace,
     )
     tree = annotator.visit(tree)
