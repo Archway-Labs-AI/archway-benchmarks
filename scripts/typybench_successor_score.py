@@ -166,10 +166,15 @@ def main() -> None:
             _write_json(score_manifest_path, manifest)
             continue
 
+        # Give every repository an isolated one-repo view.  Besides making the
+        # upstream scorer's broad pred-path scan bounded, this prevents a
+        # resumed/manual scorer from retargeting another active scorer's
+        # staging symlink.
+        repo_staging_root = staging_root / repo_name
         stage_single_repo_prediction_root(
             repo_name=repo_name,
             predictions_root=predictions_root,
-            staging_root=staging_root,
+            staging_root=repo_staging_root,
         )
         started = time.monotonic()
         score_records[repo_name] = {
@@ -183,7 +188,7 @@ def main() -> None:
                 score_command(
                     typybench_root=args.typybench_root,
                     data_path=args.data_root,
-                    pred_path=staging_root,
+                    pred_path=repo_staging_root,
                     repo=repo_name,
                     progress_jsonl=progress_path,
                     log_dir=log_root,
