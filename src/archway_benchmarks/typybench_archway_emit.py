@@ -706,18 +706,14 @@ try:
     missing = tuple(dict.fromkeys(
         item.address for item in missing_observations
     ))
-    all_signature_roots = session.observation_workload_roots(
-        missing, coalesce_module_roots=True
-    )
+    all_signature_roots = session.observation_workload_roots(missing)
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
     requested = (
         missing
         if requested_body_label
         else missing[:demand_limit] if demand_limit is not None else missing
     )
-    signature_roots = session.observation_workload_roots(
-        requested, coalesce_module_roots=True
-    )
+    signature_roots = session.observation_workload_roots(requested)
     body_labels = {
         template.body_morphism_id: (
             f"{template.module.dotted if template.module else '?'}:"
