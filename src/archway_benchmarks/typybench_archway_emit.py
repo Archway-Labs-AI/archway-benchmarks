@@ -664,7 +664,8 @@ try:
     session = open_hybrid_program_session(
         modules, entry, record_events=False,
         record_timings=record_timings,
-        signature_observations_only=True,
+        body_observations_only=True,
+        class_field_observations=True,
         callable_input_exact_limit=callable_input_exact_limit,
         contextual_summary_evaluation=True,
     )
@@ -676,7 +677,7 @@ try:
     observations = session.type_observations()
     missing_observations = sorted((
         item for item in observations
-        if item.kind in {"parameter", "return"}
+        if item.kind in {"parameter", "return", "variable"}
         if (session.store.resolved(item.address) is None
             or not session.store.resolved(item.address).value)
     ), key=lambda item: (
