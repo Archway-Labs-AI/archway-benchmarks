@@ -880,6 +880,7 @@ try:
             signal.alarm(0)
     targeted_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
+    projection_started = time.monotonic()
     files = {}
     if collect_predictions:
         files = {str(path.relative_to(root)): [] for path in all_paths}
@@ -900,6 +901,7 @@ try:
                 "function": item.function,
                 "types": sorted(str(value) for value in fact.value),
             })
+    observation_projection_seconds = time.monotonic() - projection_started
     scheduler_telemetry = (
         dict(session.scheduler.aggregate_production_telemetry)
         if diagnostic_details else {
@@ -980,6 +982,7 @@ try:
                 "session_open": session_open_seconds - translation_seconds,
                 "forward": forward_seconds - session_open_seconds,
                 "targeted": targeted_seconds - forward_seconds,
+                "observation_projection": observation_projection_seconds,
             },
             "scheduler": scheduler_telemetry,
             "production_replay_hotspots": (
@@ -1024,13 +1027,24 @@ try:
             } if diagnostic_details else {},
         },
     }
+    out["analysis_summary"]["phase_seconds"]["result_assembly"] = (
+        time.monotonic() - projection_started
+        - observation_projection_seconds
+    )
 except Exception as exc:
     out = {
         "ok": False,
         "error": f"{type(exc).__name__}: {exc}",
         "trace_tail": traceback.format_exc()[-2400:],
     }
-print(json.dumps(out, sort_keys=True))
+encode_started = time.monotonic()
+encoded = json.dumps(out, sort_keys=True)
+print(
+    f"ARCHWAY_PHASE result_encode {time.monotonic() - encode_started:.6f}",
+    file=sys.stderr,
+    flush=True,
+)
+print(encoded)
 '''
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
         f.write(probe)
