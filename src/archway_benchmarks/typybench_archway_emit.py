@@ -789,6 +789,9 @@ try:
             edge_telemetry_before = dict(
                 session.scheduler.graph.component_edge_update_telemetry
             )
+            topology_counts_before = dict(
+                session.scheduler.graph.topology_change_counts
+            )
             summary_registry = session.invocation_registry.callable_summaries
             applications_before = frozenset(
                 summary_registry.applications
@@ -857,6 +860,12 @@ try:
                     - executions_before
                 ),
                 "topology_changes": session.scheduler.graph.topology_generation - topology_before,
+                "topology_change_counts": {
+                    name: value - topology_counts_before.get(name, 0)
+                    for name, value in (
+                        session.scheduler.graph.topology_change_counts
+                    ).items()
+                },
                 "component_edge_updates": {
                     name: value - edge_telemetry_before.get(name, 0)
                     for name, value in (
@@ -904,6 +913,9 @@ try:
                     "seconds": body_profile["seconds"],
                     "executions": body_profile["executions"],
                     "topology_changes": body_profile["topology_changes"],
+                    "topology_change_counts": body_profile[
+                        "topology_change_counts"
+                    ],
                     "component_edge_updates": body_profile[
                         "component_edge_updates"
                     ],
