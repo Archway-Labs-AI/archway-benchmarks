@@ -527,6 +527,7 @@ def _run_successor_repo_probe(
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
 import json
+import os
 import signal
 import sys
 import time
@@ -689,6 +690,14 @@ try:
             flush=True,
         )
     sampling_profile = None
+    targeted_profiler = None
+    if sample_rate_hz and sample_body_label is None and signature_roots:
+        from sd_core.tooling.sampling_profile import SamplingProfiler
+        targeted_profiler = SamplingProfiler(
+            rate_hz=sample_rate_hz,
+            project_marker="/sd_core/",
+        )
+        targeted_profiler.__enter__()
     timed_out_body = False
     timeout_signal = signal.SIGALRM
     if requested_body_timeout:
@@ -871,7 +880,10 @@ try:
         if requested_body_timeout and signature_roots:
             signal.alarm(requested_body_timeout)
         try:
-            if sample_rate_hz and signature_roots:
+            if (
+                sample_rate_hz and signature_roots
+                and targeted_profiler is None
+            ):
                 from sd_core.tooling.sampling_profile import SamplingProfiler
                 profiler = SamplingProfiler(
                     rate_hz=sample_rate_hz,
@@ -894,6 +906,11 @@ try:
             sampling_profile = locals().get("sampling_profile")
         finally:
             signal.alarm(0)
+    if targeted_profiler is not None:
+        targeted_profiler.__exit__(None, None, None)
+        sampling_profile = targeted_profiler.jsonable(
+            top=40, include_stacks=diagnostic_details
+        )
     targeted_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
     projection_started = time.monotonic()
@@ -1061,6 +1078,13 @@ print(
     flush=True,
 )
 print(encoded)
+sys.stdout.flush()
+# This process is an isolated analysis worker and has no in-process resources
+# that must outlive its serialized result.  Normal interpreter shutdown walks
+# and decrefs the complete repository scheduler/store graph, which can add
+# tens of seconds after the durable evidence is already on stdout.  Let the OS
+# reclaim that graph at the process boundary instead.
+os._exit(0)
 '''
     with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
         f.write(probe)

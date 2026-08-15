@@ -44,6 +44,8 @@ def main() -> None:
         parser.error(
             "--body-timeout requires --body-label or --sample-body-label"
         )
+    if args.sample_body_label is not None and args.sample_rate_hz is None:
+        parser.error("--sample-body-label requires --sample-rate-hz")
     result = _run_successor_repo_probe(
         engine_worktree=args.engine_worktree,
         source_root=args.source_root,
