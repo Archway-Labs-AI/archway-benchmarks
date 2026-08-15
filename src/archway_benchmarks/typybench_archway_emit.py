@@ -1131,6 +1131,10 @@ try:
                 session.scheduler.production_replay_hotspots()
                 if diagnostic_details else ()
             ),
+            "production_replay_operation_hotspots": (
+                session.scheduler.production_replay_operation_hotspots()
+                if diagnostic_details else ()
+            ),
             "morphism_transfer_reuse": dict(
                 session.morphism_transfer_reuse_counts()
             ) if diagnostic_details else {},

@@ -131,6 +131,21 @@ def main() -> None:
             key: value for key, value in sampling_profile.items()
             if key not in {"stacks", "top_stacks"}
         }
+    replay_hotspots = summary.get("production_replay_hotspots") or []
+    replay_operation_hotspots = summary.get(
+        "production_replay_operation_hotspots"
+    ) or []
+    if args.compact_diagnostics:
+        replay_hotspots = [
+            {
+                key: item.get(key)
+                for key in (
+                    "family", "operation", "executions", "replays",
+                    "semantic_changes",
+                )
+            }
+            for item in replay_hotspots[:12]
+        ]
     print(json.dumps({
         "ok": result.get("ok"),
         "error": result.get("error"),
@@ -145,12 +160,11 @@ def main() -> None:
         "requested_body_roots": summary.get("requested_body_roots"),
         "signature_body_roots": summary.get("signature_body_roots"),
         "morphism_transfer_reuse": (
-            None if args.compact_diagnostics
-            else summary.get("morphism_transfer_reuse")
+            summary.get("morphism_transfer_reuse")
         ),
         "morphism_transfer_reuse_by_operation": (
-            None if args.compact_diagnostics else summary.get(
-                "morphism_transfer_reuse_by_operation"
+            top_counts(
+                summary.get("morphism_transfer_reuse_by_operation"), 40
             )
         ),
         "atomic_effect_gaps": summary.get("atomic_effect_gaps"),
@@ -158,9 +172,7 @@ def main() -> None:
             "morphism_fact_output_barriers"
         ),
         "morphism_read_intersections": (
-            None if args.compact_diagnostics else summary.get(
-                "morphism_read_intersections"
-            )
+            top_counts(summary.get("morphism_read_intersections"), 30)
         ),
         "invocation_contexts": top_counts(summary.get("invocation_contexts")),
         "invocation_inputs": top_counts(summary.get("invocation_inputs")),
@@ -177,9 +189,8 @@ def main() -> None:
         "unique_productions": scheduler.get("unique_production_count"),
         "production_executions": scheduler.get("production_execution_count"),
         "repeated_productions": scheduler.get("repeated_production_count"),
-        "production_replay_hotspots": summary.get(
-            "production_replay_hotspots"
-        ) if not args.compact_diagnostics else None,
+        "production_replay_hotspots": replay_hotspots,
+        "production_replay_operation_hotspots": replay_operation_hotspots,
         "affected_selected": worklist.get("affected_component_selected"),
         "topology_restarts": worklist.get("topology_restart"),
         "component_recompute_count": scheduler.get("component_recompute_count"),
