@@ -618,12 +618,15 @@ def analysis_paths():
 source_roots = analysis_source_roots()
 
 def module_name(path):
-    source_root = max(
-        (
-            candidate for candidate in source_roots
-            if path.is_relative_to(candidate)
-        ),
-        key=lambda candidate: len(candidate.parts),
+    # Traversal roots are not necessarily Python import roots.  A top-level
+    # package such as ``root/capa`` is traversed directly to exclude unrelated
+    # repository trees, but its import name must remain ``capa.*``.  Only a
+    # conventional ``src`` directory is removed from the import identity.
+    src_root = root / "src"
+    source_root = (
+        src_root
+        if src_root.is_dir() and path.is_relative_to(src_root)
+        else root
     )
     rel = path.relative_to(source_root).with_suffix("")
     parts = list(rel.parts)
