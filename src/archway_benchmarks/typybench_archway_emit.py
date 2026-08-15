@@ -97,6 +97,7 @@ class FileProfile:
     functions_annotated: int = 0
     params_annotated: int = 0
     returns_annotated: int = 0
+    variables_annotated: int = 0
     error: str | None = None
     trace_tail: str | None = None
     analysis_summary: dict[str, Any] | None = None
@@ -114,6 +115,7 @@ class FileProfile:
             "functions_annotated": self.functions_annotated,
             "params_annotated": self.params_annotated,
             "returns_annotated": self.returns_annotated,
+            "variables_annotated": self.variables_annotated,
             "error": self.error,
             "trace_tail": self.trace_tail,
             "analysis_summary": self.analysis_summary,
@@ -130,6 +132,7 @@ class EmitStats:
     functions_annotated: int
     params_annotated: int
     returns_annotated: int
+    variables_annotated: int = 0
     failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
     file_profiles: tuple[FileProfile, ...] = field(default_factory=tuple)
     engine_sha: str | None = None
@@ -187,6 +190,7 @@ def emit_archway_predictions(
     functions_annotated = 0
     params_annotated = 0
     returns_annotated = 0
+    variables_annotated = 0
     failures: list[dict[str, str]] = []
     file_profiles: list[FileProfile] = []
 
@@ -207,25 +211,12 @@ def emit_archway_predictions(
             rel = src.relative_to(untyped_root)
             rel_s = str(rel)
             dest = dest_root / rel
-            remaining = timeout - (time.monotonic() - started)
-            if remaining <= 0:
-                error = f"TimeoutExpired: repo analysis exceeded {timeout}s"
-                failures.append({"file": rel_s, "error": error})
-                profile = FileProfile(
-                    repo_name=repo_name,
-                    file=rel_s,
-                    status="repo_timeout",
-                    seconds_total=round(time.monotonic() - file_started, 6),
-                    seconds_engine_probe=0.0,
-                    error=error,
-                )
-                file_profiles.append(profile)
-                if profile_writer:
-                    profile_writer.write(profile)
-                continue
-
             record = repo_record
             seconds_probe = seconds_repo_probe
+            # Preserve the probe's compact phase/cohort evidence when the
+            # repository-wide subprocess itself consumed the timeout.  The
+            # elapsed-budget check below used to replace this richer failure
+            # with one generic error per file.
             if not record.get("ok"):
                 err = str(record.get("error", "no engine result"))[:300]
                 failures.append({"file": rel_s, "error": err})
@@ -238,6 +229,23 @@ def emit_archway_predictions(
                     error=err,
                     trace_tail=record.get("trace_tail"),
                     analysis_summary=record.get("analysis_summary"),
+                )
+                file_profiles.append(profile)
+                if profile_writer:
+                    profile_writer.write(profile)
+                continue
+
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0:
+                error = f"TimeoutExpired: repo analysis exceeded {timeout}s"
+                failures.append({"file": rel_s, "error": error})
+                profile = FileProfile(
+                    repo_name=repo_name,
+                    file=rel_s,
+                    status="repo_timeout",
+                    seconds_total=round(time.monotonic() - file_started, 6),
+                    seconds_engine_probe=0.0,
+                    error=error,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -271,12 +279,20 @@ def emit_archway_predictions(
             function_types = _successor_function_types(
                 record.get("files", {}).get(rel_s, []), trace=file_trace
             )
+            variable_types = _successor_variable_types(
+                record.get("files", {}).get(rel_s, []), trace=file_trace
+            )
             seconds_render = time.monotonic() - render_started
             functions_seen += len(function_types)
             raw = src.read_text(encoding="utf-8")
             annotate_started = time.monotonic()
             try:
-                annotated, file_stats = _annotate_source(raw, function_types, trace=file_trace)
+                annotated, file_stats = _annotate_source(
+                    raw,
+                    function_types,
+                    variable_types=variable_types,
+                    trace=file_trace,
+                )
             except SyntaxError as exc:
                 error = f"emit SyntaxError: {exc}"[:300]
                 failures.append({"file": rel_s, "error": error})
@@ -300,6 +316,7 @@ def emit_archway_predictions(
             functions_annotated += file_stats["functions"]
             params_annotated += file_stats["params"]
             returns_annotated += file_stats["returns"]
+            variables_annotated += file_stats["variables"]
             dest.write_text(annotated, encoding="utf-8")
             profile = FileProfile(
                 repo_name=repo_name,
@@ -313,6 +330,7 @@ def emit_archway_predictions(
                 functions_annotated=file_stats["functions"],
                 params_annotated=file_stats["params"],
                 returns_annotated=file_stats["returns"],
+                variables_annotated=file_stats["variables"],
                 analysis_summary=record.get("analysis_summary"),
             )
             file_profiles.append(profile)
@@ -334,6 +352,7 @@ def emit_archway_predictions(
         functions_annotated=functions_annotated,
         params_annotated=params_annotated,
         returns_annotated=returns_annotated,
+        variables_annotated=variables_annotated,
         failures=tuple(failures),
         file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
@@ -389,6 +408,52 @@ def _successor_function_types(
                     candidates=[{"successor_types": values}],
                     merged_annotation=(ret if slot == "return" else params.get(slot.removeprefix("param:"))),
                 )
+    return rendered
+
+
+def _successor_variable_types(
+    observations: list[dict[str, Any]], trace: _TraceBuffer | None = None
+) -> dict[tuple[int, str], str]:
+    """Render diagram-produced store/attribute facts for source emission."""
+
+    candidates: dict[tuple[int, str], list[str]] = {}
+    for item in observations:
+        line = item.get("line")
+        name = item.get("name")
+        if not line or item.get("kind") != "variable" or not name:
+            continue
+        # Class-attribute observations retain their qualified semantic name
+        # (``Model.field``); source position plus the local target name is the
+        # adapter identity. Instance targets likewise end in the attribute
+        # name. Analysis itself continues to use the full semantic identity.
+        local_name = str(name).rsplit(".", 1)[-1]
+        values = [
+            _successor_annotation(value)
+            for value in item.get("types", [])
+            if value
+        ]
+        candidates.setdefault((int(line), local_name), []).extend(values)
+
+    rendered = {
+        key: merged
+        for key, values in candidates.items()
+        if (merged := _merge_types(values))
+    }
+    if trace:
+        for (line, name), values in candidates.items():
+            trace.add_slot(
+                line=line,
+                function=str(next((
+                    item.get("function") or "<module>"
+                    for item in observations
+                    if item.get("kind") == "variable"
+                    and item.get("line") == line
+                    and str(item.get("name", "")).rsplit(".", 1)[-1] == name
+                ), "<module>")),
+                slot=f"variable:{name}",
+                candidates=[{"successor_types": values}],
+                merged_annotation=rendered.get((line, name)),
+            )
     return rendered
 
 
@@ -1845,10 +1910,17 @@ class _Annotator(ast.NodeTransformer):
     def __init__(
         self,
         function_types: dict[tuple[int, str], dict[str, Any]],
+        variable_types: dict[tuple[int, str], str] | None = None,
         trace: _TraceBuffer | None = None,
     ) -> None:
         self.function_types = function_types
-        self.stats = {"functions": 0, "params": 0, "returns": 0}
+        self.variable_types = variable_types or {}
+        self.stats = {
+            "functions": 0,
+            "params": 0,
+            "returns": 0,
+            "variables": 0,
+        }
         self.needs_typing = False
         self.typing_imports: set[str] = set()
         self.trace = trace
@@ -1862,6 +1934,32 @@ class _Annotator(ast.NodeTransformer):
         self.generic_visit(node)
         self._annotate_function(node)
         return node
+
+    def visit_Assign(self, node: ast.Assign) -> ast.AST:
+        self.generic_visit(node)
+        if len(node.targets) != 1:
+            return node
+        target = node.targets[0]
+        name = _annotation_target_name(target)
+        if name is None:
+            return node
+        annotation = self.variable_types.get((node.lineno, name))
+        if annotation is None:
+            return node
+        rendered = _parse_annotation(annotation)
+        self.stats["variables"] += 1
+        imports = _typing_import_names({"variable": annotation})
+        self.needs_typing = self.needs_typing or bool(imports)
+        self.typing_imports.update(imports)
+        return ast.copy_location(
+            ast.AnnAssign(
+                target=target,
+                annotation=rendered,
+                value=node.value,
+                simple=int(isinstance(target, ast.Name)),
+            ),
+            node,
+        )
 
     def _annotate_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
         info = self.function_types.get((node.lineno, node.name))
@@ -2002,6 +2100,8 @@ def _typing_import_names(info: dict[str, Any]) -> set[str]:
     values = list((info.get("params") or {}).values())
     if info.get("return"):
         values.append(info["return"])
+    if info.get("variable"):
+        values.append(info["variable"])
     imports: set[str] = set()
     for value in values:
         if "Any" in value or "Union[" in value:
@@ -2018,10 +2118,15 @@ def _parse_annotation(value: str) -> ast.expr:
 def _annotate_source(
     source: str,
     function_types: dict[tuple[int, str], dict[str, Any]],
+    variable_types: dict[tuple[int, str], str] | None = None,
     trace: _TraceBuffer | None = None,
 ) -> tuple[str, dict[str, int]]:
     tree = ast.parse(source)
-    annotator = _Annotator(function_types, trace=trace)
+    annotator = _Annotator(
+        function_types,
+        variable_types=variable_types,
+        trace=trace,
+    )
     tree = annotator.visit(tree)
     ast.fix_missing_locations(tree)
     if annotator.needs_typing:
@@ -2029,6 +2134,14 @@ def _annotate_source(
     if trace:
         trace.flush()
     return ast.unparse(tree) + "\n", annotator.stats
+
+
+def _annotation_target_name(target: ast.expr) -> str | None:
+    if isinstance(target, ast.Name):
+        return target.id
+    if isinstance(target, ast.Attribute):
+        return target.attr
+    return None
 
 
 def _ensure_typing_import(tree: ast.AST, names: set[str]) -> None:

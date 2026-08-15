@@ -2,6 +2,7 @@ import ast
 import json
 import sys
 
+import archway_benchmarks.typybench_archway_emit as emit_module
 from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
     _element_type,
@@ -9,6 +10,7 @@ from archway_benchmarks.typybench_archway_emit import (
     _probe_progress,
     _run_engine_probe,
     _successor_function_types,
+    _successor_variable_types,
     capture_runtime_phase_profile_file,
     capture_translation_trace_file,
     emit_archway_predictions,
@@ -41,6 +43,50 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
             "label": "appworld.api_docs:generate_example",
         }],
     }
+
+
+def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None:
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "demo.py").write_text("value = 1\n", encoding="utf-8")
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    progress = {
+        "phase_progress": {"translation": 2.0, "body_roots": 12},
+        "body_plan": [["module:slow"]],
+        "body_profiles": [{
+            "index": 1,
+            "total": 12,
+            "seconds": 30.0,
+            "executions": 100,
+            "topology_changes": 200,
+            "label": "module:slow",
+        }],
+    }
+    monkeypatch.setattr(
+        emit_module,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": False,
+            "error": "TimeoutExpired: analysis exceeded 1s",
+            "trace_tail": "ARCHWAY_BODY 1/12",
+            "analysis_summary": progress,
+        },
+    )
+
+    stats = emit_module.emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=tmp_path / "predictions",
+        engine_worktree=engine,
+        timeout=1,
+    )
+
+    assert stats.files_failed == 1
+    profile = stats.file_profiles[0]
+    assert profile.status == "engine_failed"
+    assert profile.analysis_summary == progress
+    assert profile.trace_tail == "ARCHWAY_BODY 1/12"
 
 
 def test_successor_observations_render_function_signatures() -> None:
@@ -88,7 +134,51 @@ def test_successor_observations_match_qualified_methods_to_source_name() -> None
         function_types,
     )
     assert "def __init__(self, enabled: bool) -> None:" in annotated
-    assert stats == {"functions": 1, "params": 1, "returns": 1}
+    assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
+
+
+def test_successor_variable_observations_annotate_class_and_instance_stores() -> None:
+    observations = [
+        {
+            "line": 2,
+            "name": "Model.value",
+            "kind": "variable",
+            "function": None,
+            "types": ["builtins.int"],
+        },
+        {
+            "line": 5,
+            "name": "self.labels",
+            "kind": "variable",
+            "function": "Model.__init__",
+            "types": ["builtins.list", "Any"],
+        },
+    ]
+
+    variable_types = _successor_variable_types(observations)
+    assert variable_types == {
+        (2, "value"): "int",
+        (5, "labels"): "Union[Any, list]",
+    }
+    annotated, stats = _annotate_source(
+        "class Model:\n"
+        "    value = 3\n"
+        "\n"
+        "    def __init__(self):\n"
+        "        self.labels = []\n",
+        {},
+        variable_types=variable_types,
+    )
+    ast.parse(annotated)
+    assert "from typing import Any, Union" in annotated
+    assert "value: int = 3" in annotated
+    assert "self.labels: Union[Any, list] = []" in annotated
+    assert stats == {
+        "functions": 0,
+        "params": 0,
+        "returns": 0,
+        "variables": 2,
+    }
 
 
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:
@@ -114,7 +204,7 @@ async def g(items, **kwargs):
     assert "from typing import Any, Union" in annotated
     assert "def f(x: int, y: Union[int, str]=1) -> Any:" in annotated
     assert "async def g(items: list[str], **kwargs: dict[str, int]) -> list[str]:" in annotated
-    assert stats == {"functions": 2, "params": 4, "returns": 2}
+    assert stats == {"functions": 2, "params": 4, "returns": 2, "variables": 0}
 
 
 def test_annotate_source_preserves_existing_annotations() -> None:
@@ -124,7 +214,7 @@ def test_annotate_source_preserves_existing_annotations() -> None:
     annotated, stats = _annotate_source(source, function_types)
 
     assert "def f(x: str) -> str:" in annotated
-    assert stats == {"functions": 0, "params": 0, "returns": 0}
+    assert stats == {"functions": 0, "params": 0, "returns": 0, "variables": 0}
 
 
 def test_annotate_source_places_typing_import_after_future_imports() -> None:
@@ -142,7 +232,7 @@ def f(x):
     future_at = annotated.index("from __future__ import annotations")
     typing_at = annotated.index("from typing import Any, Union")
     assert future_at < typing_at
-    assert stats == {"functions": 1, "params": 1, "returns": 1}
+    assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
 
 
 def test_function_types_extracts_signatures_from_engine_projection() -> None:
@@ -224,7 +314,7 @@ def test_builtins_nonetype_renders_as_parseable_none_annotations() -> None:
     ast.parse(annotated)
     assert "NoneType" not in annotated
     assert "def main(argv: None=None) -> None:" in annotated
-    assert stats == {"functions": 1, "params": 1, "returns": 1}
+    assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
 
 
 def test_generator_element_renders_as_parseable_generator_annotation() -> None:
@@ -260,7 +350,7 @@ def test_generator_element_renders_as_parseable_generator_annotation() -> None:
     assert "unknown kind: generator" not in annotated
     assert "from typing import Generator" in annotated
     assert "def numbers() -> Generator[int, None, None]:" in annotated
-    assert stats == {"functions": 1, "params": 0, "returns": 1}
+    assert stats == {"functions": 1, "params": 0, "returns": 1, "variables": 0}
 
 
 def test_ellipsis_pytype_renders_as_any_fallback_instead_of_lowercase_name() -> None:
@@ -367,7 +457,7 @@ def test_renderer_keeps_container_elements_and_parseable_union_spelling() -> Non
     assert "Optional" not in annotated
     assert "def f(items: list[str], lookup: dict[str, int], pair: tuple[int, str]) -> Union[None, int]:" in annotated
     assert "from typing import Any, Union" in annotated
-    assert stats == {"functions": 1, "params": 3, "returns": 1}
+    assert stats == {"functions": 1, "params": 3, "returns": 1, "variables": 0}
 
 
 def test_emit_predictions_leaves_original_source_on_invalid_annotation_syntax(tmp_path) -> None:

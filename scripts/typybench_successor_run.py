@@ -76,6 +76,7 @@ def _stats_record(stats, elapsed: float) -> dict[str, object]:
         "functions_annotated": stats.functions_annotated,
         "params_annotated": stats.params_annotated,
         "returns_annotated": stats.returns_annotated,
+        "variables_annotated": stats.variables_annotated,
         "failure_count": len(stats.failures),
         "failures": list(stats.failures[:20]),
         "analysis_summary": summary,
