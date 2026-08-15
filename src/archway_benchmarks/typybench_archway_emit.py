@@ -982,7 +982,11 @@ try:
     files = {}
     if collect_predictions:
         files = {str(path.relative_to(root)): [] for path in all_paths}
-        for item in session.type_observations():
+        # ``observations`` is the immutable address/template inventory already
+        # collected before refinement.  Rebuilding it after a framework-sized
+        # session has selected thousands of contextual plans repeats graph
+        # discovery even though only the resolved values have changed.
+        for item in observations:
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
             if rel is None and module is not None:
@@ -1037,7 +1041,7 @@ try:
         if session.invocation_registry is not None else None
     )
     unresolved_summary_bodies = Counter()
-    if collect_predictions and summary_registry is not None:
+    if diagnostic_details and collect_predictions and summary_registry is not None:
         callable_labels = {
             body_id: f"{boundary.module_name}:{boundary.qualified_name}"
             for body_id, boundary
