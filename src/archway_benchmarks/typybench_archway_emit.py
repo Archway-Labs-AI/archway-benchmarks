@@ -1142,7 +1142,7 @@ try:
         for item, candidate in session.type_candidate_observations():
             # Nested-path candidates constrain an element/attribute reached
             # through the parameter, not the parameter annotation itself.
-            if candidate.path:
+            if candidate.path or len(candidate.types) != 1:
                 continue
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
