@@ -83,6 +83,25 @@ def _stats_record(stats, elapsed: float) -> dict[str, object]:
     }
 
 
+def _terminal_run_status(
+    records: dict[str, object], repos: list[str]
+) -> str:
+    """Describe a fully attempted corpus without hiding incomplete repos."""
+
+    statuses = {
+        name: (
+            records.get(name, {}).get("status")
+            if isinstance(records.get(name), dict) else None
+        )
+        for name in repos
+    }
+    if all(status == "complete" for status in statuses.values()):
+        return "complete"
+    if any(status == "running" for status in statuses.values()):
+        return "interrupted"
+    return "finished_with_incomplete_repositories"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("data_root", type=Path)
@@ -153,6 +172,11 @@ def main() -> None:
 
     records = manifest.setdefault("repositories", {})
     assert isinstance(records, dict)
+    manifest["run_status"] = "running"
+    manifest["run_started_unix"] = time.time()
+    manifest["run_attempt"] = int(manifest.get("run_attempt", 0)) + 1
+    manifest["updated_unix"] = time.time()
+    _write_manifest(manifest_path, manifest)
     run_started = time.monotonic()
     for index, repo_name in enumerate(repos, 1):
         existing = records.get(repo_name)
@@ -215,7 +239,8 @@ def main() -> None:
             flush=True,
         )
     else:
-        manifest["run_status"] = "complete"
+        manifest["run_status"] = _terminal_run_status(records, repos)
+        manifest["run_elapsed_seconds"] = time.monotonic() - run_started
         manifest["updated_unix"] = time.time()
         _write_manifest(manifest_path, manifest)
 
