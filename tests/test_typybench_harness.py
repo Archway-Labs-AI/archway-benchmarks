@@ -126,6 +126,30 @@ def test_stage_single_repo_prediction_root_rejects_empty_prediction_tree(tmp_pat
     assert not (tmp_path / "single").exists()
 
 
+def test_stage_single_repo_replaces_legacy_root_symlink_without_touching_source(
+    tmp_path: Path,
+) -> None:
+    predictions = tmp_path / "predictions"
+    source = predictions / "gptme"
+    package = source / "gptme"
+    package.mkdir(parents=True)
+    module = package / "__init__.py"
+    module.write_text("value = 1\n")
+    staging_root = tmp_path / "staging" / "gptme"
+    staging_root.parent.mkdir()
+    staging_root.symlink_to(source, target_is_directory=True)
+
+    stage_single_repo_prediction_root(
+        repo_name="gptme",
+        predictions_root=predictions,
+        staging_root=staging_root,
+    )
+
+    assert staging_root.is_dir() and not staging_root.is_symlink()
+    assert (staging_root / "gptme").is_symlink()
+    assert module.read_text() == "value = 1\n"
+
+
 def test_validate_repo_source_trees_rejects_zero_source_fixture(tmp_path: Path) -> None:
     data = tmp_path / "typybenchdata"
     for tree_name in ("repo_without_types", "original_repo"):
