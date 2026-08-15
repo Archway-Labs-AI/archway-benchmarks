@@ -221,6 +221,11 @@ def main() -> None:
                     1, min(args.timeout_per_repo, int(remaining_total))
                 ),
                 checkpoint_roots=True,
+                # TypyBench's target surface includes local and module
+                # variables as well as callable signatures.  These values are
+                # diagram-derived observations from the same persistent
+                # reduced-product session, not a separate benchmark pass.
+                emit_variable_annotations=True,
             )
             record = _stats_record(stats, time.monotonic() - started)
         except Exception as exc:
