@@ -104,6 +104,35 @@ def test_aggregate_scores_weights_repositories_by_observations() -> None:
     }
 
 
+def test_partitioned_aggregates_keep_holdout_evidence_separate() -> None:
+    records = {
+        "paper-qa": {
+            "status": "complete",
+            "score": {
+                "total_vars": 10,
+                "overall_score_exact": 0.2,
+                "overall_score": 0.3,
+                "missing_ratio": 0.4,
+            },
+        },
+        "rich": {
+            "status": "complete",
+            "score": {
+                "total_vars": 10,
+                "overall_score_exact": 0.8,
+                "overall_score": 0.9,
+                "missing_ratio": 0.1,
+            },
+        },
+    }
+
+    aggregates = _MODULE._partitioned_aggregates(records)
+
+    assert aggregates["all"]["overall_score_exact"] == 0.5
+    assert aggregates["development"]["overall_score_exact"] == 0.2
+    assert aggregates["holdout"]["overall_score_exact"] == 0.8
+
+
 def test_command_group_returns_child_exit_status() -> None:
     assert _MODULE._run_command_group(
         [sys.executable, "-c", "raise SystemExit(7)"], timeout=5

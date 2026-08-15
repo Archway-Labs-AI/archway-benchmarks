@@ -25,6 +25,10 @@ from archway_benchmarks.typybench_harness import (
     score_command,
     stage_single_repo_prediction_root,
 )
+from archway_benchmarks.typybench_partitions import (
+    HOLDOUT_VERSION,
+    typybench_partition,
+)
 
 
 def _write_json(path: Path, value: dict[str, object]) -> None:
@@ -112,6 +116,31 @@ def _aggregate_scores(records: dict[str, object]) -> dict[str, object]:
         "overall_score": weighted("overall_score"),
         "missing_ratio": weighted("missing_ratio"),
     }
+
+
+def _partitioned_aggregates(
+    records: dict[str, object],
+) -> dict[str, dict[str, object]]:
+    return {
+        "all": _aggregate_scores(records),
+        "development": _aggregate_scores({
+            name: record for name, record in records.items()
+            if typybench_partition(name) == "development"
+        }),
+        "holdout": _aggregate_scores({
+            name: record for name, record in records.items()
+            if typybench_partition(name) == "holdout"
+        }),
+    }
+
+
+def _update_aggregates(
+    manifest: dict[str, object], records: dict[str, object]
+) -> None:
+    aggregates = _partitioned_aggregates(records)
+    manifest["aggregate"] = aggregates["all"]
+    manifest["aggregates"] = aggregates
+    manifest["holdout_version"] = HOLDOUT_VERSION
 
 
 def _run_command_group(command: list[str], *, timeout: int) -> int:
@@ -212,7 +241,7 @@ def main() -> None:
                 "finished_unix": time.time(),
             }
             manifest["updated_unix"] = time.time()
-            manifest["aggregate"] = _aggregate_scores(score_records)
+            _update_aggregates(manifest, score_records)
             _write_json(score_manifest_path, manifest)
             print(
                 f"ARCHWAY_TYPYBENCH_SCORE adopt {index}/{len(repositories)} {repo_name}",
@@ -226,7 +255,7 @@ def main() -> None:
                 "docker_image": docker_image_name(repo_name),
             }
             manifest["updated_unix"] = time.time()
-            manifest["aggregate"] = _aggregate_scores(score_records)
+            _update_aggregates(manifest, score_records)
             _write_json(score_manifest_path, manifest)
             continue
 
@@ -276,7 +305,7 @@ def main() -> None:
         record["finished_unix"] = time.time()
         score_records[repo_name] = record
         manifest["updated_unix"] = time.time()
-        manifest["aggregate"] = _aggregate_scores(score_records)
+        _update_aggregates(manifest, score_records)
         _write_json(score_manifest_path, manifest)
         print(
             f"ARCHWAY_TYPYBENCH_SCORE {record['status']} {repo_name} "
@@ -286,7 +315,7 @@ def main() -> None:
 
     manifest["run_status"] = "complete"
     manifest["updated_unix"] = time.time()
-    manifest["aggregate"] = _aggregate_scores(score_records)
+    _update_aggregates(manifest, score_records)
     _write_json(score_manifest_path, manifest)
 
 
