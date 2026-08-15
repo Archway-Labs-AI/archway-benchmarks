@@ -888,6 +888,10 @@ try:
                 body_profile if diagnostic_details else {
                     "index": index,
                     "label": body_label,
+                    # Cohorts are the actual unit of shared convergence.  A
+                    # single leading label hid which companion demand caused
+                    # a replay wave in low-overhead framework diagnostics.
+                    "root_labels": body_profile["root_labels"],
                     "seconds": body_profile["seconds"],
                     "executions": body_profile["executions"],
                     "topology_changes": body_profile["topology_changes"],
