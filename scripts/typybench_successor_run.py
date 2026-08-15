@@ -163,6 +163,7 @@ def main() -> None:
             "engine_revision": engine_revision,
             "harness_revision": harness_revision,
             "partition": args.partition,
+            "selected_repositories": repos,
         }
         mismatches = {
             name: (manifest.get(name), expected)
@@ -187,6 +188,10 @@ def main() -> None:
             "harness_revision": harness_revision,
             "predictions_root": str(predictions_root.resolve()),
             "partition": args.partition,
+            # Freeze the ordered workload itself.  Repository availability can
+            # change between checkpoint attempts; revision pins alone cannot
+            # prove that a resumed aggregate represents the same run.
+            "selected_repositories": repos,
             "repositories": {},
         }
 
@@ -218,6 +223,9 @@ def main() -> None:
         )
         if remaining_total <= 0:
             manifest["run_status"] = "time_budget_exhausted"
+            manifest["run_elapsed_seconds"] = (
+                time.monotonic() - run_started
+            )
             manifest["updated_unix"] = time.time()
             _write_manifest(manifest_path, manifest)
             break
