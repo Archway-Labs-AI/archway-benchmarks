@@ -671,7 +671,11 @@ try:
     )
     session_open_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
-    forward = session.run_forward()
+    # Seed every translated module in one shared scheduler before asking for
+    # missing source observations.  This is the repository-wide forward phase:
+    # targeted body demands below extend its facts and topology rather than
+    # restarting one analysis per benchmark location.
+    forward = session.run_module_roots()
     forward_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE forward {forward_seconds:.6f}", file=sys.stderr, flush=True)
     observations = session.type_observations()
