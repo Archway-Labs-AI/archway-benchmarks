@@ -231,7 +231,7 @@ def test_repository_emission_keeps_variable_annotations_opt_in(
     assert opted_in.variables_annotated == 1
 
 
-def test_repository_emission_includes_diagram_class_fields_by_default(
+def test_repository_emission_can_include_diagram_class_fields_explicitly(
     monkeypatch, tmp_path,
 ) -> None:
     source_root = tmp_path / "repo"
@@ -263,6 +263,7 @@ def test_repository_emission_includes_diagram_class_fields_by_default(
         untyped_root=source_root,
         predictions_root=tmp_path / "predictions",
         engine_worktree=engine,
+        emit_class_field_annotations=True,
     )
 
     assert "value: int = 1" in (

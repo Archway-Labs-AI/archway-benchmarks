@@ -157,7 +157,7 @@ def emit_archway_predictions(
     type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
     emit_variable_annotations: bool = False,
-    emit_class_field_annotations: bool = True,
+    emit_class_field_annotations: bool = False,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
