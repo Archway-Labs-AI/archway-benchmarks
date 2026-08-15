@@ -610,7 +610,7 @@ try:
     session = open_hybrid_program_session(
         modules, entry, record_events=False,
         record_timings=record_timings,
-        signature_observations_only=True,
+        body_observations_only=True,
         callable_input_exact_limit=callable_input_exact_limit,
         contextual_summary_evaluation=True,
     )
@@ -622,7 +622,7 @@ try:
     observations = session.type_observations()
     missing_observations = sorted((
         item for item in observations
-        if item.kind in {"parameter", "return"}
+        if item.kind in {"parameter", "return", "variable"}
         if (session.store.resolved(item.address) is None
             or not session.store.resolved(item.address).value)
     ), key=lambda item: (
@@ -637,14 +637,14 @@ try:
     missing = tuple(dict.fromkeys(
         item.address for item in missing_observations
     ))
-    all_signature_roots = session.signature_workload_roots(missing)
+    all_signature_roots = session.observation_workload_roots(missing)
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
     requested = (
         missing
         if requested_body_label
         else missing[:demand_limit] if demand_limit is not None else missing
     )
-    signature_roots = session.signature_workload_roots(requested)
+    signature_roots = session.observation_workload_roots(requested)
     body_labels = {
         template.body_morphism_id: (
             f"{template.module.dotted if template.module else '?'}:"
