@@ -169,7 +169,7 @@ def main() -> None:
         "repeated_productions": scheduler.get("repeated_production_count"),
         "production_replay_hotspots": summary.get(
             "production_replay_hotspots"
-        ),
+        ) if not args.compact_diagnostics else None,
         "affected_selected": worklist.get("affected_component_selected"),
         "topology_restarts": worklist.get("topology_restart"),
         "component_recompute_count": scheduler.get("component_recompute_count"),
@@ -179,6 +179,16 @@ def main() -> None:
         "component_incremental_refresh_count": scheduler.get(
             "component_incremental_refresh_count"
         ),
+        "topology_change_counts": scheduler.get("topology_change_counts"),
+        "provider_set_change_counts_by_family": scheduler.get(
+            "provider_set_change_counts_by_family"
+        ),
+        "top_output_owner_operations": sorted(
+            (scheduler.get(
+                "output_owner_creations_by_operation_family"
+            ) or {}).items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:20],
         "component_edge_update_telemetry": scheduler.get(
             "component_edge_update_telemetry"
         ),
