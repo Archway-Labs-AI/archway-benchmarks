@@ -19,6 +19,7 @@ from archway_benchmarks.typybench_harness import (
     available_repos,
     untyped_source_root,
 )
+from archway_benchmarks.typybench_partitions import typybench_partition
 
 
 def _python_file_count(root: Path) -> int:
@@ -108,6 +109,12 @@ def main() -> None:
     parser.add_argument("output_root", type=Path)
     parser.add_argument("engine_worktree", type=Path)
     parser.add_argument("--repo", action="append", dest="repos")
+    parser.add_argument(
+        "--partition",
+        choices=("all", "development", "holdout"),
+        default="all",
+        help="run the frozen development or holdout partition",
+    )
     parser.add_argument("--timeout-per-repo", type=int, default=900)
     parser.add_argument("--max-total-seconds", type=int, default=14_400)
     parser.add_argument("--no-resume", action="store_true")
@@ -122,10 +129,21 @@ def main() -> None:
         name for name in available_repos(args.data_root)
         if _python_file_count(untyped_source_root(name, args.data_root)) > 0
     }
-    selected = set(args.repos or available)
+    partition_available = {
+        name for name in available
+        if args.partition == "all"
+        or typybench_partition(name) == args.partition
+    }
+    selected = set(args.repos or partition_available)
     unknown = sorted(selected - available)
     if unknown:
         parser.error("unknown repositories: " + ", ".join(unknown))
+    wrong_partition = sorted(selected - partition_available)
+    if args.partition != "all" and wrong_partition:
+        parser.error(
+            f"repositories outside {args.partition} partition: "
+            + ", ".join(wrong_partition)
+        )
 
     repos = sorted(
         selected,
@@ -144,6 +162,7 @@ def main() -> None:
         expected_revisions = {
             "engine_revision": engine_revision,
             "harness_revision": harness_revision,
+            "partition": args.partition,
         }
         mismatches = {
             name: (manifest.get(name), expected)
@@ -167,6 +186,7 @@ def main() -> None:
             "engine_revision": engine_revision,
             "harness_revision": harness_revision,
             "predictions_root": str(predictions_root.resolve()),
+            "partition": args.partition,
             "repositories": {},
         }
 
