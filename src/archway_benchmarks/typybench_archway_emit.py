@@ -31,6 +31,8 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
     phases: dict[str, float | int] = {}
     body_profiles: list[dict[str, Any]] = []
     body_plan: list[list[str]] = []
+    translation_files: list[dict[str, Any]] = []
+    active_translation_file: str | None = None
     for line in stderr.splitlines():
         if line.startswith("ARCHWAY_PHASE "):
             parts = line.split(" ", 2)
@@ -77,10 +79,32 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                 })
             except ValueError:
                 continue
+        elif line.startswith("ARCHWAY_TRANSLATION_START "):
+            active_translation_file = line.removeprefix(
+                "ARCHWAY_TRANSLATION_START "
+            )
+        elif line.startswith("ARCHWAY_TRANSLATION_DONE "):
+            parts = line.split(" ", 3)
+            if len(parts) != 4:
+                continue
+            try:
+                translation_files.append({
+                    "seconds": float(parts[1]),
+                    "status": parts[2],
+                    "file": parts[3],
+                })
+                active_translation_file = None
+            except ValueError:
+                continue
     return {
         "phase_progress": phases,
         "body_plan": body_plan,
         "body_profiles": body_profiles,
+        "active_translation_file": active_translation_file,
+        "slow_translation_files": sorted(
+            translation_files,
+            key=lambda item: (-item["seconds"], item["file"]),
+        )[:20],
     }
 
 
@@ -608,6 +632,12 @@ try:
     modules = {}
     translation_failures = {}
     for name, source in sources.items():
+        rel_name = module_files[name]
+        print(
+            f"ARCHWAY_TRANSLATION_START {rel_name}",
+            file=sys.stderr, flush=True,
+        )
+        file_translation_started = time.monotonic()
         try:
             modules[name] = TranslationResult.from_source(
                 source, name=name
@@ -616,6 +646,13 @@ try:
             translation_failures[module_files[name]] = (
                 f"{type(exc).__name__}: {exc}"
             )
+        print(
+            "ARCHWAY_TRANSLATION_DONE "
+            f"{time.monotonic() - file_translation_started:.6f} "
+            f"{'failed' if rel_name in translation_failures else 'ok'} "
+            f"{rel_name}",
+            file=sys.stderr, flush=True,
+        )
     if not modules:
         raise RuntimeError("no repository module translated successfully")
     translation_seconds = time.monotonic() - phase_started
