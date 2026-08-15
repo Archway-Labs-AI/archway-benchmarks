@@ -231,6 +231,46 @@ def test_repository_emission_keeps_variable_annotations_opt_in(
     assert opted_in.variables_annotated == 1
 
 
+def test_repository_emission_includes_diagram_class_fields_by_default(
+    monkeypatch, tmp_path,
+) -> None:
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "demo.py").write_text(
+        "class Model:\n    value = 1\n", encoding="utf-8"
+    )
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    monkeypatch.setattr(
+        emit_module,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {"demo.py": [{
+                "line": 2,
+                "name": "Model.value",
+                "kind": "variable",
+                "function": None,
+                "types": ["builtins.int"],
+            }]},
+            "translation_failures": {},
+            "analysis_summary": {},
+        },
+    )
+
+    stats = emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=tmp_path / "predictions",
+        engine_worktree=engine,
+    )
+
+    assert "value: int = 1" in (
+        tmp_path / "predictions" / "demo" / "demo.py"
+    ).read_text()
+    assert stats.variables_annotated == 1
+
+
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:
     source = '''"""module docstring"""
 

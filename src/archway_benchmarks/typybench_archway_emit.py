@@ -157,6 +157,7 @@ def emit_archway_predictions(
     type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
     emit_variable_annotations: bool = False,
+    emit_class_field_annotations: bool = True,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -284,7 +285,13 @@ def emit_archway_predictions(
                 _successor_variable_types(
                     record.get("files", {}).get(rel_s, []), trace=file_trace
                 )
-                if emit_variable_annotations else {}
+                if emit_variable_annotations else
+                _successor_variable_types(
+                    record.get("files", {}).get(rel_s, []),
+                    trace=file_trace,
+                    class_fields_only=True,
+                )
+                if emit_class_field_annotations else {}
             )
             seconds_render = time.monotonic() - render_started
             functions_seen += len(function_types)
@@ -416,7 +423,8 @@ def _successor_function_types(
 
 
 def _successor_variable_types(
-    observations: list[dict[str, Any]], trace: _TraceBuffer | None = None
+    observations: list[dict[str, Any]], trace: _TraceBuffer | None = None,
+    *, class_fields_only: bool = False,
 ) -> dict[tuple[int, str], str]:
     """Render diagram-produced store/attribute facts for source emission."""
 
@@ -425,6 +433,10 @@ def _successor_variable_types(
         line = item.get("line")
         name = item.get("name")
         if not line or item.get("kind") != "variable" or not name:
+            continue
+        if class_fields_only and (
+            item.get("function") is not None or "." not in str(name)
+        ):
             continue
         # Class-attribute observations retain their qualified semantic name
         # (``Model.field``); source position plus the local target name is the
