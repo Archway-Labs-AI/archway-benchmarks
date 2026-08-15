@@ -683,6 +683,22 @@ def module_name(path):
         parts.pop()
     return ".".join(parts) or "__init__"
 
+def bounded_scheduler_snapshot(session):
+    """Retain monotone progress counters even when a diagnostic cutoff fires."""
+    scheduler = session.scheduler
+    graph = scheduler.graph
+    return {
+        "unique_production_count": scheduler.unique_production_count,
+        "production_execution_count": scheduler.production_execution_count,
+        "repeated_production_count": scheduler.repeated_production_count,
+        "component_recompute_count": graph.component_recompute_count,
+        "component_node_visits": graph.component_node_visits,
+        "component_edge_visits": graph.component_edge_visits,
+        "component_incremental_refresh_count": (
+            graph.component_incremental_refresh_count
+        ),
+    }
+
 try:
     phase_started = time.monotonic()
     all_paths = sorted(root.rglob("*.py"))
@@ -1257,6 +1273,8 @@ except Exception as exc:
         partial_summary.setdefault("phase_seconds", {})["session_open"] = (
             session_open_seconds - translation_seconds
         )
+    if "session" in locals():
+        partial_summary["scheduler"] = bounded_scheduler_snapshot(session)
     out = {
         "ok": False,
         "error": f"{type(exc).__name__}: {exc}",
