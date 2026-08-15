@@ -425,6 +425,9 @@ def _successor_function_types(
     """Render compact successor observations into the annotation adapter shape."""
 
     candidates: dict[tuple[int, str], dict[str, list[str]]] = {}
+    requirement_candidates: dict[
+        tuple[int, str], dict[str, list[str]]
+    ] = {}
     for item in observations:
         line = item.get("line")
         kind = item.get("kind")
@@ -448,12 +451,23 @@ def _successor_function_types(
             for value in item.get("types", [])
             if value
         ]
-        candidates.setdefault((int(line), function), {}).setdefault(
+        target = (
+            requirement_candidates
+            if item.get("family") == "CallableTypeCandidates"
+            else candidates
+        )
+        target.setdefault((int(line), function), {}).setdefault(
             slot, []
         ).extend(values)
 
     rendered: dict[tuple[int, str], dict[str, Any]] = {}
-    for key, slots in candidates.items():
+    for key in candidates.keys() | requirement_candidates.keys():
+        observed_slots = candidates.get(key, {})
+        fallback_slots = requirement_candidates.get(key, {})
+        slots = {
+            slot: observed_slots.get(slot) or fallback_slots.get(slot, [])
+            for slot in observed_slots.keys() | fallback_slots.keys()
+        }
         params = {
             slot.removeprefix("param:"): merged
             for slot, values in slots.items()
@@ -1124,6 +1138,31 @@ try:
                     sorted(str(value) for value in fact.value)
                     if fact is not None else []
                 ),
+            })
+        for item, candidate in session.type_candidate_observations():
+            # Nested-path candidates constrain an element/attribute reached
+            # through the parameter, not the parameter annotation itself.
+            if candidate.path:
+                continue
+            module = item.module.dotted if item.module is not None else None
+            rel = module_files.get(module)
+            if rel is None and module is not None:
+                matches = [path for name, path in module_files.items()
+                           if module == name or module.endswith("." + name)]
+                rel = matches[0] if len(matches) == 1 else None
+            if rel is None:
+                continue
+            files[rel].append({
+                "line": (
+                    item.position.row if item.position is not None else None
+                ),
+                "name": item.name,
+                "kind": item.kind,
+                "family": item.address.family,
+                "function": item.function,
+                "types": sorted(candidate.types),
+                "precision": candidate.precision,
+                "requirement_path": [],
             })
     observation_projection_seconds = time.monotonic() - projection_started
     scheduler_telemetry = (

@@ -119,6 +119,43 @@ def test_successor_observations_render_function_signatures() -> None:
     }
 
 
+def test_successor_requirement_candidates_fill_unknown_parameter_only() -> None:
+    observations = [
+        {
+            "line": 4, "name": "x", "kind": "parameter",
+            "function": "f", "family": "TypeOf", "types": [],
+        },
+        {
+            "line": 4, "name": "x", "kind": "parameter",
+            "function": "f", "family": "CallableTypeCandidates",
+            "types": ["builtins.str"],
+        },
+    ]
+
+    assert _successor_function_types(observations) == {
+        (4, "f"): {"params": {"x": "str"}, "return": None}
+    }
+
+
+def test_successor_observed_type_precedes_requirement_candidates() -> None:
+    observations = [
+        {
+            "line": 4, "name": "x", "kind": "parameter",
+            "function": "f", "family": "TypeOf",
+            "types": ["builtins.bytes"],
+        },
+        {
+            "line": 4, "name": "x", "kind": "parameter",
+            "function": "f", "family": "CallableTypeCandidates",
+            "types": ["builtins.str"],
+        },
+    ]
+
+    assert _successor_function_types(observations) == {
+        (4, "f"): {"params": {"x": "bytes"}, "return": None}
+    }
+
+
 def test_successor_observations_match_qualified_methods_to_source_name() -> None:
     observations = [
         {
