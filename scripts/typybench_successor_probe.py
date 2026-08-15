@@ -40,6 +40,11 @@ def main() -> None:
         action="store_true",
         help="include lexical-variable observations in the requested workload",
     )
+    parser.add_argument(
+        "--collect-predictions",
+        action="store_true",
+        help="exercise the prediction projection used by the corpus emitter",
+    )
     args = parser.parse_args()
     if (
         args.body_timeout is not None
@@ -68,7 +73,7 @@ def main() -> None:
         sample_body_label=args.sample_body_label,
         record_timings=args.record_timings,
         diagnostic_details=not args.production_light,
-        collect_predictions=False,
+        collect_predictions=args.collect_predictions,
         observation_kinds=frozenset((
             "parameter",
             "return",
