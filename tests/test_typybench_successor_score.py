@@ -1,6 +1,8 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+
 
 _SCRIPT = Path(__file__).parents[1] / "scripts" / "typybench_successor_score.py"
 _SPEC = importlib.util.spec_from_file_location("typybench_successor_score", _SCRIPT)
@@ -67,3 +69,35 @@ def test_existing_result_is_current_only_when_it_postdates_predictions(tmp_path)
 
     prediction.touch()
     assert not _MODULE._result_is_current(result, prediction.parent)
+
+
+def test_aggregate_scores_weights_repositories_by_observations() -> None:
+    aggregate = _MODULE._aggregate_scores({
+        "small": {
+            "status": "complete",
+            "score": {
+                "total_vars": 10,
+                "overall_score_exact": 0.8,
+                "overall_score": 0.9,
+                "missing_ratio": 0.1,
+            },
+        },
+        "large": {
+            "status": "complete",
+            "score": {
+                "total_vars": 90,
+                "overall_score_exact": 0.2,
+                "overall_score": 0.3,
+                "missing_ratio": 0.4,
+            },
+        },
+        "failed": {"status": "failed"},
+    })
+
+    assert aggregate == {
+        "repositories_scored": 2,
+        "total_vars": 100,
+        "overall_score_exact": 0.26,
+        "overall_score": pytest.approx(0.36),
+        "missing_ratio": pytest.approx(0.37),
+    }

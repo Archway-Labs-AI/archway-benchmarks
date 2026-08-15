@@ -81,6 +81,38 @@ def _eligible_repositories(
     )
 
 
+def _aggregate_scores(records: dict[str, object]) -> dict[str, object]:
+    """Compute observation-weighted gates over completed official scores."""
+
+    scores = [
+        record["score"]
+        for record in records.values()
+        if isinstance(record, dict)
+        and record.get("status") == "complete"
+        and isinstance(record.get("score"), dict)
+    ]
+    total = sum(int(score["total_vars"]) for score in scores)
+
+    def weighted(field: str) -> float | None:
+        terms = [
+            (int(score["total_vars"]), score.get(field))
+            for score in scores
+            if score.get(field) is not None
+        ]
+        denominator = sum(count for count, _value in terms)
+        if not denominator:
+            return None
+        return sum(count * float(value) for count, value in terms) / denominator
+
+    return {
+        "repositories_scored": len(scores),
+        "total_vars": total,
+        "overall_score_exact": weighted("overall_score_exact"),
+        "overall_score": weighted("overall_score"),
+        "missing_ratio": weighted("missing_ratio"),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("run_root", type=Path)
@@ -150,6 +182,7 @@ def main() -> None:
                 "finished_unix": time.time(),
             }
             manifest["updated_unix"] = time.time()
+            manifest["aggregate"] = _aggregate_scores(score_records)
             _write_json(score_manifest_path, manifest)
             print(
                 f"ARCHWAY_TYPYBENCH_SCORE adopt {index}/{len(repositories)} {repo_name}",
@@ -163,6 +196,7 @@ def main() -> None:
                 "docker_image": docker_image_name(repo_name),
             }
             manifest["updated_unix"] = time.time()
+            manifest["aggregate"] = _aggregate_scores(score_records)
             _write_json(score_manifest_path, manifest)
             continue
 
@@ -213,6 +247,7 @@ def main() -> None:
         record["finished_unix"] = time.time()
         score_records[repo_name] = record
         manifest["updated_unix"] = time.time()
+        manifest["aggregate"] = _aggregate_scores(score_records)
         _write_json(score_manifest_path, manifest)
         print(
             f"ARCHWAY_TYPYBENCH_SCORE {record['status']} {repo_name} "
@@ -222,6 +257,7 @@ def main() -> None:
 
     manifest["run_status"] = "complete"
     manifest["updated_unix"] = time.time()
+    manifest["aggregate"] = _aggregate_scores(score_records)
     _write_json(score_manifest_path, manifest)
 
 
