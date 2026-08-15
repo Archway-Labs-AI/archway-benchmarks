@@ -24,6 +24,16 @@ def main() -> None:
     parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
     parser.add_argument("--sample-body-label")
+    parser.add_argument(
+        "--sample-forward",
+        action="store_true",
+        help="sample only the initial forward-seeding phase",
+    )
+    parser.add_argument(
+        "--forward-timeout",
+        type=int,
+        help="gracefully cut off forward seeding and retain its sample",
+    )
     parser.add_argument("--record-timings", action="store_true")
     parser.add_argument(
         "--compact-diagnostics",
@@ -71,6 +81,8 @@ def main() -> None:
         callable_input_exact_limit=args.callable_input_exact_limit,
         sample_rate_hz=args.sample_rate_hz,
         sample_body_label=args.sample_body_label,
+        sample_forward=args.sample_forward,
+        forward_timeout=args.forward_timeout,
         record_timings=args.record_timings,
         diagnostic_details=not args.production_light,
         collect_predictions=args.collect_predictions,
@@ -192,6 +204,7 @@ def main() -> None:
             None if args.compact_diagnostics else summary.get("body_plan")
         ),
         "timed_out_body": summary.get("timed_out_body"),
+        "timed_out_forward": summary.get("timed_out_forward"),
         "unique_productions": scheduler.get("unique_production_count"),
         "production_executions": scheduler.get("production_execution_count"),
         "repeated_productions": scheduler.get("repeated_production_count"),

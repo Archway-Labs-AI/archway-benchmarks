@@ -557,6 +557,8 @@ def _run_successor_repo_probe(
     callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
     sample_body_label: str | None = None,
+    sample_forward: bool = False,
+    forward_timeout: int | None = None,
     record_timings: bool = False,
     diagnostic_details: bool = True,
     collect_predictions: bool = True,
@@ -586,6 +588,10 @@ def _run_successor_repo_probe(
         raise ValueError("sample_rate_hz must be positive")
     if sample_body_label is not None and sample_rate_hz is None:
         raise ValueError("sample_body_label requires sample_rate_hz")
+    if sample_forward and sample_rate_hz is None:
+        raise ValueError("sample_forward requires sample_rate_hz")
+    if forward_timeout is not None and forward_timeout <= 0:
+        raise ValueError("forward_timeout must be positive")
     unsupported_observation_kinds = observation_kinds - {
         "parameter", "return", "variable",
     }
@@ -627,6 +633,8 @@ checkpoint_tail_count = int(sys.argv[14])
 requested_observation_kinds = frozenset(
     item for item in sys.argv[15].split(",") if item
 )
+sample_forward = sys.argv[16] == "sample-forward"
+requested_forward_timeout = int(sys.argv[17]) or None
 
 def analysis_source_roots():
     # Respect Python's conventional src layout.  Repository-wide prediction
@@ -729,7 +737,33 @@ try:
     # library module as an eager entry point creates a monolithic execution
     # wave.  The observation workload below extends this same fact store and
     # topology with only the additional module/body roots it actually needs.
-    forward = session.run_forward()
+    sampling_profile = None
+    forward_profiler = None
+    timed_out_forward = False
+    if sample_forward:
+        from sd_core.tooling.sampling_profile import SamplingProfiler
+        forward_profiler = SamplingProfiler(
+            rate_hz=sample_rate_hz,
+            project_marker="/sd_core/",
+        )
+        forward_profiler.__enter__()
+    if requested_forward_timeout:
+        def timeout_forward(_signum, _frame):
+            raise TimeoutError("diagnostic forward cutoff")
+        signal.signal(signal.SIGALRM, timeout_forward)
+        signal.alarm(requested_forward_timeout)
+    try:
+        forward = session.run_forward()
+    except TimeoutError:
+        timed_out_forward = True
+        raise
+    finally:
+        signal.alarm(0)
+        if forward_profiler is not None:
+            forward_profiler.__exit__(None, None, None)
+            sampling_profile = forward_profiler.jsonable(
+                top=40, include_stacks=diagnostic_details
+            )
     forward_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE forward {forward_seconds:.6f}", file=sys.stderr, flush=True)
     observations = session.type_observations()
@@ -785,9 +819,13 @@ try:
             file=sys.stderr,
             flush=True,
         )
-    sampling_profile = None
     targeted_profiler = None
-    if sample_rate_hz and sample_body_label is None and signature_roots:
+    if (
+        sample_rate_hz
+        and not sample_forward
+        and sample_body_label is None
+        and signature_roots
+    ):
         from sd_core.tooling.sampling_profile import SamplingProfiler
         targeted_profiler = SamplingProfiler(
             rate_hz=sample_rate_hz,
@@ -1206,10 +1244,24 @@ try:
         - observation_projection_seconds
     )
 except Exception as exc:
+    partial_summary = {}
+    if "sampling_profile" in locals() and sampling_profile is not None:
+        partial_summary["sampling_profile"] = sampling_profile
+    if "timed_out_forward" in locals():
+        partial_summary["timed_out_forward"] = timed_out_forward
+    if "translation_seconds" in locals():
+        partial_summary.setdefault("phase_seconds", {})["translation"] = (
+            translation_seconds
+        )
+    if "session_open_seconds" in locals():
+        partial_summary.setdefault("phase_seconds", {})["session_open"] = (
+            session_open_seconds - translation_seconds
+        )
     out = {
         "ok": False,
         "error": f"{type(exc).__name__}: {exc}",
         "trace_tail": traceback.format_exc()[-2400:],
+        "analysis_summary": partial_summary,
     }
 encode_started = time.monotonic()
 encoded = json.dumps(out, sort_keys=True)
@@ -1254,6 +1306,8 @@ os._exit(0)
             ),
             str(checkpoint_tail_count or 0),
             ",".join(sorted(observation_kinds)),
+            "sample-forward" if sample_forward else "no-forward-sample",
+            str(forward_timeout or 0),
         ]
         try:
             proc = subprocess.Popen(
