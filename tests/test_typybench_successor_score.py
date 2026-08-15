@@ -54,3 +54,16 @@ def test_score_values_preserves_official_exact_weighted_and_missing(tmp_path) ->
     assert score["overall_score"] == 0.35
     assert score["overall_score_exact"] == 0.30
     assert score["missing_ratio"] == 0.10
+
+
+def test_existing_result_is_current_only_when_it_postdates_predictions(tmp_path) -> None:
+    prediction = tmp_path / "repo" / "module.py"
+    prediction.parent.mkdir()
+    prediction.write_text("value = 1\n", encoding="utf-8")
+    result = prediction.parent / "repo_results_w_exact.csv"
+    result.write_text("score\n", encoding="utf-8")
+
+    assert _MODULE._result_is_current(result, prediction.parent)
+
+    prediction.touch()
+    assert not _MODULE._result_is_current(result, prediction.parent)

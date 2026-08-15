@@ -46,6 +46,19 @@ def _score_values(csv_path: Path) -> dict[str, object]:
     }
 
 
+def _result_is_current(csv_path: Path, prediction_root: Path) -> bool:
+    """Return whether an existing official score postdates its source tree."""
+
+    if not csv_path.is_file():
+        return False
+    scored_at = csv_path.stat().st_mtime_ns
+    return all(
+        path.stat().st_mtime_ns <= scored_at
+        for path in prediction_root.rglob("*")
+        if path.is_file() and path.suffix in {".py", ".pyi"}
+    )
+
+
 def _eligible_repositories(
     analysis_manifest: dict[str, object],
     *,
@@ -124,6 +137,24 @@ def main() -> None:
             and csv_path.is_file()
         ):
             print(f"ARCHWAY_TYPYBENCH_SCORE skip {index}/{len(repositories)} {repo_name}", flush=True)
+            continue
+        if (
+            not args.no_resume
+            and _result_is_current(csv_path, predictions_root / repo_name)
+        ):
+            score_records[repo_name] = {
+                "status": "complete",
+                "elapsed_seconds": 0.0,
+                "adopted_existing_result": True,
+                "score": _score_values(csv_path),
+                "finished_unix": time.time(),
+            }
+            manifest["updated_unix"] = time.time()
+            _write_json(score_manifest_path, manifest)
+            print(
+                f"ARCHWAY_TYPYBENCH_SCORE adopt {index}/{len(repositories)} {repo_name}",
+                flush=True,
+            )
             continue
         if docker_image_name(repo_name) not in local_images:
             score_records[repo_name] = {
