@@ -34,6 +34,7 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
     body_plan: list[list[str]] = []
     translation_files: list[dict[str, Any]] = []
     active_translation_file: str | None = None
+    active_body: dict[str, Any] | None = None
     for line in stderr.splitlines():
         if line.startswith("ARCHWAY_PHASE "):
             parts = line.split(" ", 2)
@@ -61,6 +62,21 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                 for batch in candidate
             ):
                 body_plan = candidate
+        elif line.startswith("ARCHWAY_BODY_START "):
+            parts = line.split(" ", 3)
+            if len(parts) != 4:
+                continue
+            _prefix, position, label, root_id = parts
+            try:
+                index, total = (int(item) for item in position.split("/", 1))
+            except ValueError:
+                continue
+            active_body = {
+                "index": index,
+                "total": total,
+                "label": label,
+                "root_id": root_id,
+            }
         elif line.startswith("ARCHWAY_BODY "):
             parts = line.split(" ", 5)
             if len(parts) != 6:
@@ -78,6 +94,8 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                     ),
                     "label": label,
                 })
+                if active_body is not None and active_body["index"] == index:
+                    active_body = None
             except ValueError:
                 continue
         elif line.startswith("ARCHWAY_TRANSLATION_START "):
@@ -101,6 +119,7 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
         "phase_progress": phases,
         "body_plan": body_plan,
         "body_profiles": body_profiles,
+        "active_body": active_body,
         "active_translation_file": active_translation_file,
         "slow_translation_files": sorted(
             translation_files,
@@ -848,6 +867,11 @@ try:
             )
             body_id = getattr(root_address.subject, "body_morphism_id", "")
             body_label = body_labels.get(body_id, "?")
+            print(
+                f"ARCHWAY_BODY_START {index}/{len(root_batches)} "
+                f"{body_label} {root_address.id}",
+                file=sys.stderr, flush=True,
+            )
             sample_this_body = (
                 sample_rate_hz and body_label == sample_body_label
             )
@@ -1259,7 +1283,10 @@ os._exit(0)
         }
     for line in reversed(stdout.splitlines()):
         if line.strip().startswith("{"):
-            return json.loads(line)
+            result = json.loads(line)
+            if not result.get("ok") and not result.get("analysis_summary"):
+                result["analysis_summary"] = _probe_progress(stderr)
+            return result
     return {"ok": False, "error": "engine probe produced no JSON", "trace_tail": stderr[-2400:]}
 
 

@@ -26,8 +26,12 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
         "ARCHWAY_TRANSLATION_DONE 1.500000 ok pkg/slow.py\n"
         "ARCHWAY_TRANSLATION_START pkg/active.py\n"
         'ARCHWAY_BODY_PLAN [["first","second"]]\n'
+        "ARCHWAY_BODY_START 2/139 appworld.api_docs:generate_example "
+        "fact-address:v1:active\n"
         "ARCHWAY_BODY 2/139 16.250000 exec=618 topology=5940 "
         "appworld.api_docs:generate_example\n"
+        "ARCHWAY_BODY_START 3/139 appworld.api_docs:next "
+        "fact-address:v1:next\n"
     )
 
     assert progress == {
@@ -45,6 +49,12 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
             "topology_changes": 5940,
             "label": "appworld.api_docs:generate_example",
         }],
+        "active_body": {
+            "index": 3,
+            "total": 139,
+            "label": "appworld.api_docs:next",
+            "root_id": "fact-address:v1:next",
+        },
         "active_translation_file": "pkg/active.py",
         "slow_translation_files": [{
             "seconds": 1.5,

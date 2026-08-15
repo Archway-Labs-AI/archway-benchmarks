@@ -157,6 +157,7 @@ def main() -> None:
         "phase_seconds": summary.get("phase_seconds"),
         "phase_progress": summary.get("phase_progress"),
         "active_translation_file": summary.get("active_translation_file"),
+        "active_body": summary.get("active_body"),
         "slow_translation_files": summary.get("slow_translation_files"),
         "modules": summary.get("modules"),
         "observations": summary.get("observations"),
