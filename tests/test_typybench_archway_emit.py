@@ -560,31 +560,28 @@ def test_renderer_keeps_container_elements_and_parseable_union_spelling() -> Non
     assert stats == {"functions": 1, "params": 3, "returns": 1, "variables": 0}
 
 
-def test_emit_predictions_leaves_original_source_on_invalid_annotation_syntax(tmp_path) -> None:
+def test_emit_predictions_leaves_original_source_on_invalid_annotation_syntax(
+    monkeypatch, tmp_path,
+) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
-        """
-def analyze_source(source, module_name):
-    return {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {"x": [{"element": {"kind": "pytype", "name": "list["}}]},
-                        "ret": {"element": {"kind": "pytype", "name": "builtins.int"}},
-                    }
-                ],
-            }
-        ]
-    }
-""",
-        encoding="utf-8",
+    engine.mkdir()
+    monkeypatch.setattr(
+        emit_module,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {"demo.py": [
+                {
+                    "line": 1, "name": "x", "kind": "parameter",
+                    "function": "f", "types": ["list["],
+                },
+                {
+                    "line": 1, "name": "f", "kind": "return",
+                    "function": None, "types": ["builtins.int"],
+                },
+            ]},
+            "analysis_summary": {"translation_failures": {}},
+        },
     )
 
     source_root = tmp_path / "repo"
@@ -630,28 +627,30 @@ def test_emit_predictions_rejects_zero_source_repo_before_staging(tmp_path) -> N
     assert not (tmp_path / "predictions" / "pylint").exists()
 
 
-def test_emit_predictions_preserves_cookiecutter_template_paths(tmp_path) -> None:
+def test_emit_predictions_preserves_cookiecutter_template_paths(
+    monkeypatch, tmp_path,
+) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
-        """
-from pathlib import Path
-
-def analyze_source(source, module_name):
-    assert "{{cookiecutter.__root_folder}}" in source
-    assert Path(__import__("sys").argv[1]).is_file()
-    return {"functions": []}
-""",
-        encoding="utf-8",
-    )
+    engine.mkdir()
 
     source_root = tmp_path / "repo_without_types"
     template_dir = source_root / "taipy" / "templates" / "default" / "{{cookiecutter.__root_folder}}"
     template_dir.mkdir(parents=True)
     source = template_dir / "{{cookiecutter.__main_file}}.py"
     source.write_text('MARKER = "{{cookiecutter.__root_folder}}"\n', encoding="utf-8")
+
+    rel = "taipy/templates/default/{{cookiecutter.__root_folder}}/{{cookiecutter.__main_file}}.py"
+
+    def probe(**kwargs):
+        assert kwargs["source_root"] == source_root
+        assert "{{cookiecutter.__root_folder}}" in source.read_text()
+        return {
+            "ok": True,
+            "files": {rel: []},
+            "analysis_summary": {"translation_failures": {}},
+        }
+
+    monkeypatch.setattr(emit_module, "_run_successor_repo_probe", probe)
 
     stats = emit_archway_predictions(
         repo_name="taipy",
@@ -663,7 +662,6 @@ def analyze_source(source, module_name):
         per_file_timeout=5,
     )
 
-    rel = "taipy/templates/default/{{cookiecutter.__root_folder}}/{{cookiecutter.__main_file}}.py"
     assert stats.files_total == 1
     assert stats.files_failed == 0
     assert (tmp_path / "predictions" / "taipy" / rel).is_file()
@@ -740,35 +738,36 @@ def analyze_source(source, module_name):
     assert stats.files_failed == 2
 
 
-def test_emit_predictions_trace_jsonl_records_raw_rendered_and_insertion(tmp_path) -> None:
+def test_emit_predictions_trace_jsonl_records_raw_rendered_and_insertion(
+    monkeypatch, tmp_path,
+) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
-        """
-def analyze_source(source, module_name):
-    return {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "x": [{"element": {"kind": "pytype", "name": "builtins.int"}}],
-                            "y": [{"element": {"kind": "list"}}],
-                            "z": [{"element": {"kind": "pytype", "name": "builtins.str"}}],
-                        },
-                        "ret": {"element": {"kind": "top"}},
-                    }
-                ],
-            }
-        ]
-    }
-""",
-        encoding="utf-8",
+    engine.mkdir()
+    monkeypatch.setattr(
+        emit_module,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {"demo.py": [
+                {
+                    "line": 1, "name": "x", "kind": "parameter",
+                    "function": "f", "types": ["builtins.int"],
+                },
+                {
+                    "line": 1, "name": "y", "kind": "parameter",
+                    "function": "f", "types": ["list[Any]"],
+                },
+                {
+                    "line": 1, "name": "z", "kind": "parameter",
+                    "function": "f", "types": ["builtins.str"],
+                },
+                {
+                    "line": 1, "name": "f", "kind": "return",
+                    "function": None, "types": ["Any"],
+                },
+            ]},
+            "analysis_summary": {"translation_failures": {}},
+        },
     )
 
     source_root = tmp_path / "repo"
@@ -790,8 +789,8 @@ def analyze_source(source, module_name):
     assert stats.params_annotated == 1
     records = [json.loads(line) for line in trace_jsonl.read_text(encoding="utf-8").splitlines()]
     by_slot = {record["slot"]: record for record in records}
-    assert by_slot["param:x"]["raw_candidates"][0]["raw_elements"] == [
-        {"kind": "pytype", "name": "builtins.int"}
+    assert by_slot["param:x"]["raw_candidates"] == [
+        {"successor_types": ["int"]}
     ]
     assert by_slot["param:x"]["rendered_annotation"] == "int"
     assert by_slot["param:x"]["insertion_happened"] is True
@@ -799,31 +798,35 @@ def analyze_source(source, module_name):
     assert by_slot["param:y"]["rendered_annotation"] == "list[Any]"
     assert by_slot["param:y"]["insertion_happened"] is False
     assert by_slot["param:y"]["insertion_reason"] == "existing annotation preserved"
-    assert by_slot["param:y"]["fallback_reason"] == "list.element: missing element"
+    assert by_slot["param:y"]["fallback_reason"] is None
     assert by_slot["param:z"]["insertion_reason"] == "parameter not present in AST"
     assert by_slot["return"]["rendered_annotation"] == "Any"
-    assert by_slot["return"]["fallback_reason"] == "top"
+    assert by_slot["return"]["fallback_reason"] is None
     assert by_slot["return"]["final_annotation"] == "bool"
 
 
-def test_emit_trace_records_slots_omitted_by_engine_projection(tmp_path) -> None:
+def test_emit_trace_records_slots_omitted_by_engine_projection(
+    monkeypatch, tmp_path,
+) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
-        """
-def analyze_source(source, module_name):
-    return {
-        "functions": [{
-            "fn_id": 1,
-            "name": "main",
-            "source_position": {"row": 1},
-            "instantiations": [{"params": {}, "ret": {}}],
-        }]
-    }
-""",
-        encoding="utf-8",
+    engine.mkdir()
+    monkeypatch.setattr(
+        emit_module,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {"demo.py": [
+                {
+                    "line": 1, "name": "argv", "kind": "parameter",
+                    "function": "main", "types": [],
+                },
+                {
+                    "line": 1, "name": "main", "kind": "return",
+                    "function": None, "types": [],
+                },
+            ]},
+            "analysis_summary": {"translation_failures": {}},
+        },
     )
     source_root = tmp_path / "repo"
     source_root.mkdir()
@@ -852,108 +855,38 @@ def analyze_source(source, module_name):
     assert by_slot["return"]["insertion_reason"] == "no inferred return candidate"
 
 
-def test_emit_predictions_profile_jsonl_records_per_file_timings(tmp_path) -> None:
+def test_emit_predictions_profile_jsonl_records_per_file_timings(
+    monkeypatch, tmp_path,
+) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    runners = sd_core / "runners"
-    runners.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (runners / "__init__.py").write_text("", encoding="utf-8")
-    (runners / "analysis_observability.py").write_text(
-        """
-class AnalysisObservationConfig:
-    def __init__(self, mode="summary"):
-        self.mode = mode
-
-    @classmethod
-    def summary(cls):
-        return cls("summary")
-
-    @classmethod
-    def diagnostic(cls):
-        return cls("diagnostic")
-
-    @classmethod
-    def off(cls):
-        return cls("off")
-""",
-        encoding="utf-8",
-    )
-    (runners / "file_results.py").write_text(
-        """
-class _Run:
-    finalized = object()
-
-class _Result:
-    status = "analyzed"
-    run = _Run()
-
-    def to_jsonable(self):
-        return {
-            "analysis_summary": {
-                "schema": "archway.analysis_run_summary.v1",
-                "phases": [
-                    {"name": "types.evaluate", "wall_seconds": 0.125, "status": "ok"}
-                ],
-                "type_functor": {
-                    "body_execution_hotspots": [
-                        {"body_name": "f", "execution_count": 1, "wall_seconds": 0.1}
-                    ]
-                },
-            }
-        }
-
-class FileAnalysisFailure(Exception):
-    pass
-
-def analyze_source_file_result(
-    source,
-    module,
-    repo_path=None,
-    observation_config=None,
-    body_summary_consumption="off",
-    analysis_product="standalone",
-):
-    if body_summary_consumption != "safe":
-        raise RuntimeError(f"policy was {body_summary_consumption}")
-    if analysis_product != "type_body_summary_product":
-        raise RuntimeError(f"product was {analysis_product}")
-    if getattr(observation_config, "mode", None) != "diagnostic":
-        raise RuntimeError(f"observation was {getattr(observation_config, 'mode', None)}")
-    if "boom" in source:
-        raise RuntimeError("synthetic")
-    return _Result()
-""",
-        encoding="utf-8",
-    )
-    (sd_core / "analysis_server.py").write_text(
-        """
-def _analysis():
-    return {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {"x": [{"element": {"kind": "pytype", "name": "builtins.int"}}]},
-                        "ret": {"element": {"kind": "pytype", "name": "builtins.int"}},
-                    }
-                ],
-            }
-        ]
+    engine.mkdir()
+    analysis_summary = {
+        "schema": "archway.analysis_run_summary.v1",
+        "type_functor": {
+            "body_execution_hotspots": [
+                {"body_name": "f", "execution_count": 1,
+                 "wall_seconds": 0.1}
+            ],
+        },
+        "translation_failures": {"bad.py": "RuntimeError: synthetic"},
     }
-
-def _encode_finalized(finalized):
-    return _analysis()
-
-def analyze_source(source, module_name):
-    if "boom" in source:
-        raise RuntimeError("synthetic")
-    return _analysis()
-""",
-        encoding="utf-8",
+    monkeypatch.setattr(
+        emit_module,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {"ok.py": [
+                {
+                    "line": 1, "name": "x", "kind": "parameter",
+                    "function": "f", "types": ["builtins.int"],
+                },
+                {
+                    "line": 1, "name": "f", "kind": "return",
+                    "function": None, "types": ["builtins.int"],
+                },
+            ], "bad.py": []},
+            "analysis_summary": analysis_summary,
+        },
     )
     source_root = tmp_path / "repo"
     source_root.mkdir()
@@ -987,7 +920,7 @@ def analyze_source(source, module_name):
     assert by_file["ok.py"]["analysis_summary"]["type_functor"][
         "body_execution_hotspots"
     ][0]["body_name"] == "f"
-    assert by_file["bad.py"]["status"] == "engine_failed"
+    assert by_file["bad.py"]["status"] == "translation_failed"
     assert "RuntimeError: synthetic" in by_file["bad.py"]["error"]
 
 

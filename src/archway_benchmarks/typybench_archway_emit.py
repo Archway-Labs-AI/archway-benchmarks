@@ -438,9 +438,18 @@ def _successor_function_types(
         rendered[key] = {"params": params, "return": ret}
         if trace:
             for slot, values in slots.items():
+                fallback = (
+                    "no inferred return candidate"
+                    if slot == "return"
+                    else "no inferred parameter candidate"
+                )
                 trace.add_slot(
                     line=key[0], function=key[1], slot=slot,
-                    candidates=[{"successor_types": values}],
+                    candidates=[{
+                        "successor_types": values,
+                        **({"fallback_reasons": [fallback]}
+                           if not values else {}),
+                    }],
                     merged_annotation=(ret if slot == "return" else params.get(slot.removeprefix("param:"))),
                 )
     return rendered
@@ -996,14 +1005,21 @@ try:
                            if module == name or module.endswith("." + name)]
                 rel = matches[0] if len(matches) == 1 else None
             fact = session.store.resolved(item.address)
-            if rel is None or fact is None or not fact.value:
+            if rel is None:
                 continue
             files[rel].append({
                 "line": item.position.row if item.position is not None else None,
                 "name": item.name,
                 "kind": item.kind,
                 "function": item.function,
-                "types": sorted(str(value) for value in fact.value),
+                # Retain unresolved catalog entries as explicit missing
+                # evidence.  The source adapter inserts nothing for an empty
+                # set, while diagnostic traces can now distinguish an open
+                # analysis result from an uncataloged source location.
+                "types": (
+                    sorted(str(value) for value in fact.value)
+                    if fact is not None else []
+                ),
             })
     observation_projection_seconds = time.monotonic() - projection_started
     scheduler_telemetry = (
