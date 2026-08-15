@@ -982,11 +982,7 @@ try:
     files = {}
     if collect_predictions:
         files = {str(path.relative_to(root)): [] for path in all_paths}
-        # ``observations`` is the immutable address/template inventory already
-        # collected before refinement.  Rebuilding it after a framework-sized
-        # session has selected thousands of contextual plans repeats graph
-        # discovery even though only the resolved values have changed.
-        for item in observations:
+        for item in session.type_observations():
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
             if rel is None and module is not None:
