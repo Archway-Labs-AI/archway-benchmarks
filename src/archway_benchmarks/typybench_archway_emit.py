@@ -230,6 +230,11 @@ def emit_archway_predictions(
             timeout=timeout,
             checkpoint_roots=checkpoint_roots,
             diagnostic_details=False,
+            observation_kinds=frozenset((
+                "parameter",
+                "return",
+                *(("variable",) if emit_variable_annotations else ()),
+            )),
         )
         seconds_repo_probe = time.monotonic() - probe_started
         for src in files:
@@ -533,6 +538,9 @@ def _run_successor_repo_probe(
     record_timings: bool = False,
     diagnostic_details: bool = True,
     collect_predictions: bool = True,
+    observation_kinds: frozenset[str] = frozenset((
+        "parameter", "return",
+    )),
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
@@ -556,6 +564,14 @@ def _run_successor_repo_probe(
         raise ValueError("sample_rate_hz must be positive")
     if sample_body_label is not None and sample_rate_hz is None:
         raise ValueError("sample_body_label requires sample_rate_hz")
+    unsupported_observation_kinds = observation_kinds - {
+        "parameter", "return", "variable",
+    }
+    if unsupported_observation_kinds:
+        raise ValueError(
+            "unsupported observation kinds: "
+            + ", ".join(sorted(unsupported_observation_kinds))
+        )
 
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
@@ -586,6 +602,9 @@ collect_predictions = sys.argv[11] == "predictions"
 checkpoint_size = int(sys.argv[12])
 checkpoint_tail_start = int(sys.argv[13])
 checkpoint_tail_count = int(sys.argv[14])
+requested_observation_kinds = frozenset(
+    item for item in sys.argv[15].split(",") if item
+)
 
 def analysis_source_roots():
     # Respect Python's conventional src layout.  Repository-wide prediction
@@ -694,7 +713,7 @@ try:
     observations = session.type_observations()
     missing_observations = sorted((
         item for item in observations
-        if item.kind in {"parameter", "return", "variable"}
+        if item.kind in requested_observation_kinds
         if (session.store.resolved(item.address) is None
             or not session.store.resolved(item.address).value)
     ), key=lambda item: (
@@ -1202,6 +1221,7 @@ os._exit(0)
                 if checkpoint_tail_start is not None else -1
             ),
             str(checkpoint_tail_count or 0),
+            ",".join(sorted(observation_kinds)),
         ]
         try:
             proc = subprocess.Popen(

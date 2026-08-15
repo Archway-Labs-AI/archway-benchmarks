@@ -212,9 +212,13 @@ def test_repository_emission_keeps_variable_annotations_opt_in(
         "translation_failures": {},
         "analysis_summary": {},
     }
-    monkeypatch.setattr(
-        emit_module, "_run_successor_repo_probe", lambda **_kwargs: record
-    )
+    requested_kinds = []
+
+    def probe(**kwargs):
+        requested_kinds.append(kwargs["observation_kinds"])
+        return record
+
+    monkeypatch.setattr(emit_module, "_run_successor_repo_probe", probe)
 
     default_root = tmp_path / "default"
     default = emit_archway_predictions(
@@ -238,6 +242,10 @@ def test_repository_emission_keeps_variable_annotations_opt_in(
         opt_in_root / "demo" / "demo.py"
     ).read_text()
     assert opted_in.variables_annotated == 1
+    assert requested_kinds == [
+        frozenset(("parameter", "return")),
+        frozenset(("parameter", "return", "variable")),
+    ]
 
 
 def test_repository_emission_can_include_diagram_class_fields_explicitly(

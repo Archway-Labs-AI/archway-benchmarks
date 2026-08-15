@@ -35,6 +35,11 @@ def main() -> None:
         action="store_true",
         help="disable detailed per-cohort diagnostic attribution",
     )
+    parser.add_argument(
+        "--include-variables",
+        action="store_true",
+        help="include lexical-variable observations in the requested workload",
+    )
     args = parser.parse_args()
     if (
         args.body_timeout is not None
@@ -64,6 +69,11 @@ def main() -> None:
         record_timings=args.record_timings,
         diagnostic_details=not args.production_light,
         collect_predictions=False,
+        observation_kinds=frozenset((
+            "parameter",
+            "return",
+            *(("variable",) if args.include_variables else ()),
+        )),
     )
     summary = result.get("analysis_summary") or {}
     scheduler = summary.get("scheduler") or {}
