@@ -1140,6 +1140,11 @@ try:
             cutoff_this_body = (
                 requested_body_timeout
                 and (
+                    (
+                        not requested_body_labels
+                        and sample_body_label is None
+                    )
+                    or
                     body_label == sample_body_label
                     or body_label in requested_body_labels
                 )

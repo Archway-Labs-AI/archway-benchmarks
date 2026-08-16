@@ -97,9 +97,10 @@ def main() -> None:
         args.body_timeout is not None
         and not args.body_labels
         and args.sample_body_label is None
+        and not args.checkpoint_roots
     ):
         parser.error(
-            "--body-timeout requires --body-label or --sample-body-label"
+            "--body-timeout requires a selected body or checkpointed roots"
         )
     if args.sample_body_label is not None and args.sample_rate_hz is None:
         parser.error("--sample-body-label requires --sample-rate-hz")
