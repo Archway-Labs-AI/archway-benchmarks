@@ -598,9 +598,10 @@ def _run_successor_repo_probe(
         and body_label is None
         and not body_labels
         and sample_body_label is None
+        and not checkpoint_roots
     ):
         raise ValueError(
-            "body_timeout requires body_label or sample_body_label"
+            "body_timeout requires a selected body or checkpointed roots"
         )
     if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
         raise ValueError("callable_input_exact_limit must be non-negative")
