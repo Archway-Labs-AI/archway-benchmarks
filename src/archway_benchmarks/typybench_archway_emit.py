@@ -567,6 +567,7 @@ def _run_successor_repo_probe(
     checkpoint_tail_start: int | None = None,
     checkpoint_tail_count: int | None = None,
     body_label: str | None = None,
+    body_labels: tuple[str, ...] | None = None,
     body_timeout: int | None = None,
     callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
@@ -579,12 +580,14 @@ def _run_successor_repo_probe(
     observation_kinds: frozenset[str] = frozenset((
         "parameter", "return",
     )),
+    disable_cyclic_gc: bool = True,
 ) -> dict[str, Any]:
     """Run one successor session for the complete repository source graph."""
 
     if (
         body_timeout is not None
         and body_label is None
+        and not body_labels
         and sample_body_label is None
     ):
         raise ValueError(
@@ -617,6 +620,7 @@ def _run_successor_repo_probe(
 
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
+import gc
 import json
 import os
 import signal
@@ -627,12 +631,14 @@ from collections import Counter
 from pathlib import Path
 
 from sd_core.analysis.diagram_analysis import open_hybrid_program_session
+from sd_core.tooling.analysis_arena import AnalysisAllocationArena
 from sd_core.tooling.harness import TranslationResult
 
 root = Path(sys.argv[1])
 demand_limit = int(sys.argv[2]) or None
 checkpoint_roots = sys.argv[3] == "checkpoint"
 requested_body_label = sys.argv[4] or None
+requested_body_labels = frozenset(json.loads(requested_body_label)) if requested_body_label else frozenset()
 requested_body_timeout = int(sys.argv[5]) or None
 exact_limit_arg = int(sys.argv[6])
 callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
@@ -649,6 +655,52 @@ requested_observation_kinds = frozenset(
 )
 sample_forward = sys.argv[16] == "sample-forward"
 requested_forward_timeout = int(sys.argv[17]) or None
+disable_cyclic_gc = sys.argv[18] == "disable-cyclic-gc"
+
+# Repository sessions intentionally retain a large immutable scheduler/store
+# graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
+# cost grows with unrelated prior cohorts.  Attribute those pauses without a
+# per-call profiler hook; this callback runs only at collection boundaries.
+gc_started = {}
+gc_totals = [
+    {"collections": 0, "seconds": 0.0, "max_seconds": 0.0,
+     "collected": 0, "uncollectable": 0}
+    for _generation in range(3)
+]
+
+def gc_profile_callback(phase, info):
+    generation = int(info.get("generation", 0))
+    if generation >= len(gc_totals):
+        return
+    if phase == "start":
+        gc_started[generation] = time.perf_counter()
+        return
+    started = gc_started.pop(generation, None)
+    seconds = time.perf_counter() - started if started is not None else 0.0
+    totals = gc_totals[generation]
+    totals["collections"] += 1
+    totals["seconds"] += seconds
+    totals["max_seconds"] = max(totals["max_seconds"], seconds)
+    totals["collected"] += int(info.get("collected", 0))
+    totals["uncollectable"] += int(info.get("uncollectable", 0))
+
+gc.callbacks.append(gc_profile_callback)
+analysis_arena = None
+
+def gc_profile_snapshot():
+    return tuple(dict(item) for item in gc_totals)
+
+def gc_profile_delta(before, after):
+    return [
+        {
+            name: (
+                current[name] - previous[name]
+                if name != "max_seconds" else current[name]
+            )
+            for name in current
+        }
+        for previous, current in zip(before, after)
+    ]
 
 def analysis_source_roots():
     # Respect Python's conventional src layout.  Repository-wide prediction
@@ -762,6 +814,13 @@ try:
     )
     session_open_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
+    if disable_cyclic_gc:
+        # Translation/session construction creates temporary cyclic objects
+        # that are not part of the persistent semantic graph.  Collect those
+        # once, then make the forward/refinement lifetime the explicit arena.
+        analysis_arena = AnalysisAllocationArena.enter_isolated_process(
+            collect_on_enter=True
+        )
     # Seed the selected program entry in the persistent scheduler.  Every
     # module is translated and available for later demands, but treating every
     # library module as an eager entry point creates a monolithic execution
@@ -818,7 +877,7 @@ try:
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
     requested = (
         missing
-        if requested_body_label
+        if requested_body_labels
         else missing[:demand_limit] if demand_limit is not None else missing
     )
     signature_roots = session.observation_workload_roots(requested)
@@ -830,12 +889,12 @@ try:
         for plan in session.module_plans.values()
         for template in plan.templates
     }
-    if requested_body_label:
+    if requested_body_labels:
         signature_roots = tuple(
             root_address for root_address in signature_roots
             if body_labels.get(
                 getattr(root_address.subject, "body_morphism_id", "")
-            ) == requested_body_label
+            ) in requested_body_labels
         )
     print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
     if diagnostic_details and len(signature_roots) <= 32:
@@ -919,6 +978,7 @@ try:
             topology_counts_before = dict(
                 session.scheduler.graph.topology_change_counts
             )
+            gc_before = gc_profile_snapshot()
             summary_registry = session.invocation_registry.callable_summaries
             applications_before = frozenset(
                 summary_registry.applications
@@ -945,7 +1005,10 @@ try:
             )
             cutoff_this_body = (
                 requested_body_timeout
-                and body_label in {sample_body_label, requested_body_label}
+                and (
+                    body_label == sample_body_label
+                    or body_label in requested_body_labels
+                )
             )
             profiler = None
             if cutoff_this_body:
@@ -1004,6 +1067,7 @@ try:
                         session.scheduler.graph.component_edge_update_telemetry
                     ).items()
                 },
+                "gc": gc_profile_delta(gc_before, gc_profile_snapshot()),
                 "top_execution_families": sorted(
                     family_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
@@ -1248,6 +1312,7 @@ try:
                 "observation_projection": observation_projection_seconds,
             },
             "scheduler": scheduler_telemetry,
+            "gc": gc_profile_snapshot(),
             "production_replay_hotspots": (
                 session.scheduler.production_replay_hotspots()
                 if diagnostic_details else ()
@@ -1345,7 +1410,10 @@ os._exit(0)
             str(Path(source_root).absolute()),
             str(demand_limit or 0),
             "checkpoint" if checkpoint_roots else "collective",
-            body_label or "",
+            json.dumps(tuple(dict.fromkeys((
+                *((body_label,) if body_label else ()),
+                *(body_labels or ()),
+            )))),
             str(body_timeout or 0),
             str(
                 callable_input_exact_limit
@@ -1365,6 +1433,7 @@ os._exit(0)
             ",".join(sorted(observation_kinds)),
             "sample-forward" if sample_forward else "no-forward-sample",
             str(forward_timeout or 0),
+            "disable-cyclic-gc" if disable_cyclic_gc else "cyclic-gc",
         ]
         try:
             proc = subprocess.Popen(

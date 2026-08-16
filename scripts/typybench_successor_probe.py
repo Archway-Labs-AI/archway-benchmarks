@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument("--checkpoint-size", type=int, default=8)
     parser.add_argument("--checkpoint-tail-start", type=int)
     parser.add_argument("--checkpoint-tail-count", type=int)
-    parser.add_argument("--body-label")
+    parser.add_argument("--body-label", action="append", dest="body_labels")
     parser.add_argument("--body-timeout", type=int)
     parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
@@ -35,6 +35,19 @@ def main() -> None:
         help="gracefully cut off forward seeding and retain its sample",
     )
     parser.add_argument("--record-timings", action="store_true")
+    parser.add_argument(
+        "--disable-cyclic-gc",
+        action="store_true",
+        dest="disable_cyclic_gc",
+        help="diagnose an isolated arena without cyclic-GC graph scans",
+    )
+    parser.add_argument(
+        "--cyclic-gc",
+        action="store_false",
+        dest="disable_cyclic_gc",
+        help="retain cyclic GC for an arena A/B control",
+    )
+    parser.set_defaults(disable_cyclic_gc=True)
     parser.add_argument(
         "--compact-diagnostics",
         action="store_true",
@@ -58,7 +71,7 @@ def main() -> None:
     args = parser.parse_args()
     if (
         args.body_timeout is not None
-        and args.body_label is None
+        and not args.body_labels
         and args.sample_body_label is None
     ):
         parser.error(
@@ -76,7 +89,7 @@ def main() -> None:
         checkpoint_size=args.checkpoint_size,
         checkpoint_tail_start=args.checkpoint_tail_start,
         checkpoint_tail_count=args.checkpoint_tail_count,
-        body_label=args.body_label,
+        body_labels=tuple(args.body_labels or ()),
         body_timeout=args.body_timeout,
         callable_input_exact_limit=args.callable_input_exact_limit,
         sample_rate_hz=args.sample_rate_hz,
@@ -86,6 +99,7 @@ def main() -> None:
         record_timings=args.record_timings,
         diagnostic_details=not args.production_light,
         collect_predictions=args.collect_predictions,
+        disable_cyclic_gc=args.disable_cyclic_gc,
         observation_kinds=frozenset((
             "parameter",
             "return",
