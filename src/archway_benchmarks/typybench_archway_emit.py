@@ -1054,6 +1054,34 @@ try:
                 for family, seconds in telemetry_after["seconds"].items()
                 if seconds - family_seconds_before.get(family, 0.0) > 0
             }
+            workload_relevance = []
+            if diagnostic_details:
+                for workload_root in root_batch:
+                    workload_body_id = getattr(
+                        workload_root.subject, "body_morphism_id", ""
+                    )
+                    for provider in session.targeted_body_providers:
+                        templates = provider._root_observations.get(
+                            workload_root
+                        )
+                        if templates is None:
+                            continue
+                        workload_relevance.append({
+                            "root_id": workload_root.id,
+                            "observation_count": len(templates),
+                            "active_morphism_count": (
+                                provider._workload_active_morphism_counts.get(
+                                    workload_root
+                                )
+                            ),
+                            "required_definition_bindings": sorted(
+                                provider._required_definition_bindings.get((
+                                    workload_body_id,
+                                    workload_root.context,
+                                ), ())
+                            ),
+                        })
+                        break
             body_profile = {
                 "index": index,
                 "label": body_label,
@@ -1120,6 +1148,7 @@ try:
                     )
                     if diagnostic_details else []
                 ),
+                "workload_relevance": workload_relevance,
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
                 "root_labels": [
