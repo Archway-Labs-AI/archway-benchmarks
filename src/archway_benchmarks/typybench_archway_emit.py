@@ -569,6 +569,8 @@ def _run_successor_repo_probe(
     checkpoint_size: int = 8,
     checkpoint_tail_start: int | None = None,
     checkpoint_tail_count: int | None = None,
+    checkpoint_batch_start: int | None = None,
+    checkpoint_batch_count: int | None = None,
     checkpoint_replay_prefix: bool = True,
     body_label: str | None = None,
     body_labels: tuple[str, ...] | None = None,
@@ -607,6 +609,14 @@ def _run_successor_repo_probe(
         raise ValueError("checkpoint_tail_start must be non-negative")
     if checkpoint_tail_count is not None and checkpoint_tail_count <= 0:
         raise ValueError("checkpoint_tail_count must be positive")
+    if checkpoint_batch_start is not None and checkpoint_batch_start < 0:
+        raise ValueError("checkpoint_batch_start must be non-negative")
+    if checkpoint_batch_count is not None and checkpoint_batch_count <= 0:
+        raise ValueError("checkpoint_batch_count must be positive")
+    if checkpoint_batch_count is not None and checkpoint_batch_start is None:
+        raise ValueError("checkpoint_batch_count requires checkpoint_batch_start")
+    if checkpoint_tail_start is not None and checkpoint_batch_start is not None:
+        raise ValueError("root-tail and batch-tail checkpoints are exclusive")
     if sample_rate_hz is not None and sample_rate_hz <= 0:
         raise ValueError("sample_rate_hz must be positive")
     if sample_body_label is not None and sample_rate_hz is None:
@@ -665,6 +675,8 @@ disable_cyclic_gc = sys.argv[18] == "disable-cyclic-gc"
 checkpoint_replay_prefix = sys.argv[19] == "replay-prefix"
 run_forward_seed = sys.argv[20] == "run-forward-seed"
 sample_session_open = sys.argv[21] == "sample-session-open"
+checkpoint_batch_start = int(sys.argv[22])
+checkpoint_batch_count = int(sys.argv[23])
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -1022,6 +1034,7 @@ try:
                     batches[index].append(root_address)
                     batch_groups[index].add(group)
             return tuple(tuple(batch) for batch in batches)
+        all_batches = admission_batches(signature_roots)
         requested_tail_start = (
             min(checkpoint_tail_start, len(signature_roots))
             if checkpoint_tail_start >= 0 else 0
@@ -1039,11 +1052,22 @@ try:
             min(len(signature_roots), tail_start + checkpoint_tail_count)
             if checkpoint_tail_count > 0 else len(signature_roots)
         )
-        root_batches = prefix + (
-            tuple((root,) for root in signature_roots[tail_start:tail_end])
-            if checkpoint_tail_start >= 0
-            else admission_batches(signature_roots[tail_start:tail_end])
-        )
+        if checkpoint_batch_start >= 0:
+            batch_start = min(checkpoint_batch_start, len(all_batches))
+            batch_end = (
+                min(len(all_batches), batch_start + checkpoint_batch_count)
+                if checkpoint_batch_count > 0 else len(all_batches)
+            )
+            root_batches = (
+                all_batches[:batch_start]
+                if checkpoint_replay_prefix else ()
+            ) + all_batches[batch_start:batch_end]
+        else:
+            root_batches = prefix + (
+                tuple((root,) for root in signature_roots[tail_start:tail_end])
+                if checkpoint_tail_start >= 0
+                else all_batches
+            )
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
                 body_labels.get(
@@ -1586,6 +1610,11 @@ os._exit(0)
             "replay-prefix" if checkpoint_replay_prefix else "skip-prefix",
             "run-forward-seed" if run_forward_seed else "skip-forward-seed",
             "sample-session-open" if sample_session_open else "no-session-sample",
+            str(
+                checkpoint_batch_start
+                if checkpoint_batch_start is not None else -1
+            ),
+            str(checkpoint_batch_count or 0),
         ]
         progress_stream = None
         if progress_log is not None:

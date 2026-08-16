@@ -19,6 +19,12 @@ def main() -> None:
     parser.add_argument("--checkpoint-size", type=int, default=8)
     parser.add_argument("--checkpoint-tail-start", type=int)
     parser.add_argument("--checkpoint-tail-count", type=int)
+    parser.add_argument(
+        "--checkpoint-batch-start",
+        type=int,
+        help="replay and preserve the exact production cohort partition",
+    )
+    parser.add_argument("--checkpoint-batch-count", type=int)
     parser.add_argument("--body-label", action="append", dest="body_labels")
     parser.add_argument("--body-timeout", type=int)
     parser.add_argument("--callable-input-exact-limit", type=int)
@@ -100,6 +106,8 @@ def main() -> None:
         checkpoint_size=args.checkpoint_size,
         checkpoint_tail_start=args.checkpoint_tail_start,
         checkpoint_tail_count=args.checkpoint_tail_count,
+        checkpoint_batch_start=args.checkpoint_batch_start,
+        checkpoint_batch_count=args.checkpoint_batch_count,
         body_labels=tuple(args.body_labels or ()),
         body_timeout=args.body_timeout,
         callable_input_exact_limit=args.callable_input_exact_limit,
