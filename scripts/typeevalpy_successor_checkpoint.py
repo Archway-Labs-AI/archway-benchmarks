@@ -108,7 +108,7 @@ def main() -> None:
     harness_root = Path(__file__).resolve().parents[1]
     expected_header = {
         "kind": "header",
-        "schema_version": 1,
+        "schema_version": 2,
         "corpus_root": str(args.corpus_root.resolve()),
         "engine_revision": _revision(engine_worktree),
         "harness_revision": _revision(harness_root),
@@ -173,6 +173,10 @@ def main() -> None:
                 annotation.location: annotation.types
                 for annotation in predictions
             }
+            ground_truth = {
+                annotation.location: annotation.types
+                for annotation in snippet.annotations
+            }
             classifications = Counter(
                 gap.classification
                 for gap in (result.gaps if result is not None else ())
@@ -181,11 +185,11 @@ def main() -> None:
                 "kind": "snippet",
                 "suite_path": snippet.suite_path,
                 "seconds": elapsed,
-                "annotations": len(snippet.annotations),
+                "annotations": len(ground_truth),
                 "predictions": len(predicted),
                 "exact": sum(
-                    predicted.get(item.location) == item.types
-                    for item in snippet.annotations
+                    predicted.get(location) == expected
+                    for location, expected in ground_truth.items()
                 ),
                 "classifications": dict(sorted(classifications.items())),
                 "error": error,
