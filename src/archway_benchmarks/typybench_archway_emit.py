@@ -202,6 +202,7 @@ def emit_archway_predictions(
     type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
     body_timeout: int | None = None,
+    progress_timeout: int | None = None,
     emit_variable_annotations: bool = False,
     emit_class_field_annotations: bool = False,
 ) -> EmitStats:
@@ -253,6 +254,7 @@ def emit_archway_predictions(
             progress_log=progress_log,
             checkpoint_roots=checkpoint_roots,
             body_timeout=body_timeout,
+            progress_timeout=progress_timeout,
             diagnostic_details=False,
             observation_kinds=frozenset((
                 "parameter",
@@ -576,7 +578,9 @@ def _run_successor_repo_probe(
     checkpoint_replay_prefix: bool = True,
     body_label: str | None = None,
     body_labels: tuple[str, ...] | None = None,
+    root_ids: tuple[str, ...] | None = None,
     body_timeout: int | None = None,
+    progress_timeout: int | None = None,
     callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
     sample_body_label: str | None = None,
@@ -607,6 +611,8 @@ def _run_successor_repo_probe(
         )
     if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
         raise ValueError("callable_input_exact_limit must be non-negative")
+    if progress_timeout is not None and progress_timeout <= 0:
+        raise ValueError("progress_timeout must be positive")
     if checkpoint_size <= 0:
         raise ValueError("checkpoint_size must be positive")
     if checkpoint_tail_start is not None and checkpoint_tail_start < 0:
@@ -682,6 +688,8 @@ sample_session_open = sys.argv[21] == "sample-session-open"
 checkpoint_batch_start = int(sys.argv[22])
 checkpoint_batch_count = int(sys.argv[23])
 contextual_summary_evaluation = sys.argv[24] == "contextual-summaries"
+requested_progress_timeout = int(sys.argv[25]) or None
+requested_root_ids = frozenset(json.loads(sys.argv[26]))
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -959,6 +967,11 @@ try:
                 getattr(root_address.subject, "body_morphism_id", "")
             ) in requested_body_labels
         )
+    if requested_root_ids:
+        signature_roots = tuple(
+            root_address for root_address in signature_roots
+            if root_address.id in requested_root_ids
+        )
     print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
     if diagnostic_details and len(signature_roots) <= 32:
         print(
@@ -985,11 +998,31 @@ try:
         )
         targeted_profiler.__enter__()
     timed_out_body = False
+    timed_out_execution = None
     timeout_signal = signal.SIGALRM
     if requested_body_timeout:
         def timeout_body(_signum, _frame):
             raise TimeoutError("diagnostic body cutoff")
         signal.signal(timeout_signal, timeout_body)
+    if requested_progress_timeout:
+        session.scheduler.set_execution_progress_tracking(True)
+
+        def timeout_stalled_execution(_signum, _frame):
+            global timed_out_execution
+            progress = dict(session.scheduler.execution_progress)
+            elapsed = max(
+                float(progress.get("active_seconds", 0.0)),
+                float(progress.get("seconds_since_progress", 0.0)),
+            )
+            if elapsed >= requested_progress_timeout:
+                timed_out_execution = progress
+                raise TimeoutError("scheduler execution progress cutoff")
+            signal.alarm(max(
+                1,
+                int(requested_progress_timeout - elapsed + 0.999999),
+            ))
+
+        signal.signal(timeout_signal, timeout_stalled_execution)
     if checkpoint_roots:
         targeted = None
         body_profiles = []
@@ -1166,6 +1199,10 @@ try:
                 targeted = session.observe(root_batch)
             except TimeoutError:
                 timed_out_body = True
+                if timed_out_execution is None and requested_progress_timeout:
+                    timed_out_execution = dict(
+                        session.scheduler.execution_progress
+                    )
                 targeted = None
             finally:
                 signal.alarm(0)
@@ -1330,8 +1367,9 @@ try:
         # SamplingProfiler owns ITIMER_VIRTUAL/SIGVTALRM.  Keep the bounded
         # body cutoff on the independent wall-clock alarm so both diagnostics
         # remain active when profiling one long-running body.
-        if requested_body_timeout and signature_roots:
-            signal.alarm(requested_body_timeout)
+        collective_timeout = requested_progress_timeout or requested_body_timeout
+        if collective_timeout and signature_roots:
+            signal.alarm(collective_timeout)
         try:
             if (
                 sample_rate_hz and signature_roots
@@ -1356,6 +1394,10 @@ try:
         except TimeoutError:
             targeted = None
             timed_out_body = True
+            if timed_out_execution is None and requested_progress_timeout:
+                timed_out_execution = dict(
+                    session.scheduler.execution_progress
+                )
             sampling_profile = locals().get("sampling_profile")
         finally:
             signal.alarm(0)
@@ -1515,6 +1557,7 @@ try:
             "signature_body_roots": len(all_signature_roots),
             "body_profiles": body_profiles,
             "timed_out_body": timed_out_body,
+            "timed_out_execution": timed_out_execution,
             "forward_events": len(forward.events) if forward is not None else 0,
             "targeted_events": len(targeted.events) if targeted is not None else 0,
             "resolved_facts": (
@@ -1684,6 +1727,8 @@ os._exit(0)
                 "contextual-summaries"
                 if contextual_summary_evaluation else "composed-summaries"
             ),
+            str(progress_timeout or 0),
+            json.dumps(tuple(dict.fromkeys(root_ids or ()))),
         ]
         progress_stream = None
         if progress_log is not None:

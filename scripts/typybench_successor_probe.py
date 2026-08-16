@@ -25,8 +25,17 @@ def main() -> None:
         help="replay and preserve the exact production cohort partition",
     )
     parser.add_argument("--checkpoint-batch-count", type=int)
+    parser.add_argument(
+        "--no-checkpoint-replay-prefix",
+        action="store_false",
+        dest="checkpoint_replay_prefix",
+        help="run an exact diagnostic cohort without replaying earlier cohorts",
+    )
+    parser.set_defaults(checkpoint_replay_prefix=True)
     parser.add_argument("--body-label", action="append", dest="body_labels")
+    parser.add_argument("--root-id", action="append", dest="root_ids")
     parser.add_argument("--body-timeout", type=int)
+    parser.add_argument("--progress-timeout", type=int)
     parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
     parser.add_argument("--sample-body-label")
@@ -121,8 +130,11 @@ def main() -> None:
         checkpoint_tail_count=args.checkpoint_tail_count,
         checkpoint_batch_start=args.checkpoint_batch_start,
         checkpoint_batch_count=args.checkpoint_batch_count,
+        checkpoint_replay_prefix=args.checkpoint_replay_prefix,
         body_labels=tuple(args.body_labels or ()),
+        root_ids=tuple(args.root_ids or ()),
         body_timeout=args.body_timeout,
+        progress_timeout=args.progress_timeout,
         callable_input_exact_limit=args.callable_input_exact_limit,
         sample_rate_hz=args.sample_rate_hz,
         sample_body_label=args.sample_body_label,

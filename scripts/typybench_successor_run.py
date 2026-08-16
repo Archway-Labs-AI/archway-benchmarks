@@ -65,9 +65,13 @@ def _stats_record(stats, elapsed: float) -> dict[str, object]:
             "TimeoutExpired:", "engine probe failed:",
         ))
     ), None)
+    analysis_timeout = bool(
+        isinstance(summary, dict) and summary.get("timed_out_body")
+    )
     return {
         "status": (
             "failed" if probe_failure is not None
+            else "timed_out" if analysis_timeout
             else "complete" if not stats.failures else "partial"
         ),
         "elapsed_seconds": elapsed,
@@ -121,7 +125,10 @@ def main() -> None:
         "--body-timeout",
         type=int,
         default=25,
-        help="stop a checkpointed repository at its first slow body",
+        help=(
+            "stop a collective repository query when one scheduler execution "
+            "makes no progress for this many seconds"
+        ),
     )
     parser.add_argument("--max-total-seconds", type=int, default=14_400)
     parser.add_argument("--no-resume", action="store_true")
@@ -276,8 +283,12 @@ def main() -> None:
                     1, min(args.timeout_per_repo, int(remaining_total))
                 ),
                 progress_log=Path(records[repo_name]["progress_log"]),
-                checkpoint_roots=True,
-                body_timeout=args.body_timeout,
+                # Preserve one collective convergence wave per repository.
+                # The execution heartbeat identifies a genuinely stalled
+                # production without turning the workload into dozens of
+                # separately settled mini-runs.
+                checkpoint_roots=False,
+                progress_timeout=args.body_timeout,
                 # Declarative class transforms (dataclasses, PEP-681-style
                 # model bases) expose constructor types through diagram-owned
                 # ClassFieldTypeOf facts.  Emitting only that semantic family
