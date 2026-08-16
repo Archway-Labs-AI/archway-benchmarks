@@ -195,6 +195,7 @@ def emit_archway_predictions(
     per_file_timeout: int = 60,
     trace_jsonl: Path | None = None,
     profile_jsonl: Path | None = None,
+    progress_log: Path | None = None,
     body_summary_consumption: str = "off",
     analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
@@ -248,6 +249,7 @@ def emit_archway_predictions(
             source_root=untyped_root,
             runner=runner,
             timeout=timeout,
+            progress_log=progress_log,
             checkpoint_roots=checkpoint_roots,
             diagnostic_details=False,
             observation_kinds=frozenset((
@@ -561,6 +563,7 @@ def _run_successor_repo_probe(
     source_root: Path,
     runner: tuple[str, ...],
     timeout: int,
+    progress_log: Path | None = None,
     demand_limit: int | None = None,
     checkpoint_roots: bool = False,
     checkpoint_size: int = 8,
@@ -1435,25 +1438,63 @@ os._exit(0)
             str(forward_timeout or 0),
             "disable-cyclic-gc" if disable_cyclic_gc else "cyclic-gc",
         ]
+        progress_stream = None
+        if progress_log is not None:
+            progress_log = Path(progress_log)
+            progress_log.parent.mkdir(parents=True, exist_ok=True)
+            progress_stream = progress_log.open("w", encoding="utf-8")
         try:
             proc = subprocess.Popen(
                 cmd, cwd=engine_worktree, stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE, text=True,
-                env=_probe_env(engine_worktree), start_new_session=True,
+                stderr=(progress_stream if progress_stream is not None else subprocess.PIPE),
+                text=True, env=_probe_env(engine_worktree),
+                start_new_session=True,
             )
-            stdout, stderr = proc.communicate(timeout=timeout)
-        except subprocess.TimeoutExpired:
             try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-            _stdout, stderr = proc.communicate()
-            return {
-                "ok": False,
-                "error": f"TimeoutExpired: analysis exceeded {timeout}s",
-                "trace_tail": stderr[-2400:],
-                "analysis_summary": _probe_progress(stderr),
-            }
+                stdout, captured_stderr = proc.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(proc.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                _stdout, captured_stderr = proc.communicate()
+                if progress_stream is not None:
+                    progress_stream.flush()
+                    stderr = progress_log.read_text(encoding="utf-8")
+                else:
+                    stderr = captured_stderr or ""
+                return {
+                    "ok": False,
+                    "error": f"TimeoutExpired: analysis exceeded {timeout}s",
+                    "trace_tail": stderr[-2400:],
+                    "analysis_summary": _probe_progress(stderr),
+                }
+            except BaseException:
+                # The worker owns a process group because a repository
+                # analysis may itself be launched through Hatch.  Never leave
+                # that group consuming CPU after an operator interrupts a
+                # diagnostic or corpus gate.
+                try:
+                    os.killpg(proc.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    proc.communicate(timeout=5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        os.killpg(proc.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    proc.communicate()
+                raise
+            if progress_stream is not None:
+                progress_stream.flush()
+                stderr = progress_log.read_text(encoding="utf-8")
+            else:
+                stderr = captured_stderr or ""
+        finally:
+            if progress_stream is not None:
+                progress_stream.close()
     if proc.returncode != 0:
         return {
             "ok": False,

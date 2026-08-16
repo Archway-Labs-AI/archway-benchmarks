@@ -36,6 +36,16 @@ def main() -> None:
     )
     parser.add_argument("--record-timings", action="store_true")
     parser.add_argument(
+        "--progress-log",
+        type=Path,
+        help="persist worker progress as it is emitted, including on timeout",
+    )
+    parser.add_argument(
+        "--output-json",
+        type=Path,
+        help="persist the final diagnostic report instead of printing it",
+    )
+    parser.add_argument(
         "--disable-cyclic-gc",
         action="store_true",
         dest="disable_cyclic_gc",
@@ -84,6 +94,7 @@ def main() -> None:
         source_root=args.source_root,
         runner=("hatch", "run", "python"),
         timeout=args.timeout,
+        progress_log=args.progress_log,
         demand_limit=args.demand_limit,
         checkpoint_roots=args.checkpoint_roots,
         checkpoint_size=args.checkpoint_size,
@@ -177,7 +188,7 @@ def main() -> None:
             }
             for item in replay_hotspots[:12]
         ]
-    print(json.dumps({
+    report = {
         "ok": result.get("ok"),
         "error": result.get("error"),
         "phase_seconds": summary.get("phase_seconds"),
@@ -256,7 +267,15 @@ def main() -> None:
         "top_restart_reasons": top_restart_reasons,
         "top_restart_operation_reasons": top_restart_operation_reasons,
         "trace_tail": result.get("trace_tail"),
-    }, sort_keys=True))
+    }
+    encoded = json.dumps(report, sort_keys=True)
+    if args.output_json is None:
+        print(encoded)
+    else:
+        args.output_json.parent.mkdir(parents=True, exist_ok=True)
+        temporary = args.output_json.with_suffix(args.output_json.suffix + ".tmp")
+        temporary.write_text(encoded + "\n", encoding="utf-8")
+        temporary.replace(args.output_json)
 
 
 if __name__ == "__main__":

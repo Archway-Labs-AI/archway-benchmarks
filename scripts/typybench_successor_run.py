@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -118,7 +119,20 @@ def main() -> None:
     parser.add_argument("--timeout-per-repo", type=int, default=900)
     parser.add_argument("--max-total-seconds", type=int, default=14_400)
     parser.add_argument("--no-resume", action="store_true")
+    parser.add_argument(
+        "--continue-after-incomplete",
+        action="store_true",
+        help=(
+            "continue after a timeout/failure whose cause is already known; "
+            "the default stops at the first new incomplete repository"
+        ),
+    )
     args = parser.parse_args()
+
+    def interrupt_run(_signum, _frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, interrupt_run)
 
     if args.timeout_per_repo <= 0:
         parser.error("--timeout-per-repo must be positive")
@@ -235,6 +249,11 @@ def main() -> None:
             "status": "running",
             "started_unix": time.time(),
             "python_files": _python_file_count(source_root),
+            "progress_log": str(
+                (args.output_root / "progress" / (
+                    f"{repo_name}.attempt-{manifest['run_attempt']}.log"
+                )).resolve()
+            ),
         }
         _write_manifest(manifest_path, manifest)
         print(f"ARCHWAY_TYPYBENCH start {index}/{len(repos)} {repo_name}", flush=True)
@@ -248,6 +267,7 @@ def main() -> None:
                 timeout=max(
                     1, min(args.timeout_per_repo, int(remaining_total))
                 ),
+                progress_log=Path(records[repo_name]["progress_log"]),
                 checkpoint_roots=True,
                 # Declarative class transforms (dataclasses, PEP-681-style
                 # model bases) expose constructor types through diagram-owned
@@ -257,6 +277,19 @@ def main() -> None:
                 emit_class_field_annotations=True,
             )
             record = _stats_record(stats, time.monotonic() - started)
+        except KeyboardInterrupt:
+            record = {
+                "status": "interrupted",
+                "elapsed_seconds": time.monotonic() - started,
+                "error": "operator interrupted repository analysis",
+                "finished_unix": time.time(),
+            }
+            records[repo_name] = record
+            manifest["run_status"] = "interrupted"
+            manifest["run_elapsed_seconds"] = time.monotonic() - run_started
+            manifest["updated_unix"] = time.time()
+            _write_manifest(manifest_path, manifest)
+            raise
         except Exception as exc:
             record = {
                 "status": "failed",
@@ -272,6 +305,15 @@ def main() -> None:
             f"{record['elapsed_seconds']:.3f}s",
             flush=True,
         )
+        if (
+            record["status"] != "complete"
+            and not args.continue_after_incomplete
+        ):
+            manifest["run_status"] = "stopped_after_incomplete_repository"
+            manifest["run_elapsed_seconds"] = time.monotonic() - run_started
+            manifest["updated_unix"] = time.time()
+            _write_manifest(manifest_path, manifest)
+            break
     else:
         manifest["run_status"] = _terminal_run_status(records, repos)
         manifest["run_elapsed_seconds"] = time.monotonic() - run_started
