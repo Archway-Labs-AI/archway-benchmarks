@@ -261,6 +261,10 @@ def main() -> None:
             (scheduler.get("transfer_operation_seconds") or {}).items(),
             key=lambda item: (-item[1], item[0]),
         )[:20],
+        "top_transfer_operation_counts": sorted(
+            (scheduler.get("transfer_operation_counts") or {}).items(),
+            key=lambda item: (-item[1], item[0]),
+        )[:20],
         "top_execution_families": top_families,
         "top_family_seconds": top_family_seconds,
         "top_restart_operations": top_restart_operations,
