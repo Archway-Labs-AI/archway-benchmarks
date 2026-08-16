@@ -201,6 +201,7 @@ def emit_archway_predictions(
     analysis_observation_mode: str = "summary",
     type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
+    body_timeout: int | None = None,
     emit_variable_annotations: bool = False,
     emit_class_field_annotations: bool = False,
 ) -> EmitStats:
@@ -251,6 +252,7 @@ def emit_archway_predictions(
             timeout=timeout,
             progress_log=progress_log,
             checkpoint_roots=checkpoint_roots,
+            body_timeout=body_timeout,
             diagnostic_details=False,
             observation_kinds=frozenset((
                 "parameter",

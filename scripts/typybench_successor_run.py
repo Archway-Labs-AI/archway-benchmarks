@@ -117,6 +117,12 @@ def main() -> None:
         help="run the frozen development or holdout partition",
     )
     parser.add_argument("--timeout-per-repo", type=int, default=900)
+    parser.add_argument(
+        "--body-timeout",
+        type=int,
+        default=25,
+        help="stop a checkpointed repository at its first slow body",
+    )
     parser.add_argument("--max-total-seconds", type=int, default=14_400)
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument(
@@ -136,6 +142,8 @@ def main() -> None:
 
     if args.timeout_per_repo <= 0:
         parser.error("--timeout-per-repo must be positive")
+    if args.body_timeout <= 0:
+        parser.error("--body-timeout must be positive")
     if args.max_total_seconds <= 0:
         parser.error("--max-total-seconds must be positive")
 
@@ -269,6 +277,7 @@ def main() -> None:
                 ),
                 progress_log=Path(records[repo_name]["progress_log"]),
                 checkpoint_roots=True,
+                body_timeout=args.body_timeout,
                 # Declarative class transforms (dataclasses, PEP-681-style
                 # model bases) expose constructor types through diagram-owned
                 # ClassFieldTypeOf facts.  Emitting only that semantic family
