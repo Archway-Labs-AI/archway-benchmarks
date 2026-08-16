@@ -577,6 +577,8 @@ def _run_successor_repo_probe(
     sample_rate_hz: float | None = None,
     sample_body_label: str | None = None,
     sample_forward: bool = False,
+    sample_session_open: bool = False,
+    run_forward_seed: bool = True,
     forward_timeout: int | None = None,
     record_timings: bool = False,
     diagnostic_details: bool = True,
@@ -661,6 +663,8 @@ sample_forward = sys.argv[16] == "sample-forward"
 requested_forward_timeout = int(sys.argv[17]) or None
 disable_cyclic_gc = sys.argv[18] == "disable-cyclic-gc"
 checkpoint_replay_prefix = sys.argv[19] == "replay-prefix"
+run_forward_seed = sys.argv[20] == "run-forward-seed"
+sample_session_open = sys.argv[21] == "sample-session-open"
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -809,14 +813,37 @@ try:
         (name for name in ("main", "__main__") if name in modules),
         min(modules, key=lambda name: (name.count("."), len(name), name)),
     )
-    session = open_hybrid_program_session(
-        modules, entry, record_events=False,
-        record_timings=record_timings,
-        body_observations_only=True,
-        class_field_observations=True,
-        callable_input_exact_limit=callable_input_exact_limit,
-        contextual_summary_evaluation=True,
-    )
+    session_profiler = None
+    if sample_session_open:
+        from sd_core.tooling.sampling_profile import SamplingProfiler
+        session_profiler = SamplingProfiler(
+            rate_hz=sample_rate_hz or 100.0,
+            project_marker="/sd_core/",
+        )
+        session_profiler.__enter__()
+    try:
+        session = open_hybrid_program_session(
+            modules, entry, record_events=False,
+            record_timings=record_timings,
+            record_telemetry=diagnostic_details,
+            body_observations_only=True,
+            class_field_observations=True,
+            callable_input_exact_limit=callable_input_exact_limit,
+            contextual_summary_evaluation=True,
+        )
+    finally:
+        if session_profiler is not None:
+            session_profiler.__exit__(None, None, None)
+            print(
+                "ARCHWAY_SESSION_PROFILE " + json.dumps(
+                    session_profiler.jsonable(
+                        top=40, include_stacks=diagnostic_details
+                    ),
+                    separators=(",", ":"),
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
     session_open_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
     if disable_cyclic_gc:
@@ -847,7 +874,7 @@ try:
         signal.signal(signal.SIGALRM, timeout_forward)
         signal.alarm(requested_forward_timeout)
     try:
-        forward = session.run_forward()
+        forward = session.run_forward() if run_forward_seed else None
     except TimeoutError:
         timed_out_forward = True
         raise
@@ -935,37 +962,87 @@ try:
     if checkpoint_roots:
         targeted = None
         body_profiles = []
-        # Compact corpus runs admit a small batch at a time into the same
-        # persistent session.  This preserves shared knowledge and affected-
-        # region convergence while avoiding both one scheduler drain per body
-        # and the enormous topology wave produced by collective admission.
-        # Admit bounded cohorts into the same persistent scheduler. One root
-        # per drain repeats global stability checks and convergence work for
-        # every signature body; admitting the entire repository at once can
-        # create an unnecessarily large unstable topology wave. Eight roots
-        # preserves frequent durable progress while allowing related demands
-        # to share discovery and SCC convergence.
+        # Every root already coalesces all observations produced by one
+        # callable body, while the session retains facts, summaries, and
+        # topology across roots. Admit independent roots together, but never
+        # place two bodies backed by the same definition binding in one wave:
+        # their shared class/function prerequisite must stabilize before its
+        # next consumer is admitted. This avoids both one global scheduler
+        # drain per body and the convergence explosion caused by admitting
+        # sibling bodies simultaneously.
+        def admission_group(root_address):
+            body_id = getattr(
+                root_address.subject, "body_morphism_id", ""
+            )
+            for provider in session.targeted_body_providers:
+                if body_id not in provider.bodies_by_id:
+                    continue
+                return (
+                    id(provider),
+                    provider.body_binding_names.get(body_id, body_id),
+                )
+            return ("unowned", body_id)
+
+        def admission_batches(roots):
+            grouped = {}
+            group_order = {}
+            for ordinal, root_address in enumerate(roots):
+                group = admission_group(root_address)
+                grouped.setdefault(group, []).append(root_address)
+                group_order.setdefault(group, ordinal)
+            minimum_batch_count = max(
+                (len(roots) + checkpoint_size - 1) // checkpoint_size,
+                max((len(items) for items in grouped.values()), default=0),
+            )
+            batches = [[] for _ in range(minimum_batch_count)]
+            batch_groups = [set() for _ in range(minimum_batch_count)]
+            # Pack the most constrained bindings first, then place every root
+            # in the least-filled legal wave. The lower bound is the larger
+            # of capacity and maximum binding multiplicity; add a wave only
+            # if the greedy packing cannot realize that bound. A wave still
+            # contains at most one consumer of any shared definition.
+            ordered_groups = sorted(
+                grouped,
+                key=lambda group: (-len(grouped[group]), group_order[group]),
+            )
+            for group in ordered_groups:
+                for root_address in grouped[group]:
+                    candidates = [
+                        index for index, current in enumerate(batches)
+                        if len(current) < checkpoint_size
+                        and group not in batch_groups[index]
+                    ]
+                    if not candidates:
+                        batches.append([])
+                        batch_groups.append(set())
+                        candidates = [len(batches) - 1]
+                    index = min(candidates, key=lambda item: (
+                        len(batches[item]), item,
+                    ))
+                    batches[index].append(root_address)
+                    batch_groups[index].add(group)
+            return tuple(tuple(batch) for batch in batches)
         requested_tail_start = (
             min(checkpoint_tail_start, len(signature_roots))
             if checkpoint_tail_start >= 0 else 0
         )
-        prefix = tuple(
-            signature_roots[index:index + checkpoint_size]
-            for index in range(0, requested_tail_start, checkpoint_size)
-        ) if checkpoint_tail_start >= 0 and checkpoint_replay_prefix else ()
+        prefix = (
+            admission_batches(signature_roots[:requested_tail_start])
+            if checkpoint_tail_start >= 0 and checkpoint_replay_prefix else ()
+        )
         # A no-prefix tail is an explicit diagnostic slice: it identifies hot
         # later roots without pretending to measure the reuse accumulated by
         # the complete persistent session. Production and acceptance runs
         # retain prefix replay or execute the full root sequence directly.
         tail_start = requested_tail_start
-        tail_size = 1 if checkpoint_tail_start >= 0 else checkpoint_size
         tail_end = (
             min(len(signature_roots), tail_start + checkpoint_tail_count)
             if checkpoint_tail_count > 0 else len(signature_roots)
         )
-        root_batches = prefix + tuple(
-            signature_roots[index:index + tail_size]
-            for index in range(tail_start, tail_end, tail_size)
+        root_batches = prefix + (
+            tuple((root,) for root in signature_roots[tail_start:tail_end])
+            if checkpoint_tail_start >= 0
+            else admission_batches(signature_roots[tail_start:tail_end])
         )
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
@@ -1186,11 +1263,9 @@ try:
                     ],
                 }
             )
-            # One compact line per eight-root cohort is intentionally retained
-            # in production-light runs. It is negligible beside convergence
-            # work and survives a bounded subprocess timeout, unlike the final
-            # JSON summary, so large-repository replay growth remains
-            # diagnosable without enabling detailed tracing.
+            # One compact line per dependency-safe checkpoint is intentionally
+            # retained in production-light runs. It survives a bounded
+            # subprocess timeout, unlike the final JSON summary.
             print(
                 f"ARCHWAY_BODY {index}/{len(root_batches)} "
                 f"{body_profile['seconds']:.6f} "
@@ -1366,7 +1441,7 @@ try:
             "signature_body_roots": len(all_signature_roots),
             "body_profiles": body_profiles,
             "timed_out_body": timed_out_body,
-            "forward_events": len(forward.events),
+            "forward_events": len(forward.events) if forward is not None else 0,
             "targeted_events": len(targeted.events) if targeted is not None else 0,
             "resolved_facts": (
                 len(session.store.snapshot().resolved_facts)
@@ -1433,6 +1508,11 @@ try:
         - observation_projection_seconds
     )
 except Exception as exc:
+    print(
+        f"ARCHWAY_FAILURE {type(exc).__name__}: {exc}",
+        file=sys.stderr,
+        flush=True,
+    )
     partial_summary = {}
     if "sampling_profile" in locals() and sampling_profile is not None:
         partial_summary["sampling_profile"] = sampling_profile
@@ -1504,6 +1584,8 @@ os._exit(0)
             str(forward_timeout or 0),
             "disable-cyclic-gc" if disable_cyclic_gc else "cyclic-gc",
             "replay-prefix" if checkpoint_replay_prefix else "skip-prefix",
+            "run-forward-seed" if run_forward_seed else "skip-forward-seed",
+            "sample-session-open" if sample_session_open else "no-session-sample",
         ]
         progress_stream = None
         if progress_log is not None:
