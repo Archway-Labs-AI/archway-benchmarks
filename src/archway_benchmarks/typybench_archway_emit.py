@@ -569,6 +569,7 @@ def _run_successor_repo_probe(
     checkpoint_size: int = 8,
     checkpoint_tail_start: int | None = None,
     checkpoint_tail_count: int | None = None,
+    checkpoint_replay_prefix: bool = True,
     body_label: str | None = None,
     body_labels: tuple[str, ...] | None = None,
     body_timeout: int | None = None,
@@ -659,6 +660,7 @@ requested_observation_kinds = frozenset(
 sample_forward = sys.argv[16] == "sample-forward"
 requested_forward_timeout = int(sys.argv[17]) or None
 disable_cyclic_gc = sys.argv[18] == "disable-cyclic-gc"
+checkpoint_replay_prefix = sys.argv[19] == "replay-prefix"
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -943,12 +945,19 @@ try:
         # create an unnecessarily large unstable topology wave. Eight roots
         # preserves frequent durable progress while allowing related demands
         # to share discovery and SCC convergence.
-        prefix_end = min(checkpoint_tail_start, len(signature_roots))
+        requested_tail_start = (
+            min(checkpoint_tail_start, len(signature_roots))
+            if checkpoint_tail_start >= 0 else 0
+        )
         prefix = tuple(
             signature_roots[index:index + checkpoint_size]
-            for index in range(0, prefix_end, checkpoint_size)
-        ) if checkpoint_tail_start >= 0 else ()
-        tail_start = prefix_end if checkpoint_tail_start >= 0 else 0
+            for index in range(0, requested_tail_start, checkpoint_size)
+        ) if checkpoint_tail_start >= 0 and checkpoint_replay_prefix else ()
+        # A no-prefix tail is an explicit diagnostic slice: it identifies hot
+        # later roots without pretending to measure the reuse accumulated by
+        # the complete persistent session. Production and acceptance runs
+        # retain prefix replay or execute the full root sequence directly.
+        tail_start = requested_tail_start
         tail_size = 1 if checkpoint_tail_start >= 0 else checkpoint_size
         tail_end = (
             min(len(signature_roots), tail_start + checkpoint_tail_count)
@@ -1494,6 +1503,7 @@ os._exit(0)
             "sample-forward" if sample_forward else "no-forward-sample",
             str(forward_timeout or 0),
             "disable-cyclic-gc" if disable_cyclic_gc else "cyclic-gc",
+            "replay-prefix" if checkpoint_replay_prefix else "skip-prefix",
         ]
         progress_stream = None
         if progress_log is not None:
