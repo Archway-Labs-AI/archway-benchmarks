@@ -986,6 +986,11 @@ try:
             applications_before = frozenset(
                 summary_registry.applications
             ) if diagnostic_details and summary_registry is not None else frozenset()
+            initialized_modules_before = frozenset(
+                module_name
+                for module_name, module_root in session.module_roots.items()
+                if session.store.resolved(module_root) is not None
+            ) if diagnostic_details else frozenset()
             telemetry_before = (
                 session.scheduler.production_family_telemetry
                 if diagnostic_details else None
@@ -1091,6 +1096,29 @@ try:
                     ).most_common(12)
                     if diagnostic_details and summary_registry is not None
                     else []
+                ),
+                "top_new_application_bodies": (
+                    Counter(
+                        body_labels.get(
+                            spec.callable_value.body_morphism_id,
+                            spec.callable_value.body_morphism_id,
+                        )
+                        for application, spec
+                        in summary_registry.applications.items()
+                        if application not in applications_before
+                    ).most_common(24)
+                    if diagnostic_details and summary_registry is not None
+                    else []
+                ),
+                "new_initialized_modules": (
+                    sorted(
+                        module_name
+                        for module_name, module_root
+                        in session.module_roots.items()
+                        if module_name not in initialized_modules_before
+                        and session.store.resolved(module_root) is not None
+                    )
+                    if diagnostic_details else []
                 ),
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
