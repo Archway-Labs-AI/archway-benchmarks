@@ -104,9 +104,13 @@ def main() -> None:
         )
     if args.sample_body_label is not None and args.sample_rate_hz is None:
         parser.error("--sample-body-label requires --sample-rate-hz")
+    source_root = args.source_root
+    untyped_root = source_root / "repo_without_types"
+    if untyped_root.is_dir():
+        source_root = untyped_root
     result = _run_successor_repo_probe(
         engine_worktree=args.engine_worktree,
-        source_root=args.source_root,
+        source_root=source_root,
         runner=("hatch", "run", "python"),
         timeout=args.timeout,
         progress_log=args.progress_log,
@@ -242,8 +246,14 @@ def main() -> None:
         "invocation_application_hotspots": summary.get(
             "invocation_application_hotspots"
         ),
+        "invocation_product_demand_hotspots": summary.get(
+            "invocation_product_demand_hotspots"
+        ),
         "invocation_application_runtime_hotspots": summary.get(
             "invocation_application_runtime_hotspots"
+        ),
+        "invocation_application_invalidation_hotspots": summary.get(
+            "invocation_application_invalidation_hotspots"
         ),
         "sampling_profile": sampling_profile,
         "unresolved_summary_bodies": summary.get(

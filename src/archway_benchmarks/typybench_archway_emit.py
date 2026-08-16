@@ -1567,8 +1567,14 @@ try:
             "invocation_application_hotspots": list(
                 session.invocation_application_hotspots()
             ),
+            "invocation_product_demand_hotspots": list(
+                session.invocation_product_demand_hotspots()
+            ),
             "invocation_application_runtime_hotspots": list(
                 session.invocation_application_runtime_hotspots()
+            ) if diagnostic_details else [],
+            "invocation_application_invalidation_hotspots": list(
+                session.invocation_application_invalidation_hotspots()
             ) if diagnostic_details else [],
             "sampling_profile": sampling_profile,
             "unresolved_summary_bodies": dict(
