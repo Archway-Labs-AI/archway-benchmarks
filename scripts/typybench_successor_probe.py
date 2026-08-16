@@ -84,6 +84,14 @@ def main() -> None:
         action="store_true",
         help="exercise the prediction projection used by the corpus emitter",
     )
+    parser.add_argument(
+        "--contextual-summary-evaluation",
+        action="store_true",
+        help=(
+            "expand callable applications into the diagnostic contextual "
+            "production graph instead of using composed summaries"
+        ),
+    )
     args = parser.parse_args()
     if (
         args.body_timeout is not None
@@ -118,6 +126,7 @@ def main() -> None:
         record_timings=args.record_timings,
         diagnostic_details=not args.production_light,
         collect_predictions=args.collect_predictions,
+        contextual_summary_evaluation=args.contextual_summary_evaluation,
         disable_cyclic_gc=args.disable_cyclic_gc,
         observation_kinds=frozenset((
             "parameter",
@@ -210,6 +219,7 @@ def main() -> None:
         "requested_addresses": summary.get("requested_addresses"),
         "requested_body_roots": summary.get("requested_body_roots"),
         "signature_body_roots": summary.get("signature_body_roots"),
+        "component_hotspots": summary.get("component_hotspots"),
         "morphism_transfer_reuse": (
             summary.get("morphism_transfer_reuse")
         ),
@@ -228,6 +238,12 @@ def main() -> None:
         "invocation_contexts": top_counts(summary.get("invocation_contexts")),
         "invocation_inputs": top_counts(summary.get("invocation_inputs")),
         "invocation_admissions": top_counts(summary.get("invocation_admissions")),
+        "invocation_application_hotspots": summary.get(
+            "invocation_application_hotspots"
+        ),
+        "invocation_application_runtime_hotspots": summary.get(
+            "invocation_application_runtime_hotspots"
+        ),
         "sampling_profile": sampling_profile,
         "unresolved_summary_bodies": summary.get(
             "unresolved_summary_bodies"

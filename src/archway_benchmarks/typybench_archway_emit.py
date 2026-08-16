@@ -584,6 +584,7 @@ def _run_successor_repo_probe(
     forward_timeout: int | None = None,
     record_timings: bool = False,
     diagnostic_details: bool = True,
+    contextual_summary_evaluation: bool = False,
     collect_predictions: bool = True,
     observation_kinds: frozenset[str] = frozenset((
         "parameter", "return",
@@ -677,6 +678,7 @@ run_forward_seed = sys.argv[20] == "run-forward-seed"
 sample_session_open = sys.argv[21] == "sample-session-open"
 checkpoint_batch_start = int(sys.argv[22])
 checkpoint_batch_count = int(sys.argv[23])
+contextual_summary_evaluation = sys.argv[24] == "contextual-summaries"
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -838,10 +840,17 @@ try:
             modules, entry, record_events=False,
             record_timings=record_timings,
             record_telemetry=diagnostic_details,
+            # TypyBench observes a repository as an importable library surface;
+            # it does not identify an executable entry point.  Keep one root
+            # for bulk import seeding, but bind every module's ``__name__`` to
+            # its qualified import name.  Treating an arbitrary shallow module
+            # as ``__main__`` executes CLI guards and admits an unrelated whole
+            # application call graph into signature inference.
+            possible_entry_modules=frozenset(),
             body_observations_only=True,
             class_field_observations=True,
             callable_input_exact_limit=callable_input_exact_limit,
-            contextual_summary_evaluation=True,
+            contextual_summary_evaluation=contextual_summary_evaluation,
         )
     finally:
         if session_profiler is not None:
@@ -886,7 +895,14 @@ try:
         signal.signal(signal.SIGALRM, timeout_forward)
         signal.alarm(requested_forward_timeout)
     try:
-        forward = session.run_forward() if run_forward_seed else None
+        # TypyBench requests repository-wide type observations.  Seed those
+        # observations as one shared reduced-product wave; backward relevance
+        # admits concrete/control/call coordinates when type production needs
+        # them, without eagerly evaluating the full executable product.
+        forward = (
+            session.run_type_priority_forward()
+            if run_forward_seed else None
+        )
     except TimeoutError:
         timed_out_forward = True
         raise
@@ -1433,6 +1449,32 @@ try:
         session.invocation_registry.callable_summaries
         if session.invocation_registry is not None else None
     )
+    component_hotspots = (
+        session.scheduler.component_hotspots()
+        if diagnostic_details else ()
+    )
+    if component_hotspots and summary_registry is not None:
+        callable_labels = {
+            body_id: f"{boundary.module_name}:{boundary.qualified_name}"
+            for body_id, boundary
+            in session.callable_boundaries_by_body.items()
+        }
+        application_labels = {
+            address.context: callable_labels.get(
+                spec.callable_value.body_morphism_id,
+                spec.callable_value.body_morphism_id,
+            )
+            for address, spec in summary_registry.applications.items()
+        }
+        component_hotspots = tuple({
+            **item,
+            "callable_application_bodies": tuple(sorted({
+                application_labels.get(context, context)
+                for context in item.get(
+                    "callable_application_contexts", ()
+                )
+            })),
+        } for item in component_hotspots)
     unresolved_summary_bodies = Counter()
     if diagnostic_details and collect_predictions and summary_registry is not None:
         callable_labels = {
@@ -1480,6 +1522,9 @@ try:
                 "observation_projection": observation_projection_seconds,
             },
             "scheduler": scheduler_telemetry,
+            "component_hotspots": (
+                component_hotspots
+            ),
             "gc": gc_profile_snapshot(),
             "production_replay_hotspots": (
                 session.scheduler.production_replay_hotspots()
@@ -1506,13 +1551,19 @@ try:
             ) if diagnostic_details else {},
             "invocation_contexts": dict(
                 session.invocation_context_counts()
-            ) if diagnostic_details else {},
+            ),
             "invocation_inputs": dict(
                 session.invocation_input_growth_counts()
-            ) if diagnostic_details else {},
+            ),
             "invocation_admissions": dict(
                 session.invocation_admission_counts()
-            ) if diagnostic_details else {},
+            ),
+            "invocation_application_hotspots": list(
+                session.invocation_application_hotspots()
+            ),
+            "invocation_application_runtime_hotspots": list(
+                session.invocation_application_runtime_hotspots()
+            ) if diagnostic_details else [],
             "sampling_profile": sampling_profile,
             "unresolved_summary_bodies": dict(
                 unresolved_summary_bodies.most_common(32)
@@ -1615,6 +1666,10 @@ os._exit(0)
                 if checkpoint_batch_start is not None else -1
             ),
             str(checkpoint_batch_count or 0),
+            (
+                "contextual-summaries"
+                if contextual_summary_evaluation else "composed-summaries"
+            ),
         ]
         progress_stream = None
         if progress_log is not None:
