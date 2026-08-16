@@ -256,6 +256,7 @@ def main() -> None:
         "provider_set_change_counts_by_family": scheduler.get(
             "provider_set_change_counts_by_family"
         ),
+        "provider_set_hotspots": scheduler.get("provider_set_hotspots"),
         "top_output_owner_operations": sorted(
             (scheduler.get(
                 "output_owner_creations_by_operation_family"
