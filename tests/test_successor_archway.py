@@ -415,3 +415,25 @@ def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
 
     assert predictions[0].types == frozenset(("int",))
     assert result.gaps == []
+def test_typeevalpy_custom_corpus_discovers_adjacent_external_dependency(
+    tmp_path,
+):
+    corpus = tmp_path / "micro-benchmark" / "python_features"
+    case = corpus / "external" / "attribute"
+    case.mkdir(parents=True)
+    (case / "main.py").write_text("from external_package.ext import Cls\n")
+    (case / "main_gt.json").write_text("[]")
+    dependency = (
+        tmp_path
+        / "micro-benchmark-excluded"
+        / "typeevalpy_external_module"
+    )
+    dependency.mkdir(parents=True)
+
+    benchmark = TypeEvalPyBenchmark(corpus)
+
+    assert benchmark.dependency_roots == (dependency,)
+
+    benchmark = TypeEvalPyBenchmark(corpus.parent)
+
+    assert benchmark.dependency_roots == (dependency,)
