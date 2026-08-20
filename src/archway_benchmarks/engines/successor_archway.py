@@ -77,7 +77,7 @@ class SuccessorGapAudit:
 
 
 class SuccessorArchwayAnalysisEngine:
-    """Translate once and run one native type-prioritized session."""
+    """Translate once and run one coordinated type-priority session."""
 
     name = "archway-successor-analysis"
 
@@ -85,10 +85,8 @@ class SuccessorArchwayAnalysisEngine:
         self,
         *,
         record_events: bool = True,
-        use_coarse_oracle: bool = False,
     ) -> None:
         self.record_events = record_events
-        self.use_coarse_oracle = use_coarse_oracle
 
     def analyze(self, translation: Any) -> SuccessorArchwayResult:
         if not isinstance(translation, ArchwayTranslation):
@@ -119,17 +117,18 @@ class SuccessorArchwayAnalysisEngine:
                 name: item.morphism
                 for name, item in program.modules.items()
             }
+            # The sparse lifted product is the authoritative local carrier
+            # for a type-priority workload. Native scalar cells remain the
+            # targeted projection mechanism for observations not emitted at
+            # a forward or summary boundary; they are not a replacement for
+            # coordinated local interpretation of each diagram morphism.
             session = open_hybrid_program_session(
                 modules,
                 "main",
                 record_events=self.record_events,
-                enable_coarse_fallback=self.use_coarse_oracle,
+                enable_coarse_fallback=True,
             )
-            forward = (
-                session.run_forward()
-                if self.use_coarse_oracle
-                else session.run_native_type_workload()
-            )
+            forward = session.run_forward()
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
