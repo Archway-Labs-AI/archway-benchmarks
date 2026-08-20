@@ -60,6 +60,31 @@ def test_successor_adapter_reads_written_container_lvalue(tmp_path):
     assert result.gaps == []
 
 
+def test_successor_adapter_preserves_reachability_after_refused_call(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "from collections import namedtuple\n"
+        "def unsupported():\n"
+        "    point = namedtuple('Point', ['x'])\n"
+        "    return point(1)\n"
+        "unknown = unsupported()\n"
+        "def later():\n"
+        "    return 1\n"
+        "result = later()\n",
+        """[
+          {"file":"main.py","line_number":8,"col_offset":1,"variable":"result","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_successor_adapter_reconciles_autogen_lambda_parameter_kind(tmp_path):
     snippet = _snippet(
         tmp_path,
