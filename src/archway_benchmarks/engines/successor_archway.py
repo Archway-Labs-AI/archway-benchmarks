@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from collections import Counter
 from pathlib import Path
 import re
@@ -77,12 +77,18 @@ class SuccessorGapAudit:
 
 
 class SuccessorArchwayAnalysisEngine:
-    """Translate once and run one type-prioritized forward session."""
+    """Translate once and run one native type-prioritized session."""
 
     name = "archway-successor-analysis"
 
-    def __init__(self, *, record_events: bool = True) -> None:
+    def __init__(
+        self,
+        *,
+        record_events: bool = True,
+        use_coarse_oracle: bool = False,
+    ) -> None:
         self.record_events = record_events
+        self.use_coarse_oracle = use_coarse_oracle
 
     def analyze(self, translation: Any) -> SuccessorArchwayResult:
         if not isinstance(translation, ArchwayTranslation):
@@ -117,8 +123,13 @@ class SuccessorArchwayAnalysisEngine:
                 modules,
                 "main",
                 record_events=self.record_events,
+                enable_coarse_fallback=self.use_coarse_oracle,
             )
-            forward = session.run_forward()
+            forward = (
+                session.run_forward()
+                if self.use_coarse_oracle
+                else session.run_native_type_workload()
+            )
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
@@ -356,10 +367,21 @@ def _map_container_path(session, location: Location):
     )
     if not slots:
         return ()
+    roots = _map_observations(
+        session.type_observations(), replace(location, name=base)
+    )
+    occurrence_paths = (
+        session.occurrence_path_observations(roots, slots)
+        if roots and hasattr(session, "occurrence_path_observations")
+        else ()
+    )
+    candidates = occurrence_paths or session.container_path_observations(
+        base, slots
+    )
     return tuple(
-        item for item in session.container_path_observations(base, slots)
-        if item.kind == location.kind
-        and item.function == location.function
+        item for item in candidates
+        if _observation_kind_matches(item, location)
+        and _observation_scope_matches(item, location)
         and item.position is not None
         and item.position.row == location.line
     )
