@@ -295,6 +295,10 @@ def _observation_kind_matches(item, location: Location) -> bool:
         location.function == "lambda"
         and location.kind == "variable"
         and item.kind == "parameter"
+    ) or (
+        location.function is not None
+        and location.kind == "parameter"
+        and item.kind == "variable"
     )
 
 

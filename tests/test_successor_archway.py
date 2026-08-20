@@ -56,6 +56,27 @@ def test_successor_adapter_reconciles_autogen_lambda_parameter_kind(tmp_path):
     assert result.gaps == []
 
 
+def test_successor_adapter_maps_parameter_update_binding_occurrence(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def increment(value):\n"
+        "    value += 1\n"
+        "    return value\n"
+        "result = increment(1)\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":5,"function":"increment","parameter":"value","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
     snippet = _snippet(
         tmp_path,
