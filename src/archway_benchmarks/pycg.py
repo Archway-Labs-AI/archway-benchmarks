@@ -504,7 +504,6 @@ def run_archway_pycg(
     successor_summarize_callee_results: bool = False,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
-    successor_callable_input_exact_limit: int | None = None,
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -563,9 +562,6 @@ def run_archway_pycg(
                 successor_sampling_rate_hz=successor_sampling_rate_hz,
                 successor_partial_graph_checkpoint_seconds=(
                     successor_partial_graph_checkpoint_seconds
-                ),
-                successor_callable_input_exact_limit=(
-                    successor_callable_input_exact_limit
                 ),
             )
             if isinstance(produced, SuccessorEdgeResult):
@@ -667,7 +663,6 @@ def _archway_call_edges_with_timeout(
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
-    successor_callable_input_exact_limit: int | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
     if case_timeout_seconds is None:
         return _produce_archway_call_edges(
@@ -684,9 +679,6 @@ def _archway_call_edges_with_timeout(
             successor_sampling_rate_hz=successor_sampling_rate_hz,
             successor_partial_graph_checkpoint_seconds=(
                 successor_partial_graph_checkpoint_seconds
-            ),
-            successor_callable_input_exact_limit=(
-                successor_callable_input_exact_limit
             ),
         )
     if case_timeout_seconds <= 0:
@@ -708,7 +700,6 @@ def _archway_call_edges_with_timeout(
             successor_summarize_callee_results,
             successor_sampling_rate_hz,
             successor_partial_graph_checkpoint_seconds,
-            successor_callable_input_exact_limit,
         ),
     )
     process.start()
@@ -811,7 +802,6 @@ def _archway_call_edges_worker(
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
-    successor_callable_input_exact_limit: int | None = None,
 ) -> None:
     try:
         predicted = _produce_archway_call_edges(
@@ -828,9 +818,6 @@ def _archway_call_edges_worker(
             successor_sampling_rate_hz=successor_sampling_rate_hz,
             successor_partial_graph_checkpoint_seconds=(
                 successor_partial_graph_checkpoint_seconds
-            ),
-            successor_callable_input_exact_limit=(
-                successor_callable_input_exact_limit
             ),
             successor_progress=(
                 lambda evidence: result_queue.put(("progress", evidence))
@@ -857,7 +844,6 @@ def _produce_archway_call_edges(
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
-    successor_callable_input_exact_limit: int | None = None,
     successor_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
     if edge_provider == "successor":
@@ -870,9 +856,6 @@ def _produce_archway_call_edges(
             sampling_rate_hz=successor_sampling_rate_hz,
             partial_graph_checkpoint_seconds=(
                 successor_partial_graph_checkpoint_seconds
-            ),
-            callable_input_exact_limit=(
-                successor_callable_input_exact_limit
             ),
         )
     if edge_provider == "coordinated":
@@ -909,7 +892,6 @@ def successor_archway_call_edge_result(
     summarize_callee_results: bool = False,
     sampling_rate_hz: float | None = None,
     partial_graph_checkpoint_seconds: float | None = None,
-    callable_input_exact_limit: int | None = None,
 ) -> SuccessorEdgeResult:
     """Project one persistent diagram-only reduced-product program session."""
 
@@ -944,7 +926,6 @@ def successor_archway_call_edge_result(
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
         ),
-        callable_input_exact_limit=callable_input_exact_limit,
     )
     session_construction_seconds = (
         time.perf_counter() - session_construction_started
@@ -2415,15 +2396,6 @@ def main(argv: list[str] | None = None) -> int:
             "because projection has measurable cost."
         ),
     )
-    parser.add_argument(
-        "--successor-callable-input-exact-limit",
-        type=int,
-        default=None,
-        help=(
-            "Opt into bounded callable-input partitions with this many exact "
-            "patterns per compatible interface before an overflow partition."
-        ),
-    )
     args = parser.parse_args(argv)
 
     result = run_archway_pycg(
@@ -2444,9 +2416,6 @@ def main(argv: list[str] | None = None) -> int:
         successor_sampling_rate_hz=args.successor_sampling_rate_hz,
         successor_partial_graph_checkpoint_seconds=(
             args.successor_partial_graph_checkpoint_seconds
-        ),
-        successor_callable_input_exact_limit=(
-            args.successor_callable_input_exact_limit
         ),
     )
     payload = result.to_jsonable()

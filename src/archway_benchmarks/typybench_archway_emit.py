@@ -413,7 +413,6 @@ def _run_successor_repo_probe(
     checkpoint_tail_count: int | None = None,
     body_label: str | None = None,
     body_timeout: int | None = None,
-    callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
     sample_body_label: str | None = None,
     record_timings: bool = False,
@@ -430,8 +429,6 @@ def _run_successor_repo_probe(
         raise ValueError(
             "body_timeout requires body_label or sample_body_label"
         )
-    if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
-        raise ValueError("callable_input_exact_limit must be non-negative")
     if checkpoint_size <= 0:
         raise ValueError("checkpoint_size must be positive")
     if checkpoint_tail_start is not None and checkpoint_tail_start < 0:
@@ -461,16 +458,14 @@ demand_limit = int(sys.argv[2]) or None
 checkpoint_roots = sys.argv[3] == "checkpoint"
 requested_body_label = sys.argv[4] or None
 requested_body_timeout = int(sys.argv[5]) or None
-exact_limit_arg = int(sys.argv[6])
-callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
-sample_rate_hz = float(sys.argv[7]) or None
-sample_body_label = sys.argv[8] or None
-record_timings = sys.argv[9] == "timings"
-diagnostic_details = sys.argv[10] == "diagnostics"
-collect_predictions = sys.argv[11] == "predictions"
-checkpoint_size = int(sys.argv[12])
-checkpoint_tail_start = int(sys.argv[13])
-checkpoint_tail_count = int(sys.argv[14])
+sample_rate_hz = float(sys.argv[6]) or None
+sample_body_label = sys.argv[7] or None
+record_timings = sys.argv[8] == "timings"
+diagnostic_details = sys.argv[9] == "diagnostics"
+collect_predictions = sys.argv[10] == "predictions"
+checkpoint_size = int(sys.argv[11])
+checkpoint_tail_start = int(sys.argv[12])
+checkpoint_tail_count = int(sys.argv[13])
 
 def analysis_source_roots():
     # Respect Python's conventional src layout.  Repository-wide prediction
@@ -546,8 +541,6 @@ try:
         modules, entry, record_events=False,
         record_timings=record_timings,
         signature_observations_only=True,
-        callable_input_exact_limit=callable_input_exact_limit,
-        contextual_summary_evaluation=True,
     )
     session_open_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
@@ -978,10 +971,6 @@ print(json.dumps(out, sort_keys=True))
             "checkpoint" if checkpoint_roots else "collective",
             body_label or "",
             str(body_timeout or 0),
-            str(
-                callable_input_exact_limit
-                if callable_input_exact_limit is not None else -1
-            ),
             str(sample_rate_hz or 0),
             sample_body_label or "",
             "timings" if record_timings else "no-timings",
