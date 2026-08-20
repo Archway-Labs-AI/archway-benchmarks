@@ -118,7 +118,7 @@ class SuccessorArchwayAnalysisEngine:
                 "main",
                 record_events=self.record_events,
             )
-            forward = session.run_forward()
+            forward = session.run_type_priority_forward()
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
