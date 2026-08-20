@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import sqlite3
 import subprocess
 import sys
 import time
@@ -24,6 +25,17 @@ from archway_benchmarks.engines.successor_archway import (
     SuccessorArchwayAnalysisEngine,
     SuccessorTypeEvalPyAdapter,
 )
+from archway_benchmarks.coverage import CoverageStatus
+from archway_benchmarks.scoring.typeevalpy import _aggregate, score_snippet
+from archway_benchmarks.store import (
+    connect as connect_store,
+    create_run,
+    record_scores,
+    record_snippet,
+    record_snippet_scores,
+)
+from archway_benchmarks.benchmarks.typeevalpy import _location_to_record
+from archway_benchmarks.types import Location
 
 
 def _revision(path: Path) -> str:
@@ -78,6 +90,100 @@ def _summary(records: dict[str, dict], total_snippets: int) -> dict[str, object]
     }
 
 
+def _prediction_record(annotation) -> dict[str, object]:
+    location = annotation.location
+    return {
+        "file": location.file,
+        "line": location.line,
+        "col": location.col,
+        "kind": location.kind,
+        "name": location.name,
+        "function": location.function,
+        "types": sorted(annotation.types),
+    }
+
+
+def _prediction_map(record: dict) -> dict[Location, frozenset[str]]:
+    return {
+        Location(
+            file=str(item["file"]),
+            line=int(item["line"]),
+            col=(int(item["col"]) if item.get("col") is not None else None),
+            kind=str(item["kind"]),
+            name=str(item["name"]),
+            function=(
+                str(item["function"])
+                if item.get("function") is not None else None
+            ),
+        ): frozenset(str(value) for value in item["types"])
+        for item in record.get("prediction_records", ())
+    }
+
+
+def _persist_run(
+    *,
+    benchmark,
+    snippets,
+    records: dict[str, dict],
+    db_path: Path,
+    notes: str | None,
+    metadata: dict[str, object],
+) -> int:
+    per_snippet = []
+    for snippet in snippets:
+        predictions = _prediction_map(records[snippet.suite_path])
+        per_snippet.append(score_snippet(
+            suite_path=snippet.suite_path,
+            ground_truth={
+                item.location: item.types for item in snippet.annotations
+            },
+            predictions=predictions,
+            location_to_record=_location_to_record,
+        ))
+    scores = _aggregate(per_snippet)
+    with connect_store(db_path) as connection:
+        run_id = create_run(
+            connection,
+            benchmark=benchmark.name,
+            engine="archway-translation+archway-successor-analysis",
+            stub_accuracy=None,
+            seed=None,
+            notes=notes,
+            metadata=metadata,
+        )
+        for snippet in snippets:
+            record_snippet(
+                connection,
+                run_id,
+                suite_path=snippet.suite_path,
+                source=snippet.source,
+                translation_status=CoverageStatus.COVERED,
+            )
+        record_snippet_scores(connection, run_id, per_snippet)
+        record_scores(connection, run_id, scope="all", scores=scores)
+        record_scores(connection, run_id, scope="covered", scores=scores)
+    return run_id
+
+
+def _completed_run_id(summary_path: Path, db_path: Path) -> int | None:
+    if not summary_path.is_file() or not db_path.is_file():
+        return None
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    if Path(str(summary.get("db_path", ""))) != db_path:
+        return None
+    run_id = summary.get("local_run_id")
+    if not isinstance(run_id, int):
+        return None
+    connection = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    try:
+        row = connection.execute(
+            "select 1 from runs where id=?", (run_id,)
+        ).fetchone()
+    finally:
+        connection.close()
+    return run_id if row is not None else None
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("corpus_root", type=Path)
@@ -87,6 +193,8 @@ def main() -> None:
     parser.add_argument("--progress-every", type=int, default=25)
     parser.add_argument("--max-snippets", type=int)
     parser.add_argument("--no-resume", action="store_true")
+    parser.add_argument("--db", type=Path)
+    parser.add_argument("--notes")
     args = parser.parse_args()
     if args.per_snippet_timeout <= 0:
         parser.error("--per-snippet-timeout must be positive")
@@ -112,6 +220,7 @@ def main() -> None:
         "corpus_root": str(args.corpus_root.resolve()),
         "engine_revision": _revision(engine_worktree),
         "harness_revision": _revision(harness_root),
+        "corpus_revision": _revision(args.corpus_root.resolve()),
         "snippet_count": len(snippets),
     }
     header, records = (
@@ -122,6 +231,15 @@ def main() -> None:
         raise RuntimeError(
             "checkpoint provenance differs from this run; use a new path"
         )
+    summary_path = args.checkpoint_jsonl.with_suffix(".summary.json")
+    if (
+        not args.no_resume
+        and args.db is not None
+        and len(records) == len(snippets)
+        and _completed_run_id(summary_path, args.db.resolve()) is not None
+    ):
+        print(summary_path.read_text(encoding="utf-8").strip())
+        return
     args.checkpoint_jsonl.parent.mkdir(parents=True, exist_ok=True)
     mode = "w" if header is None or args.no_resume else "a"
     translator = ArchwayTranslationEngine(
@@ -200,6 +318,9 @@ def main() -> None:
                 "targeted_waves": (
                     len(result.targeted_runs) if result is not None else 0
                 ),
+                "prediction_records": [
+                    _prediction_record(item) for item in predictions
+                ],
             }
             stream.write(json.dumps(record, sort_keys=True) + "\n")
             stream.flush()
@@ -230,7 +351,23 @@ def main() -> None:
         os.fsync(stream.fileno())
 
     summary = _summary(records, len(snippets))
-    summary_path = args.checkpoint_jsonl.with_suffix(".summary.json")
+    if args.db is not None:
+        resolved_db = args.db.resolve()
+        summary["local_run_id"] = _persist_run(
+            benchmark=benchmark,
+            snippets=snippets,
+            records=records,
+            db_path=resolved_db,
+            notes=args.notes,
+            metadata={
+                "analysis_surface": "diagram-only",
+                "record_events": False,
+                "session_policy": "persistent-forward-then-targeted",
+                "checkpoint_jsonl": str(args.checkpoint_jsonl.resolve()),
+                **expected_header,
+            },
+        )
+        summary["db_path"] = str(resolved_db)
     temporary = summary_path.with_suffix(summary_path.suffix + ".tmp")
     temporary.write_text(
         json.dumps(summary, indent=2, sort_keys=True) + "\n",
