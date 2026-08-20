@@ -150,6 +150,34 @@ def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
     assert result.targeted_runs == []
 
 
+def test_successor_frontend_resolves_unexported_package_submodule(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "from package import child\n"
+        "result = child.produce()\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":1,"variable":"result","type":["bool"]}
+        ]""",
+    )
+    suite = tmp_path / "assignments" / "forward"
+    package = suite / "package"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "child.py").write_text(
+        "def produce():\n    return True\n"
+    )
+    translation = ArchwayTranslationEngine(corpus_root=tmp_path).translate(
+        snippet.source, snippet.file_path
+    )
+
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     tmp_path,
 ):
