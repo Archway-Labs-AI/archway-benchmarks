@@ -68,7 +68,14 @@ def _load_records(path: Path) -> tuple[dict[str, object] | None, dict[str, dict]
             if item.get("kind") == "header":
                 header = item
             elif item.get("kind") == "snippet":
-                records[item["suite_path"]] = item
+                # Failed attempts remain in the append-only stream as useful
+                # diagnostics, but they are not resumable analysis results.
+                # A later successful attempt for the same suite path replaces
+                # them in the effective checkpoint view.
+                if item.get("error"):
+                    records.pop(item["suite_path"], None)
+                else:
+                    records[item["suite_path"]] = item
     return header, records
 
 

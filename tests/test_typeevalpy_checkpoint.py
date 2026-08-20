@@ -83,3 +83,21 @@ def test_checkpoint_refuses_empty_corpus(tmp_path):
 
     with pytest.raises(RuntimeError, match="no recognized snippets"):
         module._require_nonempty_corpus([], tmp_path)
+
+
+def test_checkpoint_resume_retries_failed_snippet(tmp_path):
+    module = _checkpoint_module()
+    checkpoint = tmp_path / "checkpoint.jsonl"
+    checkpoint.write_text(
+        json.dumps({"kind": "header", "schema_version": 2}) + "\n"
+        + json.dumps({
+            "kind": "snippet",
+            "suite_path": "python_features/authored/retry",
+            "error": "ModuleNotFoundError: missing dependency",
+        }) + "\n"
+    )
+
+    header, records = module._load_records(checkpoint)
+
+    assert header == {"kind": "header", "schema_version": 2}
+    assert records == {}
