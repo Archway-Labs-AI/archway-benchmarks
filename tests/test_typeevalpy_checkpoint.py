@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import sqlite3
 
+import pytest
+
 from archway_benchmarks.types import Annotation, Location, Snippet
 
 
@@ -74,3 +76,10 @@ def test_checkpoint_predictions_finalize_detailed_public_run(tmp_path):
         "local_run_id": run_id,
     }))
     assert module._completed_run_id(summary_path, db_path.resolve()) == run_id
+
+
+def test_checkpoint_refuses_empty_corpus(tmp_path):
+    module = _checkpoint_module()
+
+    with pytest.raises(RuntimeError, match="no recognized snippets"):
+        module._require_nonempty_corpus([], tmp_path)

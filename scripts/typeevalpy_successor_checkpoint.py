@@ -120,6 +120,16 @@ def _prediction_map(record: dict) -> dict[Location, frozenset[str]]:
     }
 
 
+def _require_nonempty_corpus(snippets, corpus_root: Path):
+    """Reject a path mismatch instead of publishing a vacuous baseline."""
+
+    if not snippets:
+        raise RuntimeError(
+            f"TypeEvalPy corpus contains no recognized snippets: {corpus_root}"
+        )
+    return snippets
+
+
 def _persist_run(
     *,
     benchmark,
@@ -210,7 +220,9 @@ def main() -> None:
         raise RuntimeError("sd_core did not load from the requested worktree")
 
     benchmark = TypeEvalPyAutogenBenchmark(args.corpus_root.resolve())
-    snippets = benchmark.load()
+    snippets = _require_nonempty_corpus(
+        benchmark.load(), args.corpus_root.resolve()
+    )
     if args.max_snippets is not None:
         snippets = snippets[:args.max_snippets]
     harness_root = Path(__file__).resolve().parents[1]
