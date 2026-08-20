@@ -38,6 +38,28 @@ def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
     assert result.forward.cache_hits == 0
 
 
+def test_successor_adapter_reads_written_container_lvalue(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def produce():\n"
+        "    return 'value'\n"
+        "items = ['old']\n"
+        "items[0] = produce\n"
+        "result = items[0]()\n",
+        """[
+          {"file":"main.py","line_number":4,"col_offset":1,"variable":"items[0]","type":["callable"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_successor_adapter_reconciles_autogen_lambda_parameter_kind(tmp_path):
     snippet = _snippet(
         tmp_path,
