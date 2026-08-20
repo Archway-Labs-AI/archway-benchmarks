@@ -178,6 +178,38 @@ def test_successor_frontend_resolves_unexported_package_submodule(tmp_path):
     assert result.gaps == []
 
 
+def test_successor_frontend_dotted_import_preserves_root_package(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "import package.child\n"
+        "nested = package.child.produce()\n"
+        "root = package.produce()\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":1,"variable":"nested","type":["list"]},
+          {"file":"main.py","line_number":3,"col_offset":1,"variable":"root","type":["float"]}
+        ]""",
+    )
+    suite = tmp_path / "assignments" / "forward"
+    package = suite / "package"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "def produce():\n    return 1.0\n"
+    )
+    (package / "child.py").write_text(
+        "def produce():\n    return [1]\n"
+    )
+    translation = ArchwayTranslationEngine(corpus_root=tmp_path).translate(
+        snippet.source, snippet.file_path
+    )
+
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     tmp_path,
 ):
