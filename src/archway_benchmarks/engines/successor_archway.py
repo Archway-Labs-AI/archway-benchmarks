@@ -263,7 +263,7 @@ def _map_observations(observations, location: Location):
     exact = tuple(
         item for item in observations
         if _observation_name_matches(item, location.name)
-        and item.kind == location.kind
+        and _observation_kind_matches(item, location)
         and _observation_scope_matches(item, location)
         and item.position is not None
         and item.position.row == location.line
@@ -277,10 +277,24 @@ def _map_observations(observations, location: Location):
     return tuple(
         item for item in observations
         if _observation_name_matches(item, location.name)
-        and item.kind == location.kind
+        and _observation_kind_matches(item, location)
         and _observation_scope_matches(item, location)
         and item.position is not None
         and item.position.row == location.line
+    )
+
+
+def _observation_kind_matches(item, location: Location) -> bool:
+    if item.kind == location.kind:
+        return True
+    # TypeEvalPy autogen encodes lambda parameters in its ``variable`` field,
+    # while the ordinary corpus uses ``parameter`` for the same entity. Keep
+    # the engine's semantic parameter kind and reconcile only this harness
+    # schema difference at the scoring boundary.
+    return (
+        location.function == "lambda"
+        and location.kind == "variable"
+        and item.kind == "parameter"
     )
 
 

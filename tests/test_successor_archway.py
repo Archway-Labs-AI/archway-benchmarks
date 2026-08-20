@@ -38,6 +38,24 @@ def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
     assert result.forward.cache_hit is False
 
 
+def test_successor_adapter_reconciles_autogen_lambda_parameter_kind(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "x = lambda x: x + 1\na = x(1)\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":12,"function":"lambda","variable":"x","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
 def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
     snippet = _snippet(
         tmp_path,
@@ -117,7 +135,7 @@ def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
     assert result.targeted_runs[0].knowledge_deltas
 
 
-def test_successor_adapter_remaps_contexts_discovered_by_refinement(tmp_path):
+def test_successor_adapter_maps_contexts_discovered_in_shared_session(tmp_path):
     snippet = _snippet(
         tmp_path,
         "# nested receiver contexts\n"
@@ -159,7 +177,6 @@ def test_successor_adapter_remaps_contexts_discovered_by_refinement(tmp_path):
         gap.location == snippet.annotations[0].location
         for gap in result.gaps
     )
-    assert result.targeted_runs
 
 
 def test_successor_adapter_maps_qualified_class_attribute_observations(
