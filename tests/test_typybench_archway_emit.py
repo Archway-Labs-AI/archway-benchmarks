@@ -124,6 +124,7 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert profile.analysis_summary == progress
     assert profile.trace_tail == "ARCHWAY_BODY 1/12"
     assert probe_options[0]["diagnostic_details"] is True
+    assert probe_options[0]["record_timings"] is True
 
 
 def test_successor_observations_render_function_signatures() -> None:

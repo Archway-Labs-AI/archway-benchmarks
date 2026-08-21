@@ -284,6 +284,7 @@ def emit_archway_predictions(
             diagnostic_details=(
                 analysis_observation_mode == "diagnostic"
             ),
+            record_timings=(analysis_observation_mode == "diagnostic"),
             observation_kinds=frozenset((
                 "parameter",
                 "return",
