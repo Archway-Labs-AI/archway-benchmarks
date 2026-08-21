@@ -238,6 +238,9 @@ def emit_archway_predictions(
     body_labels: tuple[str, ...] | None = None,
     run_forward_seed: bool = True,
     progress_timeout: int | None = None,
+    sample_session_open: bool = False,
+    sample_rate_hz: float | None = None,
+    session_open_timeout: int | None = None,
     emit_variable_annotations: bool = False,
     emit_class_field_annotations: bool = False,
 ) -> EmitStats:
@@ -292,6 +295,9 @@ def emit_archway_predictions(
             body_labels=body_labels,
             run_forward_seed=run_forward_seed,
             progress_timeout=progress_timeout,
+            sample_session_open=sample_session_open,
+            sample_rate_hz=sample_rate_hz,
+            session_open_timeout=session_open_timeout,
             diagnostic_details=(
                 analysis_observation_mode == "diagnostic"
             ),
@@ -628,6 +634,7 @@ def _run_successor_repo_probe(
     sample_body_label: str | None = None,
     sample_forward: bool = False,
     sample_session_open: bool = False,
+    session_open_timeout: int | None = None,
     run_forward_seed: bool = True,
     forward_timeout: int | None = None,
     record_timings: bool = False,
@@ -672,6 +679,8 @@ def _run_successor_repo_probe(
         raise ValueError("sample_body_label requires sample_rate_hz")
     if sample_forward and sample_rate_hz is None:
         raise ValueError("sample_forward requires sample_rate_hz")
+    if session_open_timeout is not None and session_open_timeout <= 0:
+        raise ValueError("session_open_timeout must be positive")
     if forward_timeout is not None and forward_timeout <= 0:
         raise ValueError("forward_timeout must be positive")
     unsupported_observation_kinds = observation_kinds - {
@@ -726,6 +735,7 @@ checkpoint_batch_start = int(sys.argv[21])
 checkpoint_batch_count = int(sys.argv[22])
 requested_progress_timeout = int(sys.argv[23]) or None
 requested_root_ids = frozenset(json.loads(sys.argv[24]))
+requested_session_open_timeout = int(sys.argv[25]) or None
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -882,6 +892,12 @@ try:
             project_marker="/sd_core/",
         )
         session_profiler.__enter__()
+    if requested_session_open_timeout:
+        def timeout_session_open(_signum, _frame):
+            raise TimeoutError("diagnostic session-open cutoff")
+        signal.signal(signal.SIGALRM, timeout_session_open)
+        signal.alarm(requested_session_open_timeout)
+    session_sampling_profile = None
     try:
         session = open_hybrid_program_session(
             modules, entry, record_events=False,
@@ -898,13 +914,15 @@ try:
             class_field_observations=True,
         )
     finally:
+        signal.alarm(0)
         if session_profiler is not None:
             session_profiler.__exit__(None, None, None)
+            session_sampling_profile = session_profiler.jsonable(
+                top=40, include_stacks=diagnostic_details
+            )
             print(
                 "ARCHWAY_SESSION_PROFILE " + json.dumps(
-                    session_profiler.jsonable(
-                        top=40, include_stacks=diagnostic_details
-                    ),
+                    session_sampling_profile,
                     separators=(",", ":"),
                 ),
                 file=sys.stderr,
@@ -1800,6 +1818,13 @@ except Exception as exc:
     partial_summary = {}
     if "sampling_profile" in locals() and sampling_profile is not None:
         partial_summary["sampling_profile"] = sampling_profile
+    if (
+        "session_sampling_profile" in locals()
+        and session_sampling_profile is not None
+    ):
+        partial_summary["session_sampling_profile"] = (
+            session_sampling_profile
+        )
     if "timed_out_forward" in locals():
         partial_summary["timed_out_forward"] = timed_out_forward
     if "translation_seconds" in locals():
@@ -1873,6 +1898,7 @@ os._exit(0)
             str(checkpoint_batch_count or 0),
             str(progress_timeout or 0),
             json.dumps(tuple(dict.fromkeys(root_ids or ()))),
+            str(session_open_timeout or 0),
         ]
         progress_stream = None
         if progress_log is not None:
