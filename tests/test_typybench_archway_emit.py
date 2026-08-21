@@ -488,6 +488,38 @@ def test_function_types_extracts_signatures_from_engine_projection() -> None:
     }
 
 
+def test_function_types_trace_preserves_raw_events_and_top_origin_spans() -> None:
+    class Trace:
+        def __init__(self) -> None:
+            self.slots = []
+
+        def add_slot(self, **slot) -> None:
+            self.slots.append(slot)
+
+    position = {"row": 2, "col": 11, "end_row": 2, "end_col": 12}
+    parameter_event = {
+        "element": {"kind": "pytype", "name": "builtins.int"}
+    }
+    analysis = {
+        "functions": [{
+            "fn_id": 1,
+            "name": "f",
+            "source_position": {"row": 1},
+            "instantiations": [{
+                "params": {"x": [parameter_event]},
+                "ret": {"element": {"kind": "top"}, "source_position": position},
+            }],
+        }]
+    }
+    trace = Trace()
+
+    _function_types(analysis, trace)
+
+    by_slot = {slot["slot"]: slot for slot in trace.slots}
+    assert by_slot["param:x"]["candidates"][0]["raw_events"] == [parameter_event]
+    assert by_slot["return"]["candidates"][0]["top_origin_positions"] == [position]
+
+
 def test_function_types_normalizes_builtins_nonetype() -> None:
     analysis = {
         "functions": [
