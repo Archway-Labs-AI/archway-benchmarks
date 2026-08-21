@@ -125,6 +125,9 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
         engine_worktree=engine,
         timeout=1,
         analysis_observation_mode="diagnostic",
+        body_labels=("module:slow",),
+        body_timeout=7,
+        run_forward_seed=False,
     )
 
     assert stats.files_failed == 1
@@ -134,6 +137,9 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert profile.trace_tail == "ARCHWAY_BODY 1/12"
     assert probe_options[0]["diagnostic_details"] is True
     assert probe_options[0]["record_timings"] is True
+    assert probe_options[0]["body_labels"] == ("module:slow",)
+    assert probe_options[0]["body_timeout"] == 7
+    assert probe_options[0]["run_forward_seed"] is False
 
 
 def test_successor_observations_render_function_signatures() -> None:

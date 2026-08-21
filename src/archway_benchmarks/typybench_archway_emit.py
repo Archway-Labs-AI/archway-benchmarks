@@ -235,6 +235,8 @@ def emit_archway_predictions(
     analysis_observation_mode: str = "summary",
     checkpoint_roots: bool = True,
     body_timeout: int | None = None,
+    body_labels: tuple[str, ...] | None = None,
+    run_forward_seed: bool = True,
     progress_timeout: int | None = None,
     emit_variable_annotations: bool = False,
     emit_class_field_annotations: bool = False,
@@ -287,6 +289,8 @@ def emit_archway_predictions(
             progress_log=progress_log,
             checkpoint_roots=checkpoint_roots,
             body_timeout=body_timeout,
+            body_labels=body_labels,
+            run_forward_seed=run_forward_seed,
             progress_timeout=progress_timeout,
             diagnostic_details=(
                 analysis_observation_mode == "diagnostic"
