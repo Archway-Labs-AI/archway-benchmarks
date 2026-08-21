@@ -662,6 +662,39 @@ def test_successor_error_retains_terminal_evidence(
     }
 
 
+def test_successor_nonconvergence_scores_retained_partial_edges(
+    tmp_path: Path,
+    monkeypatch,
+):
+    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
+
+    def partially_failing_successor(*args, **kwargs):
+        from archway_benchmarks.pycg import PyCGCaseExecutionError
+
+        raise PyCGCaseExecutionError(
+            "component did not converge",
+            {"phase": "error", "resolved_fact_count": 7},
+            {("main", "main.f")},
+        )
+
+    monkeypatch.setattr(
+        "archway_benchmarks.pycg.successor_archway_call_edge_result",
+        partially_failing_successor,
+    )
+
+    result = run_archway_pycg(
+        corpus_root=tmp_path,
+        engine_root=tmp_path,
+        edge_provider="successor",
+    )
+
+    case = result.cases[0]
+    assert case.status == "partial"
+    assert case.predicted_edges == (("main", "main.f"),)
+    assert case.score.true_positive == 1
+    assert case.analysis_evidence["resolved_fact_count"] == 7
+
+
 def test_run_archway_pycg_uses_successor_provider_by_default(
     tmp_path: Path,
     monkeypatch,

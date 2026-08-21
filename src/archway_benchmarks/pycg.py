@@ -39,9 +39,15 @@ EdgeProvider = Literal[
 
 
 class PyCGCaseExecutionError(RuntimeError):
-    def __init__(self, message: str, evidence: dict[str, object]) -> None:
+    def __init__(
+        self,
+        message: str,
+        evidence: dict[str, object],
+        partial_edges: Iterable[Edge] = (),
+    ) -> None:
         super().__init__(message)
         self.analysis_evidence = evidence
+        self.partial_edges = frozenset(partial_edges)
 
 
 class PyCGCaseTimeoutError(TimeoutError):
@@ -598,6 +604,26 @@ def run_archway_pycg(
             status = "timeout"
             error = str(exc)
             analysis_evidence = getattr(exc, "analysis_evidence", {})
+        except PyCGCaseExecutionError as exc:
+            predicted = set(exc.partial_edges)
+            semantic_predicted = set(predicted)
+            predicted, normalization_lineage = (
+                normalize_edges_for_pycg_scoring(predicted, expected)
+            )
+            status = "partial" if predicted else "error"
+            error = f"{type(exc).__name__}: {exc}"
+            analysis_evidence = getattr(exc, "analysis_evidence", {})
+            if normalization_lineage:
+                analysis_evidence = {
+                    **analysis_evidence,
+                    "pycg_scoring_normalization": normalization_lineage,
+                    "pycg_scoring_normalization_count": len(
+                        normalization_lineage
+                    ),
+                    "semantic_predicted_edges": [
+                        list(edge) for edge in sorted(semantic_predicted)
+                    ],
+                }
         except Exception as exc:
             predicted = set()
             status = "error"
@@ -753,8 +779,10 @@ def _archway_call_edges_with_timeout(
         process.join()
         if status == "ok":
             return payload
-        error, evidence = payload
-        raise PyCGCaseExecutionError(error, evidence or latest_evidence)
+        error, evidence, partial_edges = payload
+        raise PyCGCaseExecutionError(
+            error, evidence or latest_evidence, partial_edges
+        )
 
 
 def _merge_progress_evidence(
@@ -842,6 +870,7 @@ def _archway_call_edges_worker(
         result_queue.put(("error", (
             f"{type(exc).__name__}: {exc}",
             getattr(exc, "analysis_evidence", {}),
+            tuple(getattr(exc, "partial_edges", ())),
         )))
     else:
         result_queue.put(("ok", predicted))
@@ -1287,6 +1316,10 @@ def successor_archway_call_edge_result(
             "deferred_materialization_counts": (
                 session.deferred_materialization_counts()
             ),
+            "native_call_graph_refusals": (
+                list(session.native_call_graph_refusals())
+                if native_cells else []
+            ),
             "resolved_fact_count": len(snapshot.resolved_facts),
             "fact_family_counts": dict(sorted(family_counts.items())),
             "demand_node_count": session.scheduler.graph.node_count,
@@ -1680,10 +1713,18 @@ def successor_archway_call_edge_result(
             )
     except Exception as exc:
         evidence = current_evidence(phase="error")
+        partial = current_partial_graph_evidence()
+        evidence.update(partial)
         if progress is not None:
             progress(evidence)
+        partial_edges = {
+            tuple(edge)
+            for edge in partial["partial_semantic_graph"][
+                "predicted_edges"
+            ]
+        }
         raise PyCGCaseExecutionError(
-            f"{type(exc).__name__}: {exc}", evidence
+            f"{type(exc).__name__}: {exc}", evidence, partial_edges
         ) from exc
     finally:
         stop_sampling.set()
