@@ -567,7 +567,7 @@ def _run_successor_repo_probe(
     progress_log: Path | None = None,
     demand_limit: int | None = None,
     checkpoint_roots: bool = False,
-    checkpoint_size: int = 8,
+    checkpoint_size: int = 1,
     checkpoint_tail_start: int | None = None,
     checkpoint_tail_count: int | None = None,
     checkpoint_batch_start: int | None = None,
@@ -1016,12 +1016,12 @@ try:
         body_profiles = []
         # Every root already coalesces all observations produced by one
         # callable body, while the session retains facts, summaries, and
-        # topology across roots. Admit independent roots together, but never
-        # place two bodies backed by the same definition binding in one wave:
-        # their shared class/function prerequisite must stabilize before its
-        # next consumer is admitted. This avoids both one global scheduler
-        # drain per body and the convergence explosion caused by admitting
-        # sibling bodies simultaneously.
+        # topology across roots. Production admits exactly one semantic root
+        # per convergence wave. Combining roots merely because they fit an
+        # arbitrary batch-size limit can create cross-products between
+        # otherwise unrelated dynamic dependencies. A diagnostic caller may
+        # explicitly explore wider cohorts, but production batching requires
+        # future proof that the roots are dependency-independent.
         def admission_group(root_address):
             body_id = getattr(
                 root_address.subject, "body_morphism_id", ""
