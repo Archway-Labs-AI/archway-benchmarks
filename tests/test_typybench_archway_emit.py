@@ -34,6 +34,9 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
         'ARCHWAY_BODY_DETAIL {"index":2,'
         '"top_execution_families":[["MorphismState",600]],'
         '"top_family_seconds":[["MorphismState",12.5]],'
+        '"top_production_phases":[["identity\\u0000cache-validation",4]],'
+        '"top_production_phase_seconds":'
+        '[["identity\\u0000cache-validation",2.75]],'
         '"topology_change_counts":{"dependency_added":5940},'
         '"component_edge_updates":{"incremental":5000},'
         '"gc":{"seconds":0.25}}\n'
@@ -58,6 +61,12 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
             "performance_detail": {
                 "top_execution_families": [["MorphismState", 600]],
                 "top_family_seconds": [["MorphismState", 12.5]],
+                "top_production_phases": [
+                    ["identity\0cache-validation", 4]
+                ],
+                "top_production_phase_seconds": [
+                    ["identity\0cache-validation", 2.75]
+                ],
                 "topology_change_counts": {"dependency_added": 5940},
                 "component_edge_updates": {"incremental": 5000},
                 "gc": {"seconds": 0.25},

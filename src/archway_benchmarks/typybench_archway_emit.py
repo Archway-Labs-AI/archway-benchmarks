@@ -123,6 +123,8 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                         "top_family_seconds",
                         "top_production_operations",
                         "top_production_seconds",
+                        "top_production_phases",
+                        "top_production_phase_seconds",
                         "top_transfer_operations",
                         "top_transfer_seconds",
                         "topology_change_counts",
@@ -1499,6 +1501,12 @@ try:
                         ],
                         "top_production_seconds": body_profile[
                             "top_production_seconds"
+                        ],
+                        "top_production_phases": body_profile[
+                            "top_production_phases"
+                        ],
+                        "top_production_phase_seconds": body_profile[
+                            "top_production_phase_seconds"
                         ],
                         "top_transfer_operations": body_profile[
                             "top_transfer_operations"
