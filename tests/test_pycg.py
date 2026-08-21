@@ -185,6 +185,32 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.evidence["peak_rss_bytes"] > 0
 
 
+def test_native_successor_adapter_projects_only_typed_cell_call_graph(
+    tmp_path: Path,
+) -> None:
+    case_root = _write_case(
+        tmp_path,
+        "functions",
+        "native_call",
+        {"main": ["main.target"], "main.target": []},
+    )
+    (case_root / "main.py").write_text(
+        "def target():\n    return 1\ntarget()\n", encoding="utf-8"
+    )
+    (case,) = load_cases(tmp_path)
+    engine_root = Path(__file__).parents[2] / "engine"
+
+    result = successor_archway_call_edge_result(
+        case, engine_root=engine_root.resolve(), native_cells=True
+    )
+
+    assert result.edges == frozenset({("main", "main.target")})
+    families = result.evidence["fact_family_counts"]
+    assert families["InternalCallTargetCell"] >= 1
+    assert "MorphismState" not in families
+    assert "ForwardExecution" not in families
+
+
 def test_successor_completed_evidence_collapses_repeated_contexts_per_callsite(
     tmp_path: Path,
 ) -> None:

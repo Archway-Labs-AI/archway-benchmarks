@@ -33,7 +33,9 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Mapping
 
 Edge = tuple[str, str]
-EdgeProvider = Literal["successor", "coordinated", "legacy"]
+EdgeProvider = Literal[
+    "successor", "native-successor", "coordinated", "legacy"
+]
 
 
 class PyCGCaseExecutionError(RuntimeError):
@@ -860,7 +862,7 @@ def _produce_archway_call_edges(
     successor_callable_input_exact_limit: int | None = None,
     successor_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
-    if edge_provider == "successor":
+    if edge_provider in {"successor", "native-successor"}:
         return successor_archway_call_edge_result(
             case,
             engine_root=engine_root,
@@ -874,6 +876,7 @@ def _produce_archway_call_edges(
             callable_input_exact_limit=(
                 successor_callable_input_exact_limit
             ),
+            native_cells=edge_provider == "native-successor",
         )
     if edge_provider == "coordinated":
         return coordinated_archway_call_edges(case, engine_root=engine_root)
@@ -910,11 +913,17 @@ def successor_archway_call_edge_result(
     sampling_rate_hz: float | None = None,
     partial_graph_checkpoint_seconds: float | None = None,
     callable_input_exact_limit: int | None = None,
+    native_cells: bool = False,
 ) -> SuccessorEdgeResult:
     """Project one persistent diagram-only reduced-product program session."""
 
     if not engine_root.exists():
         raise FileNotFoundError(f"engine root not found: {engine_root}")
+    if callable_input_exact_limit is not None:
+        raise ValueError(
+            "bounded callable-input partitions were removed from the "
+            "current diagram runtime"
+        )
     engine_text = str(engine_root)
     if engine_text not in sys.path:
         sys.path.insert(0, engine_text)
@@ -944,7 +953,7 @@ def successor_archway_call_edge_result(
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
         ),
-        callable_input_exact_limit=callable_input_exact_limit,
+        enable_coarse_fallback=not native_cells,
     )
     session_construction_seconds = (
         time.perf_counter() - session_construction_started
@@ -1661,9 +1670,13 @@ def successor_archway_call_edge_result(
     )
     try:
         with profile_context as sampling_profile:
-            forward = session.run_semantic_call_graph(
-                include_callable_bodies=include_callable_bodies,
-                summarize_callee_results=summarize_callee_results,
+            forward = (
+                session.run_native_semantic_call_graph()
+                if native_cells
+                else session.run_semantic_call_graph(
+                    include_callable_bodies=include_callable_bodies,
+                    summarize_callee_results=summarize_callee_results,
+                )
             )
     except Exception as exc:
         evidence = current_evidence(phase="error")
@@ -2345,10 +2358,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--edge-provider",
-        choices=("successor", "coordinated", "legacy"),
+        choices=("successor", "native-successor", "coordinated", "legacy"),
         default="successor",
         help=(
-            "Call-edge producer. successor uses the diagram-only fact runtime; "
+            "Call-edge producer. successor uses the coarse comparison runtime; "
+            "native-successor uses the typed-cell diagram runtime; "
             "coordinated is the quarantined source-index runtime; legacy "
             "projects the reduced-product call relation."
         ),
