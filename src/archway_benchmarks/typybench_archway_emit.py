@@ -978,14 +978,16 @@ try:
     missing = tuple(dict.fromkeys(
         item.address for item in missing_observations
     ))
-    all_signature_roots = session.observation_workload_roots(missing)
+    all_signature_root_count = len({
+        (
+            "callable",
+            session.observation_workload_body_id(address),
+        )
+        if session.observation_workload_body_id(address) is not None
+        else ("fact", address.id)
+        for address in missing
+    })
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
-    requested = (
-        missing
-        if requested_body_labels
-        else missing[:demand_limit] if demand_limit is not None else missing
-    )
-    signature_roots = session.observation_workload_roots(requested)
     body_labels = {
         template.body_morphism_id: (
             f"{template.module.dotted if template.module else '?'}:"
@@ -995,12 +997,38 @@ try:
         for template in plan.templates
     }
     if requested_body_labels:
-        signature_roots = tuple(
-            root_address for root_address in signature_roots
-            if body_labels.get(
-                getattr(root_address.subject, "body_morphism_id", "")
-            ) in requested_body_labels
+        available_body_labels = {
+            body_labels.get(session.observation_workload_body_id(address), "?")
+            for address in missing
+            if session.observation_workload_body_id(address) is not None
+        }
+        unmatched_body_labels = requested_body_labels - available_body_labels
+        if unmatched_body_labels:
+            related_labels = sorted(
+                label for label in available_body_labels
+                if any(
+                    requested.rsplit(":", 1)[-1].rsplit(".", 1)[-1]
+                    in label
+                    for requested in unmatched_body_labels
+                )
+            )[:20]
+            raise ValueError(
+                "requested callable body labels were not present in the "
+                "observation workload: "
+                + ", ".join(sorted(unmatched_body_labels))
+                + (
+                    "; related labels: " + ", ".join(related_labels)
+                    if related_labels else ""
+                )
+            )
+        requested = tuple(
+            address for address in missing
+            if body_labels.get(session.observation_workload_body_id(address))
+            in requested_body_labels
         )
+    else:
+        requested = missing[:demand_limit] if demand_limit is not None else missing
+    signature_roots = session.observation_workload_roots(requested)
     if requested_root_ids:
         signature_roots = tuple(
             root_address for root_address in signature_roots
@@ -1011,7 +1039,7 @@ try:
         print(
             "ARCHWAY_ROOTS " + json.dumps([
                 body_labels.get(
-                    getattr(item.subject, "body_morphism_id", ""), "?"
+                    session.observation_workload_body_id(item), "?"
                 )
                 for item in signature_roots
             ]),
@@ -1060,18 +1088,15 @@ try:
     if checkpoint_roots:
         targeted = None
         body_profiles = []
-        # Every root already coalesces all observations produced by one
-        # callable body, while the session retains facts, summaries, and
-        # topology across roots. Production admits exactly one semantic root
-        # per convergence wave. Combining roots merely because they fit an
-        # arbitrary batch-size limit can create cross-products between
-        # otherwise unrelated dynamic dependencies. A diagnostic caller may
-        # explicitly explore wider cohorts, but production batching requires
-        # future proof that the roots are dependency-independent.
+        # Public roots retain exact observation identity.  Group observations
+        # by the diagram callable that owns their shared workload, then admit
+        # one callable group per convergence wave.  The session creates the
+        # internal shared carrier; the adapter must not infer it from a public
+        # root subject or mix unrelated callable groups by an arbitrary size.
         def admission_group(root_address):
-            body_id = getattr(
-                root_address.subject, "body_morphism_id", ""
-            )
+            body_id = session.observation_workload_body_id(root_address)
+            if body_id is None:
+                return ("unowned", root_address.id)
             for provider in session.targeted_body_providers:
                 if body_id not in provider.bodies_by_id:
                     continue
@@ -1079,47 +1104,14 @@ try:
                     id(provider),
                     provider.body_binding_names.get(body_id, body_id),
                 )
-            return ("unowned", body_id)
+            return ("callable", body_id)
 
         def admission_batches(roots):
             grouped = {}
-            group_order = {}
-            for ordinal, root_address in enumerate(roots):
+            for root_address in roots:
                 group = admission_group(root_address)
                 grouped.setdefault(group, []).append(root_address)
-                group_order.setdefault(group, ordinal)
-            minimum_batch_count = max(
-                (len(roots) + checkpoint_size - 1) // checkpoint_size,
-                max((len(items) for items in grouped.values()), default=0),
-            )
-            batches = [[] for _ in range(minimum_batch_count)]
-            batch_groups = [set() for _ in range(minimum_batch_count)]
-            # Pack the most constrained bindings first, then place every root
-            # in the least-filled legal wave. The lower bound is the larger
-            # of capacity and maximum binding multiplicity; add a wave only
-            # if the greedy packing cannot realize that bound. A wave still
-            # contains at most one consumer of any shared definition.
-            ordered_groups = sorted(
-                grouped,
-                key=lambda group: (-len(grouped[group]), group_order[group]),
-            )
-            for group in ordered_groups:
-                for root_address in grouped[group]:
-                    candidates = [
-                        index for index, current in enumerate(batches)
-                        if len(current) < checkpoint_size
-                        and group not in batch_groups[index]
-                    ]
-                    if not candidates:
-                        batches.append([])
-                        batch_groups.append(set())
-                        candidates = [len(batches) - 1]
-                    index = min(candidates, key=lambda item: (
-                        len(batches[item]), item,
-                    ))
-                    batches[index].append(root_address)
-                    batch_groups[index].add(group)
-            return tuple(tuple(batch) for batch in batches)
+            return tuple(tuple(items) for items in grouped.values())
         all_batches = admission_batches(signature_roots)
         requested_tail_start = (
             min(checkpoint_tail_start, len(signature_roots))
@@ -1157,7 +1149,7 @@ try:
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
                 body_labels.get(
-                    getattr(root.subject, "body_morphism_id", ""), "?"
+                    session.observation_workload_body_id(root), "?"
                 )
                 for root in root_batch
             ]
@@ -1213,7 +1205,7 @@ try:
                 session.scheduler.production_phase_telemetry
                 if diagnostic_details else {"counts": {}, "seconds": {}}
             )
-            body_id = getattr(root_address.subject, "body_morphism_id", "")
+            body_id = session.observation_workload_body_id(root_address)
             body_label = body_labels.get(body_id, "?")
             print(
                 f"ARCHWAY_BODY_START {index}/{len(root_batches)} "
@@ -1246,7 +1238,7 @@ try:
                         project_marker="/sd_core/",
                     )
                     profiler.__enter__()
-                targeted = session.observe(root_batch)
+                targeted = session.observe_workload(root_batch)
             except TimeoutError:
                 timed_out_body = True
                 if timed_out_execution is None and requested_progress_timeout:
@@ -1335,34 +1327,9 @@ try:
                     label, 0.0
                 ) > 0
             }
-            workload_relevance = []
-            if diagnostic_details:
-                for workload_root in root_batch:
-                    workload_body_id = getattr(
-                        workload_root.subject, "body_morphism_id", ""
-                    )
-                    for provider in session.targeted_body_providers:
-                        templates = provider._root_observations.get(
-                            workload_root
-                        )
-                        if templates is None:
-                            continue
-                        workload_relevance.append({
-                            "root_id": workload_root.id,
-                            "observation_count": len(templates),
-                            "active_morphism_count": (
-                                provider._workload_active_morphism_counts.get(
-                                    workload_root
-                                )
-                            ),
-                            "required_definition_bindings": sorted(
-                                provider._required_definition_bindings.get((
-                                    workload_body_id,
-                                    workload_root.context,
-                                ), ())
-                            ),
-                        })
-                        break
+            workload_relevance = session.observation_workload_description(
+                root_batch
+            )
             body_profile = {
                 "index": index,
                 "label": body_label,
@@ -1458,7 +1425,7 @@ try:
                 "root_ids": [item.id for item in root_batch],
                 "root_labels": [
                     body_labels.get(
-                        getattr(item.subject, "body_morphism_id", ""), "?"
+                        session.observation_workload_body_id(item), "?"
                     )
                     for item in root_batch
                 ],
@@ -1727,7 +1694,7 @@ try:
             "targeted_addresses": len(missing),
             "requested_addresses": len(requested),
             "requested_body_roots": len(signature_roots),
-            "signature_body_roots": len(all_signature_roots),
+            "signature_body_roots": all_signature_root_count,
             "body_profiles": body_profiles,
             "timed_out_body": timed_out_body,
             "timed_out_execution": timed_out_execution,
@@ -1797,6 +1764,18 @@ try:
             "sampling_profile": sampling_profile,
             "unresolved_summary_bodies": dict(
                 unresolved_summary_bodies.most_common(32)
+            ),
+            "targeted_provider_diagnostics": (
+                [
+                    counts
+                    for provider in session.targeted_body_providers
+                    if (
+                        counts := provider.diagnostic_counts()
+                    )["registered_workloads"]
+                    or counts["definition_environment_plans"]
+                    or counts["nested_definition_environment_plans"]
+                ]
+                if diagnostic_details else []
             ),
             "observation_modules": sorted({
                 item.module.dotted for item in observations
