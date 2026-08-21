@@ -1,0 +1,586 @@
+from archway_benchmarks.benchmarks.typeevalpy import TypeEvalPyBenchmark
+from archway_benchmarks.engines.archway import ArchwayTranslationEngine
+from archway_benchmarks.engines.successor_archway import (
+    SuccessorArchwayAnalysisEngine,
+    SuccessorTypeEvalPyAdapter,
+    audit_successor_typeevalpy,
+)
+
+
+def _snippet(tmp_path, source: str, ground_truth: str):
+    suite = tmp_path / "assignments" / "forward"
+    suite.mkdir(parents=True)
+    (suite / "main.py").write_text(source)
+    (suite / "main_gt.json").write_text(ground_truth)
+    return TypeEvalPyBenchmark(tmp_path).load()[0]
+
+
+def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "x = 1\ny = x\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":1,"variable":"x","type":["int"]},
+          {"file":"main.py","line_number":2,"col_offset":1,"variable":"y","type":["int"]}
+        ]""",
+    )
+    translation = ArchwayTranslationEngine().translate(
+        snippet.source, snippet.file_path
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+    assert result.forward is not None
+    assert result.forward.cache_hit is False
+
+
+def test_successor_adapter_reads_written_container_lvalue(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def produce():\n"
+        "    return 'value'\n"
+        "items = ['old']\n"
+        "items[0] = produce\n"
+        "result = items[0]()\n",
+        """[
+          {"file":"main.py","line_number":4,"col_offset":1,"variable":"items[0]","type":["callable"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_preserves_reachability_after_refused_call(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "from collections import namedtuple\n"
+        "def unsupported():\n"
+        "    point = namedtuple('Point', ['x'])\n"
+        "    return point(1)\n"
+        "unknown = unsupported()\n"
+        "def later():\n"
+        "    return 1\n"
+        "result = later()\n",
+        """[
+          {"file":"main.py","line_number":8,"col_offset":1,"variable":"result","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_reconciles_autogen_lambda_parameter_kind(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "x = lambda x: x + 1\na = x(1)\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":12,"function":"lambda","variable":"x","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_maps_parameter_update_binding_occurrence(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def increment(value):\n"
+        "    value += 1\n"
+        "    return value\n"
+        "result = increment(1)\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":5,"function":"increment","parameter":"value","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "from library import produce\nresult = produce()\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":1,"variable":"result","type":["Nonetype"]}
+        ]""",
+    )
+    dependencies = tmp_path / "dependencies"
+    dependencies.mkdir()
+    (dependencies / "library.py").write_text(
+        "def produce():\n    return None\n"
+    )
+    translation = ArchwayTranslationEngine(
+        corpus_root=tmp_path,
+        dependency_roots=(dependencies,),
+    ).translate(snippet.source, snippet.file_path)
+
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.targeted_runs == []
+
+
+def test_successor_frontend_resolves_unexported_package_submodule(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "from package import child\n"
+        "result = child.produce()\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":1,"variable":"result","type":["bool"]}
+        ]""",
+    )
+    suite = tmp_path / "assignments" / "forward"
+    package = suite / "package"
+    package.mkdir()
+    (package / "__init__.py").write_text("")
+    (package / "child.py").write_text(
+        "def produce():\n    return True\n"
+    )
+    translation = ArchwayTranslationEngine(corpus_root=tmp_path).translate(
+        snippet.source, snippet.file_path
+    )
+
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_frontend_dotted_import_preserves_root_package(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "import package.child\n"
+        "nested = package.child.produce()\n"
+        "root = package.produce()\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":1,"variable":"nested","type":["list"]},
+          {"file":"main.py","line_number":3,"col_offset":1,"variable":"root","type":["float"]}
+        ]""",
+    )
+    suite = tmp_path / "assignments" / "forward"
+    package = suite / "package"
+    package.mkdir()
+    (package / "__init__.py").write_text(
+        "def produce():\n    return 1.0\n"
+    )
+    (package / "child.py").write_text(
+        "def produce():\n    return [1]\n"
+    )
+    translation = ArchwayTranslationEngine(corpus_root=tmp_path).translate(
+        snippet.source, snippet.file_path
+    )
+
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_reads_contextual_return_observation_without_fallback(
+    tmp_path,
+):
+    snippet = _snippet(
+        tmp_path,
+        "def identity(value):\n    return value\nanswer = identity(3)\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":5,"function":"identity","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
+    tmp_path,
+):
+    snippet = _snippet(
+        tmp_path,
+        "def first(value):\n"
+        "    return True\n"
+        "def second():\n"
+        "    return 1.5\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":5,"function":"first","type":["bool"]},
+          {"file":"main.py","line_number":3,"col_offset":5,"function":"second","type":["float"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    return_observations = tuple(
+        item for item in result.session.type_observations()
+        if item.kind == "return"
+    )
+    assert all(
+        result.session.store.resolved(item.address) is None
+        for item in return_observations
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert all(
+        result.session.store.resolved(item.address) is not None
+        for item in return_observations
+    )
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+    assert len(result.targeted_runs) == 1
+
+
+def test_successor_adapter_maps_contexts_discovered_in_shared_session(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "# nested receiver contexts\n"
+        "class Value:\n"
+        "    def result(self):\n"
+        "        return 13\n"
+        "\n\n"
+        "class Wrapper:\n"
+        "    def __init__(self, value):\n"
+        "        self.value = value\n"
+        "\n"
+        "    def result(self):\n"
+        "        return self.value.result()\n"
+        "\n\n"
+        "class Outer:\n"
+        "    def __init__(self):\n"
+        "        self.value = Value()\n"
+        "\n"
+        "    def result(self):\n"
+        "        wrapper = Wrapper(self.value)\n"
+        "        return wrapper.result()\n"
+        "\n\n"
+        "outer = Outer()\n"
+        "answer = outer.result()\n",
+        """[
+          {"file":"main.py","line_number":11,"col_offset":9,"function":"Wrapper.result","type":["int"]},
+          {"file":"main.py","line_number":19,"col_offset":9,"function":"Outer.result","type":["int"]},
+          {"file":"main.py","line_number":25,"col_offset":1,"variable":"answer","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert snippet.annotations[0] in predictions
+    assert not any(
+        gap.location == snippet.annotations[0].location
+        for gap in result.gaps
+    )
+
+
+def test_successor_adapter_maps_qualified_class_attribute_observations(
+    tmp_path,
+):
+    snippet = _snippet(
+        tmp_path,
+        "class MyClass:\n"
+        "    class_var = 1.5\n"
+        "    def __init__(self, values):\n"
+        "        self.values = values\n"
+        "item = MyClass([1, 2])\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":5,"variable":"MyClass.class_var","type":["float"]},
+          {"file":"main.py","line_number":3,"col_offset":24,"parameter":"values","function":"__init__","type":["list"]},
+          {"file":"main.py","line_number":4,"col_offset":9,"variable":"MyClass.values","function":"__init__","type":["list"]},
+          {"file":"main.py","line_number":4,"col_offset":9,"variable":"MyClass.values[0]","function":"__init__","type":["int"]},
+          {"file":"main.py","line_number":4,"col_offset":9,"variable":"MyClass.values[1]","function":"__init__","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_uses_owner_qualified_attribute_as_scope(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "class Outer:\n"
+        "    class Inner:\n"
+        "        def __init__(self):\n"
+        "            self.values = [1, 2]\n"
+        "item = Outer.Inner()\n",
+        """[
+          {"file":"main.py","line_number":4,"col_offset":13,"variable":"Outer.Inner.values","type":["list"]},
+          {"file":"main.py","line_number":4,"col_offset":13,"variable":"Outer.Inner.values[0]","type":["int"]},
+          {"file":"main.py","line_number":4,"col_offset":13,"variable":"Outer.Inner.values[1]","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_maps_unqualified_method_return_name(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "class Worker:\n"
+        "    def run(self):\n"
+        "        return 3\n"
+        "result = Worker().run()\n",
+        """[
+          {"file":"main.py","line_number":2,"col_offset":9,"function":"run","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_program_translation_expands_available_star_imports(tmp_path):
+    suite = tmp_path / "imports" / "import_all"
+    suite.mkdir(parents=True)
+    (suite / "from_module.py").write_text(
+        "def func1():\n    return 42\n\n"
+        "def func2():\n    return 'hello'\n"
+    )
+    (suite / "main.py").write_text(
+        "from from_module import *\n"
+        "a = func1()\n"
+        "b = func2()\n"
+    )
+    (suite / "main_gt.json").write_text("""[
+      {"file":"main.py","line_number":2,"col_offset":1,"variable":"a","type":["int"]},
+      {"file":"main.py","line_number":3,"col_offset":1,"variable":"b","type":["str"]}
+    ]""")
+    benchmark = TypeEvalPyBenchmark(tmp_path)
+    snippet = benchmark.load()[0]
+    translation = ArchwayTranslationEngine(
+        corpus_root=benchmark.corpus_root
+    ).translate(snippet.source, snippet.file_path)
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_successor_adapter_reads_concrete_slot_from_summary_fact(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def generate():\n"
+        "    yield 1\n"
+        "values = generate()\n",
+        """[
+          {"file":"main.py","line_number":3,"col_offset":1,"variable":"values[0]","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []
+
+
+def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
+    _snippet(
+        tmp_path,
+        "x = 1\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":1,"variable":"x","type":["int"]},
+          {"file":"main.py","line_number":1,"col_offset":5,"function":"missing","type":["int"]}
+        ]""",
+    )
+
+    audit = audit_successor_typeevalpy(TypeEvalPyBenchmark(tmp_path))
+
+    assert audit.annotations == 2
+    assert audit.predictions == 1
+    assert audit.exact == 1
+    assert audit.classifications == {"provenance_unmapped": 1}
+    assert audit.representatives == {
+        "provenance_unmapped|assignments|return": "assignments/forward"
+    }
+    assert audit.family_groups == {
+        "provenance_unmapped|assignments/forward|return": 1
+    }
+    assert audit.forward_events > 0
+    assert audit.knowledge_deltas > 0
+    assert audit.resolved_facts > 1
+
+
+def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
+    _snippet(
+        tmp_path,
+        "x = 1\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":1,"variable":"x","type":["int"]}
+        ]""",
+    )
+
+    progress = []
+    audit = audit_successor_typeevalpy(
+        TypeEvalPyBenchmark(tmp_path),
+        record_events=False,
+        suite_prefixes=("assignments/for",),
+        progress=lambda completed, total: progress.append((completed, total)),
+    )
+
+    assert audit.exact == 1
+    assert audit.forward_events == 0
+    assert audit.knowledge_deltas > 0
+    assert audit.resolved_facts > 1
+    assert progress == [(1, 1)]
+
+
+def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
+    _snippet(
+        tmp_path,
+        "def untouched(value):\n"
+        "    return 3\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":5,"function":"untouched","type":["int"]}
+        ]""",
+    )
+
+    audit = audit_successor_typeevalpy(
+        TypeEvalPyBenchmark(tmp_path),
+        record_events=False,
+    )
+
+    assert audit.exact == 1
+    assert audit.targeted_roots == 1
+    assert audit.targeted_cache_hits == 0
+    assert audit.targeted_events == 0
+    assert audit.targeted_knowledge_deltas > 0
+    assert audit.targeted_topology_changes > 0
+
+
+def test_sequence_pattern_slot_observations_reuse_forward_container_state(
+    tmp_path,
+):
+    snippet = _snippet(
+        tmp_path,
+        "def func(value):\n"
+        "    match value:\n"
+        "        case [53, 78, 59]: return (33, 45, 59)\n"
+        "        case (33, 45, 59): return [53, 78, 59]\n"
+        "        case _: return 'default'\n"
+        "a = func([53, 78, 59])\n"
+        "b = func((33, 45, 59))\n",
+        """[
+          {"file":"main.py","line_number":6,"col_offset":1,"variable":"a[0]","type":["int"]},
+          {"file":"main.py","line_number":6,"col_offset":1,"variable":"a[1]","type":["int"]},
+          {"file":"main.py","line_number":6,"col_offset":1,"variable":"a[2]","type":["int"]},
+          {"file":"main.py","line_number":7,"col_offset":1,"variable":"b[0]","type":["int"]},
+          {"file":"main.py","line_number":7,"col_offset":1,"variable":"b[1]","type":["int"]},
+          {"file":"main.py","line_number":7,"col_offset":1,"variable":"b[2]","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine(record_events=False).analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions == list(snippet.annotations)
+    assert result.targeted_runs == []
+    assert len(result.session.scheduler.graph.nodes) < 500
+
+
+def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def choose(flag):\n"
+        "    if flag:\n"
+        "        return 1\n"
+        '    return "no"\n'
+        "result = choose(True)\n",
+        """[
+          {"file":"main.py","line_number":5,"col_offset":1,"variable":"result","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert predictions[0].types == frozenset(("int",))
+    assert result.gaps == []
+def test_typeevalpy_custom_corpus_discovers_adjacent_external_dependency(
+    tmp_path,
+):
+    corpus = tmp_path / "micro-benchmark" / "python_features"
+    case = corpus / "external" / "attribute"
+    case.mkdir(parents=True)
+    (case / "main.py").write_text("from external_package.ext import Cls\n")
+    (case / "main_gt.json").write_text("[]")
+    dependency = (
+        tmp_path
+        / "micro-benchmark-excluded"
+        / "typeevalpy_external_module"
+    )
+    dependency.mkdir(parents=True)
+
+    benchmark = TypeEvalPyBenchmark(corpus)
+
+    assert benchmark.dependency_roots == (dependency,)
+
+    benchmark = TypeEvalPyBenchmark(corpus.parent)
+
+    assert benchmark.dependency_roots == (dependency,)

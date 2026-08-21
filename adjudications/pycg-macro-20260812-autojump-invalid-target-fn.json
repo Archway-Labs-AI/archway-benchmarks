@@ -1,0 +1,25 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "autojump:source-inconsistent-targets:v1",
+      "residual_ids": [
+        "pycg-residual:v1:d83ca7242a0bd10127d3a22bf74689d1132c698c0c45a342a8beeca2e9d2caae",
+        "pycg-residual:v1:81b7797cfc84f4001dfcc1ed08ea1b91045a5bb0cf0b9d88d4b3bbdf3a210805",
+        "pycg-residual:v1:608ca3ee1444821843b949031efb2d2fdaad8ad7afcf9ddbda4cc1ac4d1bfd94",
+        "pycg-residual:v1:fa8b17c4d7cc8e2b82955ad98a4e89fdae9105ed182a1411f460d69b439ecafc",
+        "pycg-residual:v1:91c9a39ff4249a9fb60273740dbe3d8933a04b244b7582f6a97cbe51dde25888",
+        "pycg-residual:v1:3f2adf293c23913c745db19cbd12e341f1764d5d4f4f4c41ccd5fb15883542d4",
+        "pycg-residual:v1:371fc143d64d45214fe90033273d541fe7236028727b51dc9856a9a5e8eba7eb"
+      ],
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "These expected targets contradict the source-visible receiver or direct dispatch: list.extend is labeled dict.extend, dict.get/index/pop operations are labeled as list methods or dict.index, and ArgumentParser.__init__ directly dispatches to _ActionsContainer.__init__ rather than skipping to its grandparent _AttributeHolder.__init__. Archway reports the corresponding source-consistent targets.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "review:autojump-source-inconsistent-targets:2026-08-12"
+      ]
+    }
+  ]
+}

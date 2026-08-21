@@ -1,0 +1,32 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "autojump:precise-vs-coarse-target-pairs:v1",
+      "residual_ids": [
+        "pycg-residual:v1:35c9139070982c288ec136056fe08f3cd4ce71d6a0e9499717c1cef8542bdc14",
+        "pycg-residual:v1:763c9f483c1ba4d1d338f20f6088d69dc0c321ffbfc6d32eab5fda58563defc3",
+        "pycg-residual:v1:b5a53c3168fe3319bae277f52bab469ba2d9c69beb97a9b8d9c399879459e3dd",
+        "pycg-residual:v1:a3a4521199104c58da5559578330aa6d0389ad231a61e7de56f42da3896abdd1",
+        "pycg-residual:v1:4378b537dbd90f40ffdcab8ee4c6c944ab76019ae71ea5269c26ef12e2be8d44",
+        "pycg-residual:v1:bc47f4fa3bd7b48ab7e4009153385e89ffab2066c917a84483ebb6026c96bd9b",
+        "pycg-residual:v1:4e89cd2738f366659a40562aec8a5e95c43c8a511f75ccc4b4761805b85452b1",
+        "pycg-residual:v1:827579393c22136c1b94d0b87935ce9582a52b0fb09601c5f94a6d45f53448c8",
+        "pycg-residual:v1:db2384600251dd3a12b76540cdb134372e2250f8c807bdcb5ed4e09f362d1784",
+        "pycg-residual:v1:f89248baae5badd1ae3ca51c975e4df6d95ac4ef5a61bd93aab7fb4647979cd9",
+        "pycg-residual:v1:29edf28da4f8e935faf9732f26407bbdb8c798b362ca4e27eddd2d26feeb4348",
+        "pycg-residual:v1:2bf770adf2749e089cdd8ae0fcd5b6f9d4ac176fe0ffb99f47d5130ac0519e88",
+        "pycg-residual:v1:b5a4a394ca2357814d2710988c83e87ed128714eb4542fd0de236d25f370c5e9",
+        "pycg-residual:v1:e124c80cfb81d4e0e0642b7ef530bb20108294a3c675752fc83fff5ac194efe9"
+      ],
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Each pair describes the same observed callsite using a more precise Archway target and a coarser PyCG compatibility name: compiled Pattern methods versus module-level re helpers, the builtin collections.namedtuple target versus collections.namedtuple, or builtin sorted versus the module-local Python-2 compatibility alias. These should be reconciled only at the scorer boundary.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "review:autojump-fp-fn-representation-pairs:2026-08-12"
+      ]
+    }
+  ]
+}

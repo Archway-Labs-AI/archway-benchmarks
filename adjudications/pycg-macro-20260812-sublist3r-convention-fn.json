@@ -1,0 +1,42 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "sublist3r:coarse-or-impossible-ground-truth:v1",
+      "residual_ids": [
+        "pycg-residual:v1:687d8cc22e9ab240f2100a6ac7ef86825b95b5e2e67ddef41a9b1bee17658d37",
+        "pycg-residual:v1:4bde58b899ea2a9f6523da523e0bcfaa1c5162f6ec4669b65fab9924a598a832",
+        "pycg-residual:v1:6ccd204554ae1077f6f5164c677a8acdf6f7a724894fd8daf2e5e05a2088f200",
+        "pycg-residual:v1:817ba58fb8bc0ebbed9854988c563c08991039807847a332ff8e8fb3ade7f9ea",
+        "pycg-residual:v1:62b4b851bed376c560d10d7b8284972e95f801c80eadf82a7f8296be3022206b",
+        "pycg-residual:v1:92569f4c41dd112cc813dd2ccfc356e064c1ef93847a5ac3f02f58e1cc67ffff",
+        "pycg-residual:v1:37c0b17061eade1ba3626f70797b48e508521a76623d220d4261770b4efe30bd",
+        "pycg-residual:v1:66b44c36714557ac30c999cdfdb84cc8cf0ad26ec1b26e0255bf92a5449c7e56",
+        "pycg-residual:v1:a306de61e4bf1de793c9bdfb4b84c9df05f617108182cfb4f6848cfeb46f08f2",
+        "pycg-residual:v1:d8e9a17939f771058e0114f0545d52cff1473887271ab50749251eef6c625015",
+        "pycg-residual:v1:ae035cb1504d659480834f1c9909eeab755852f70f9284c1f6ea1b28752f8496",
+        "pycg-residual:v1:c2a169f9d30081392d6907a3730959f5183c4cc5cd9c040994118274045173b3",
+        "pycg-residual:v1:bc9a03c595affd38e0a4ffc63b19636130f7a9ef3a21d9d487f37f4659debefc",
+        "pycg-residual:v1:21d696610dc4832fcd2637eda16be78e4b94db684257829a44cca2d17740a169",
+        "pycg-residual:v1:008c0298e838e12d95e95a5adae24835a61bbe070df78e530ca8259f1c28aaa5",
+        "pycg-residual:v1:0647d57003c93e4d38cc154e482eeacc4b2f9110e95535cc7003f513449f6258",
+        "pycg-residual:v1:d356620cb8bf7465f9631bcb5730a8ba25a5bce6901049bdc0fce81f408728e0",
+        "pycg-residual:v1:fc6d92028c0dd6ea5e0dc219c19d42e8474e3ad9c767bdcc8bc16d153a6b87c8",
+        "pycg-residual:v1:0ea4c522037e6ff404e7f9cdd8f8e1b99a69aaf40f28e3b77a8deb2bfadc1992",
+        "pycg-residual:v1:7b4d166c58493cd53fc143d86b4f5f0ee2c1d323125cb331efb6f2763b9b3e3c",
+        "pycg-residual:v1:53e0d6f2dd5c02e6eb125b8feff7457d2c8ef7e2eead43be93e33b6e71fc24f3",
+        "pycg-residual:v1:8cddf50f0cafa38fad9f75303d5a52bfb57ead64032dbf66acbf1ee0f3d9fb23",
+        "pycg-residual:v1:121b0d7d90af443f0fbfe97392459268def5c8e2b7400eea55384a275c7f0db2"
+      ],
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "These exact expectations are coarser or source-incorrect counterparts of edges Archway already reports precisely (str/file methods, Pattern methods, ArgumentParser methods, Thread.start), or impossible calls such as builtin.raise, list.add, string.hexdigest, list.count on a scalar, and a Process.__init__ call where source explicitly invokes enumratorBase.__init__.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "SUCCESSOR-SUBLIST3R-CHECKPOINT-20260812.md:Precision interpretation",
+        "review:sublist3r-ground-truth-conventions:2026-08-12"
+      ]
+    }
+  ]
+}

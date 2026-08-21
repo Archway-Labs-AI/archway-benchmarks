@@ -329,6 +329,15 @@ def stage_single_repo_prediction_root(
     )
 
     staging_root = Path(staging_root)
+    # Older scorer layouts used ``staging_root/<repo>`` directly and may leave
+    # that path as a symlink to the prediction tree. A newer per-repository
+    # staging root must never traverse such a symlink: doing so can mistake a
+    # real source package for staging state and delete it. Replace only the
+    # staging-root symlink itself before creating the isolated directory.
+    if staging_root.is_symlink():
+        staging_root.unlink()
+    elif staging_root.exists() and not staging_root.is_dir():
+        raise NotADirectoryError(f"staging root is not a directory: {staging_root}")
     staged_repo = staging_root / repo_name
     if staged_repo.exists() or staged_repo.is_symlink():
         if not overwrite:
