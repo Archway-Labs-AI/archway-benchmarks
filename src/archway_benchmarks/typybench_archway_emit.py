@@ -98,6 +98,35 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                     active_body = None
             except ValueError:
                 continue
+        elif line.startswith("ARCHWAY_BODY_DETAIL "):
+            try:
+                detail = json.loads(
+                    line.removeprefix("ARCHWAY_BODY_DETAIL ")
+                )
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(detail, dict):
+                continue
+            index = detail.get("index")
+            profile = next(
+                (
+                    item for item in reversed(body_profiles)
+                    if item["index"] == index
+                ),
+                None,
+            )
+            if profile is not None:
+                profile["performance_detail"] = {
+                    key: detail[key]
+                    for key in (
+                        "top_execution_families",
+                        "top_family_seconds",
+                        "topology_change_counts",
+                        "component_edge_updates",
+                        "gc",
+                    )
+                    if key in detail
+                }
         elif line.startswith("ARCHWAY_TRANSLATION_START "):
             active_translation_file = line.removeprefix(
                 "ARCHWAY_TRANSLATION_START "
@@ -1348,6 +1377,27 @@ try:
                 + (f" {root_address.id}" if diagnostic_details else ""),
                 file=sys.stderr, flush=True,
             )
+            if diagnostic_details:
+                print(
+                    "ARCHWAY_BODY_DETAIL " + json.dumps({
+                        "index": index,
+                        "top_execution_families": body_profile[
+                            "top_execution_families"
+                        ],
+                        "top_family_seconds": body_profile[
+                            "top_family_seconds"
+                        ],
+                        "topology_change_counts": body_profile[
+                            "topology_change_counts"
+                        ],
+                        "component_edge_updates": body_profile[
+                            "component_edge_updates"
+                        ],
+                        "gc": body_profile["gc"],
+                    }, separators=(",", ":")),
+                    file=sys.stderr,
+                    flush=True,
+                )
             if timed_out_body:
                 break
     else:

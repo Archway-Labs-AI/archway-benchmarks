@@ -31,6 +31,12 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
         "fact-address:v1:active\n"
         "ARCHWAY_BODY 2/139 16.250000 exec=618 topology=5940 "
         "appworld.api_docs:generate_example\n"
+        'ARCHWAY_BODY_DETAIL {"index":2,'
+        '"top_execution_families":[["MorphismState",600]],'
+        '"top_family_seconds":[["MorphismState",12.5]],'
+        '"topology_change_counts":{"dependency_added":5940},'
+        '"component_edge_updates":{"incremental":5000},'
+        '"gc":{"seconds":0.25}}\n'
         "ARCHWAY_BODY_START 3/139 appworld.api_docs:next "
         "fact-address:v1:next\n"
     )
@@ -49,6 +55,13 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
             "executions": 618,
             "topology_changes": 5940,
             "label": "appworld.api_docs:generate_example",
+            "performance_detail": {
+                "top_execution_families": [["MorphismState", 600]],
+                "top_family_seconds": [["MorphismState", 12.5]],
+                "topology_change_counts": {"dependency_added": 5940},
+                "component_edge_updates": {"incremental": 5000},
+                "gc": {"seconds": 0.25},
+            },
         }],
         "active_body": {
             "index": 3,
