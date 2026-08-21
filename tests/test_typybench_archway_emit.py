@@ -109,25 +109,6 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert profile.trace_tail == "ARCHWAY_BODY 1/12"
 
 
-@pytest.mark.parametrize(
-    "retired_option",
-    ("callable_input_exact_limit", "contextual_summary_evaluation"),
-)
-def test_successor_probe_rejects_retired_session_options(
-    tmp_path, retired_option,
-) -> None:
-    kwargs = {retired_option: 1 if retired_option.endswith("limit") else True}
-
-    with pytest.raises(ValueError, match="retired"):
-        emit_module._run_successor_repo_probe(
-            engine_worktree=tmp_path,
-            source_root=tmp_path,
-            runner=("python",),
-            timeout=1,
-            **kwargs,
-        )
-
-
 def test_successor_observations_render_function_signatures() -> None:
     observations = [
         {"line": 4, "name": "x", "kind": "parameter", "function": "f", "types": ["builtins.int"]},
@@ -1016,8 +997,6 @@ def test_emit_predictions_profile_jsonl_records_per_file_timings(
         timeout=30,
         per_file_timeout=5,
         profile_jsonl=profile_jsonl,
-        body_summary_consumption="safe",
-        analysis_product="type_body_summary_product",
         analysis_observation_mode="diagnostic",
     )
 

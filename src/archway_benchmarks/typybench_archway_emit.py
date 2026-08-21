@@ -196,10 +196,7 @@ def emit_archway_predictions(
     trace_jsonl: Path | None = None,
     profile_jsonl: Path | None = None,
     progress_log: Path | None = None,
-    body_summary_consumption: str = "off",
-    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
-    type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
@@ -581,7 +578,6 @@ def _run_successor_repo_probe(
     root_ids: tuple[str, ...] | None = None,
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
-    callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
     sample_body_label: str | None = None,
     sample_forward: bool = False,
@@ -590,7 +586,6 @@ def _run_successor_repo_probe(
     forward_timeout: int | None = None,
     record_timings: bool = False,
     diagnostic_details: bool = True,
-    contextual_summary_evaluation: bool = False,
     collect_predictions: bool = True,
     observation_kinds: frozenset[str] = frozenset((
         "parameter", "return",
@@ -608,16 +603,6 @@ def _run_successor_repo_probe(
     ):
         raise ValueError(
             "body_timeout requires a selected body or checkpointed roots"
-        )
-    if callable_input_exact_limit is not None:
-        raise ValueError(
-            "callable_input_exact_limit was retired from the diagram-analysis "
-            "session; remove this diagnostic override"
-        )
-    if contextual_summary_evaluation:
-        raise ValueError(
-            "contextual_summary_evaluation was retired from the "
-            "diagram-analysis session; remove this diagnostic override"
         )
     if progress_timeout is not None and progress_timeout <= 0:
         raise ValueError("progress_timeout must be positive")
@@ -674,30 +659,27 @@ checkpoint_roots = sys.argv[3] == "checkpoint"
 requested_body_label = sys.argv[4] or None
 requested_body_labels = frozenset(json.loads(requested_body_label)) if requested_body_label else frozenset()
 requested_body_timeout = int(sys.argv[5]) or None
-exact_limit_arg = int(sys.argv[6])
-callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
-sample_rate_hz = float(sys.argv[7]) or None
-sample_body_label = sys.argv[8] or None
-record_timings = sys.argv[9] == "timings"
-diagnostic_details = sys.argv[10] == "diagnostics"
-collect_predictions = sys.argv[11] == "predictions"
-checkpoint_size = int(sys.argv[12])
-checkpoint_tail_start = int(sys.argv[13])
-checkpoint_tail_count = int(sys.argv[14])
+sample_rate_hz = float(sys.argv[6]) or None
+sample_body_label = sys.argv[7] or None
+record_timings = sys.argv[8] == "timings"
+diagnostic_details = sys.argv[9] == "diagnostics"
+collect_predictions = sys.argv[10] == "predictions"
+checkpoint_size = int(sys.argv[11])
+checkpoint_tail_start = int(sys.argv[12])
+checkpoint_tail_count = int(sys.argv[13])
 requested_observation_kinds = frozenset(
-    item for item in sys.argv[15].split(",") if item
+    item for item in sys.argv[14].split(",") if item
 )
-sample_forward = sys.argv[16] == "sample-forward"
-requested_forward_timeout = int(sys.argv[17]) or None
-disable_cyclic_gc = sys.argv[18] == "disable-cyclic-gc"
-checkpoint_replay_prefix = sys.argv[19] == "replay-prefix"
-run_forward_seed = sys.argv[20] == "run-forward-seed"
-sample_session_open = sys.argv[21] == "sample-session-open"
-checkpoint_batch_start = int(sys.argv[22])
-checkpoint_batch_count = int(sys.argv[23])
-contextual_summary_evaluation = sys.argv[24] == "contextual-summaries"
-requested_progress_timeout = int(sys.argv[25]) or None
-requested_root_ids = frozenset(json.loads(sys.argv[26]))
+sample_forward = sys.argv[15] == "sample-forward"
+requested_forward_timeout = int(sys.argv[16]) or None
+disable_cyclic_gc = sys.argv[17] == "disable-cyclic-gc"
+checkpoint_replay_prefix = sys.argv[18] == "replay-prefix"
+run_forward_seed = sys.argv[19] == "run-forward-seed"
+sample_session_open = sys.argv[20] == "sample-session-open"
+checkpoint_batch_start = int(sys.argv[21])
+checkpoint_batch_count = int(sys.argv[22])
+requested_progress_timeout = int(sys.argv[23]) or None
+requested_root_ids = frozenset(json.loads(sys.argv[24]))
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -1702,10 +1684,6 @@ os._exit(0)
                 *(body_labels or ()),
             )))),
             str(body_timeout or 0),
-            str(
-                callable_input_exact_limit
-                if callable_input_exact_limit is not None else -1
-            ),
             str(sample_rate_hz or 0),
             sample_body_label or "",
             "timings" if record_timings else "no-timings",
@@ -1729,10 +1707,6 @@ os._exit(0)
                 if checkpoint_batch_start is not None else -1
             ),
             str(checkpoint_batch_count or 0),
-            (
-                "contextual-summaries"
-                if contextual_summary_evaluation else "composed-summaries"
-            ),
             str(progress_timeout or 0),
             json.dumps(tuple(dict.fromkeys(root_ids or ()))),
         ]
@@ -1816,10 +1790,7 @@ def _run_engine_probe(
     runner: tuple[str, ...],
     timeout: int,
     per_file_timeout: int = 60,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"files": {}}
     started = time.monotonic()
@@ -1839,10 +1810,7 @@ def _run_engine_probe(
             module_name=path.stem,
             runner=runner,
             timeout=max(1, min(per_file_timeout, int(remaining))),
-            body_summary_consumption=body_summary_consumption,
-            analysis_product=analysis_product,
             analysis_observation_mode=analysis_observation_mode,
-            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -1854,10 +1822,7 @@ def _run_engine_probe_file(
     module_name: str,
     runner: tuple[str, ...],
     timeout: int,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -1866,65 +1831,19 @@ import sys
 import traceback
 from pathlib import Path
 
-try:
-    from sd_core.analysis_server import _encode_finalized, analyze_source
-    from sd_core.runners.analysis_observability import AnalysisObservationConfig
-    from sd_core.runners.file_results import FileAnalysisFailure, analyze_source_file_result
-except Exception:  # pragma: no cover - compatibility with older engine pins
-    AnalysisObservationConfig = None
-    FileAnalysisFailure = None
-    _encode_finalized = None
-    analyze_source_file_result = None
-    from sd_core.analysis_server import analyze_source
+from sd_core.analysis_server import analyze_source
 
 path = Path(sys.argv[1])
 module_name = sys.argv[2]
 try:
     source = path.read_text(encoding="utf-8")
-    analysis_summary = None
-    if (
-        analyze_source_file_result is not None
-        and AnalysisObservationConfig is not None
-        and _encode_finalized is not None
-    ):
-        observation_mode = os.environ.get("ARCHWAY_ANALYSIS_OBSERVATION", "summary")
-        if observation_mode == "diagnostic":
-            observation_config = AnalysisObservationConfig.diagnostic()
-        elif observation_mode == "off":
-            observation_config = AnalysisObservationConfig.off()
-        else:
-            observation_config = AnalysisObservationConfig.summary()
-        kwargs = {
-            "module": module_name,
-            "repo_path": str(path),
-            "observation_config": observation_config,
-        }
-        body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
-        if body_summary_consumption != "off":
-            kwargs["body_summary_consumption"] = body_summary_consumption
-        analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
-        if analysis_product != "standalone":
-            kwargs["analysis_product"] = analysis_product
-        if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
-            "1", "true", "yes", "on",
-        }:
-            kwargs["type_requirements_assume_closed"] = True
-        file_result = analyze_source_file_result(source, **kwargs)
-        analysis_summary = file_result.to_jsonable().get("analysis_summary")
-        if file_result.status != "analyzed" or file_result.run is None:
-            if FileAnalysisFailure is not None:
-                raise FileAnalysisFailure(file_result)
-            raise RuntimeError(f"file analysis failed: {file_result.status}")
-        analysis = _encode_finalized(file_result.run.finalized)
-        analysis["module_name"] = module_name
-        analysis["status"] = file_result.status
-        analysis["file_result"] = file_result.to_jsonable()
-    else:
-        analysis = analyze_source(source, module_name)
+    analysis = analyze_source(source, module_name)
     out = {
         "ok": True,
         "analysis": analysis,
-        "analysis_summary": analysis_summary,
+        "analysis_summary": analysis.get("file_result", {}).get(
+            "analysis_summary"
+        ),
     }
 except Exception as exc:
     out = {
@@ -1954,10 +1873,7 @@ print(json.dumps(out, sort_keys=True))
                 text=True,
                 env=_probe_env(
                     engine_worktree,
-                    body_summary_consumption=body_summary_consumption,
-                    analysis_product=analysis_product,
                     analysis_observation_mode=analysis_observation_mode,
-                    type_requirements_assume_closed=type_requirements_assume_closed,
                 ),
                 start_new_session=True,
             )
@@ -1993,20 +1909,13 @@ print(json.dumps(out, sort_keys=True))
 def _probe_env(
     engine_worktree: Path,
     *,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, str]:
     env = os.environ.copy()
-    if body_summary_consumption:
-        env["ARCHWAY_BODY_SUMMARY_CONSUMPTION"] = body_summary_consumption
-    env["ARCHWAY_ANALYSIS_PRODUCT"] = analysis_product
     env["ARCHWAY_ANALYSIS_OBSERVATION"] = analysis_observation_mode
-    if type_requirements_assume_closed:
-        env["ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED"] = "1"
-    else:
-        env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
+    env.pop("ARCHWAY_BODY_SUMMARY_CONSUMPTION", None)
+    env.pop("ARCHWAY_ANALYSIS_PRODUCT", None)
+    env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
     existing = env.get("PYTHONPATH")
     paths = [str(engine_worktree)]
     if existing:
@@ -2099,9 +2008,6 @@ def capture_runtime_phase_profile_file(
     module_name: str,
     runner: tuple[str, ...] = ("hatch", "run", "python"),
     timeout: int = 90,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     """Measure import, translation, traced translation, and analysis separately.
 
@@ -2124,9 +2030,6 @@ def capture_runtime_phase_profile_file(
             runner=runner,
             timeout=timeout,
             phase=phase,
-            body_summary_consumption=body_summary_consumption,
-            analysis_product=analysis_product,
-            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -2139,9 +2042,6 @@ def _run_runtime_phase_probe_file(
     runner: tuple[str, ...],
     timeout: int,
     phase: str,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -2180,18 +2080,7 @@ try:
                 "span_count": len(getattr(trace, "spans", [])) if trace is not None else 0,
             }
         elif phase == "analyze_source":
-            kwargs = {}
-            body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
-            if body_summary_consumption != "off":
-                kwargs["body_summary_consumption"] = body_summary_consumption
-            analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
-            if analysis_product != "standalone":
-                kwargs["analysis_product"] = analysis_product
-            if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
-                "1", "true", "yes", "on",
-            }:
-                kwargs["type_requirements_assume_closed"] = True
-            result = analyze_source(source, module_name, **kwargs)
+            result = analyze_source(source, module_name)
             out = {
                 "ok": True,
                 "phase": phase,
@@ -2221,12 +2110,7 @@ print(json.dumps(out, sort_keys=True))
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=_probe_env(
-                    engine_worktree,
-                    body_summary_consumption=body_summary_consumption,
-                    analysis_product=analysis_product,
-                    type_requirements_assume_closed=type_requirements_assume_closed,
-                ),
+                env=_probe_env(engine_worktree),
                 start_new_session=True,
             )
             stdout, stderr = proc.communicate(timeout=timeout)
