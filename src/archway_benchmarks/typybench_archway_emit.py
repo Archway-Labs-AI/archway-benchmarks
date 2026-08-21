@@ -281,7 +281,9 @@ def emit_archway_predictions(
             checkpoint_roots=checkpoint_roots,
             body_timeout=body_timeout,
             progress_timeout=progress_timeout,
-            diagnostic_details=False,
+            diagnostic_details=(
+                analysis_observation_mode == "diagnostic"
+            ),
             observation_kinds=frozenset((
                 "parameter",
                 "return",

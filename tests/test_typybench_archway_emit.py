@@ -96,16 +96,18 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
             "label": "module:slow",
         }],
     }
-    monkeypatch.setattr(
-        emit_module,
-        "_run_successor_repo_probe",
-        lambda **_kwargs: {
+    probe_options = []
+
+    def probe(**kwargs):
+        probe_options.append(kwargs)
+        return {
             "ok": False,
             "error": "TimeoutExpired: analysis exceeded 1s",
             "trace_tail": "ARCHWAY_BODY 1/12",
             "analysis_summary": progress,
-        },
-    )
+        }
+
+    monkeypatch.setattr(emit_module, "_run_successor_repo_probe", probe)
 
     stats = emit_module.emit_archway_predictions(
         repo_name="demo",
@@ -113,6 +115,7 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
         predictions_root=tmp_path / "predictions",
         engine_worktree=engine,
         timeout=1,
+        analysis_observation_mode="diagnostic",
     )
 
     assert stats.files_failed == 1
@@ -120,6 +123,7 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert profile.status == "engine_failed"
     assert profile.analysis_summary == progress
     assert profile.trace_tail == "ARCHWAY_BODY 1/12"
+    assert probe_options[0]["diagnostic_details"] is True
 
 
 def test_successor_observations_render_function_signatures() -> None:
