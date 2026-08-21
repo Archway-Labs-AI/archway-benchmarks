@@ -236,11 +236,16 @@ def emit_archway_predictions(
     checkpoint_roots: bool = True,
     body_timeout: int | None = None,
     body_labels: tuple[str, ...] | None = None,
+    checkpoint_batch_start: int | None = None,
+    checkpoint_batch_count: int | None = None,
+    checkpoint_replay_prefix: bool = True,
     run_forward_seed: bool = True,
     progress_timeout: int | None = None,
     sample_session_open: bool = False,
+    sample_forward: bool = False,
     sample_rate_hz: float | None = None,
     session_open_timeout: int | None = None,
+    forward_timeout: int | None = None,
     emit_variable_annotations: bool = False,
     emit_class_field_annotations: bool = False,
 ) -> EmitStats:
@@ -293,11 +298,16 @@ def emit_archway_predictions(
             checkpoint_roots=checkpoint_roots,
             body_timeout=body_timeout,
             body_labels=body_labels,
+            checkpoint_batch_start=checkpoint_batch_start,
+            checkpoint_batch_count=checkpoint_batch_count,
+            checkpoint_replay_prefix=checkpoint_replay_prefix,
             run_forward_seed=run_forward_seed,
             progress_timeout=progress_timeout,
             sample_session_open=sample_session_open,
+            sample_forward=sample_forward,
             sample_rate_hz=sample_rate_hz,
             session_open_timeout=session_open_timeout,
+            forward_timeout=forward_timeout,
             diagnostic_details=(
                 analysis_observation_mode == "diagnostic"
             ),
@@ -608,6 +618,18 @@ def _successor_annotation(value: str) -> str:
     if value == "builtins.callable":
         return "Callable"
     return value.removeprefix("builtins.")
+
+
+def _observation_admission_group(session, root_address) -> tuple[object, str]:
+    """Group exact observations only by their owning callable boundary."""
+
+    body_id = session.observation_workload_body_id(root_address)
+    if body_id is None:
+        return ("unowned", root_address.id)
+    for provider in session.targeted_body_providers:
+        if body_id in provider.bodies_by_id:
+            return (id(provider), body_id)
+    return ("callable", body_id)
 
 
 def _run_successor_repo_probe(
@@ -1116,12 +1138,8 @@ try:
             if body_id is None:
                 return ("unowned", root_address.id)
             for provider in session.targeted_body_providers:
-                if body_id not in provider.bodies_by_id:
-                    continue
-                return (
-                    id(provider),
-                    provider.body_binding_names.get(body_id, body_id),
-                )
+                if body_id in provider.bodies_by_id:
+                    return (id(provider), body_id)
             return ("callable", body_id)
 
         def admission_batches(roots):
@@ -1792,6 +1810,17 @@ try:
                     )["registered_workloads"]
                     or counts["definition_environment_plans"]
                     or counts["nested_definition_environment_plans"]
+                ]
+                if diagnostic_details else []
+            ),
+            "module_provider_diagnostics": (
+                [
+                    provider.diagnostic_counts()
+                    for provider in {
+                        id(targeted.module_provider): targeted.module_provider
+                        for targeted in session.targeted_body_providers
+                    }.values()
+                    if provider.diagnostic_counts()["requested_exports"]
                 ]
                 if diagnostic_details else []
             ),

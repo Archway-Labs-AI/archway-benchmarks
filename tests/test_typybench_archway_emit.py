@@ -8,6 +8,7 @@ from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
     _element_type,
     _function_types,
+    _observation_admission_group,
     _probe_progress,
     _run_engine_probe,
     _successor_function_types,
@@ -16,6 +17,33 @@ from archway_benchmarks.typybench_archway_emit import (
     capture_translation_trace_file,
     emit_archway_predictions,
 )
+
+
+def test_observation_admission_never_merges_distinct_callable_bodies() -> None:
+    class Provider:
+        bodies_by_id = {"body:first": object(), "body:second": object()}
+        body_binding_names = {
+            "body:first": "shared_name",
+            "body:second": "shared_name",
+        }
+
+    class Session:
+        targeted_body_providers = (Provider(),)
+
+        @staticmethod
+        def observation_workload_body_id(root):
+            return root.body_id
+
+    class Root:
+        def __init__(self, body_id):
+            self.body_id = body_id
+            self.id = body_id
+
+    session = Session()
+    first = _observation_admission_group(session, Root("body:first"))
+    second = _observation_admission_group(session, Root("body:second"))
+
+    assert first != second
 
 
 def test_probe_progress_retains_compact_timeout_evidence() -> None:
@@ -127,6 +155,9 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
         analysis_observation_mode="diagnostic",
         body_labels=("module:slow",),
         body_timeout=7,
+        checkpoint_batch_start=4,
+        checkpoint_batch_count=2,
+        checkpoint_replay_prefix=False,
         run_forward_seed=False,
     )
 
@@ -139,6 +170,9 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert probe_options[0]["record_timings"] is True
     assert probe_options[0]["body_labels"] == ("module:slow",)
     assert probe_options[0]["body_timeout"] == 7
+    assert probe_options[0]["checkpoint_batch_start"] == 4
+    assert probe_options[0]["checkpoint_batch_count"] == 2
+    assert probe_options[0]["checkpoint_replay_prefix"] is False
     assert probe_options[0]["run_forward_seed"] is False
 
 
