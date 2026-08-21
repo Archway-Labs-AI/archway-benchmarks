@@ -609,8 +609,16 @@ def _run_successor_repo_probe(
         raise ValueError(
             "body_timeout requires a selected body or checkpointed roots"
         )
-    if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
-        raise ValueError("callable_input_exact_limit must be non-negative")
+    if callable_input_exact_limit is not None:
+        raise ValueError(
+            "callable_input_exact_limit was retired from the diagram-analysis "
+            "session; remove this diagnostic override"
+        )
+    if contextual_summary_evaluation:
+        raise ValueError(
+            "contextual_summary_evaluation was retired from the "
+            "diagram-analysis session; remove this diagnostic override"
+        )
     if progress_timeout is not None and progress_timeout <= 0:
         raise ValueError("progress_timeout must be positive")
     if checkpoint_size <= 0:
@@ -860,8 +868,6 @@ try:
             possible_entry_modules=frozenset(),
             body_observations_only=True,
             class_field_observations=True,
-            callable_input_exact_limit=callable_input_exact_limit,
-            contextual_summary_evaluation=contextual_summary_evaluation,
         )
     finally:
         if session_profiler is not None:

@@ -3,6 +3,7 @@ import json
 import sys
 
 import archway_benchmarks.typybench_archway_emit as emit_module
+import pytest
 from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
     _element_type,
@@ -106,6 +107,25 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert profile.status == "engine_failed"
     assert profile.analysis_summary == progress
     assert profile.trace_tail == "ARCHWAY_BODY 1/12"
+
+
+@pytest.mark.parametrize(
+    "retired_option",
+    ("callable_input_exact_limit", "contextual_summary_evaluation"),
+)
+def test_successor_probe_rejects_retired_session_options(
+    tmp_path, retired_option,
+) -> None:
+    kwargs = {retired_option: 1 if retired_option.endswith("limit") else True}
+
+    with pytest.raises(ValueError, match="retired"):
+        emit_module._run_successor_repo_probe(
+            engine_worktree=tmp_path,
+            source_root=tmp_path,
+            runner=("python",),
+            timeout=1,
+            **kwargs,
+        )
 
 
 def test_successor_observations_render_function_signatures() -> None:
