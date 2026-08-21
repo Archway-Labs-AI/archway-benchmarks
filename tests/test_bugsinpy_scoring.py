@@ -7,6 +7,7 @@ import pytest
 
 from archway_benchmarks.benchmarks.bugsinpy import BugsInPyBenchmark
 from archway_benchmarks.bugsinpy_types import BugLocation
+from archway_benchmarks.bugsinpy_protocol import RankedFinding, RankedPredictionBundle
 
 FIXTURE = Path(__file__).parent / "fixtures" / "bugsinpy"
 
@@ -72,6 +73,85 @@ def test_detection_subset_changes_denominator(bench):
     scores, _ = score_detection(bench, flagged, subset={"demoproj:1", "demoproj:2"})
     assert scores.total_bugs == 2  # subset, not 3
     assert scores.detected == 1
+
+
+def _ranked_bundle(bug, findings, *, repository_loc=1000):
+    return RankedPredictionBundle(
+        protocol="repository-static-v1",
+        bug_key=bug.key,
+        buggy_revision=bug.buggy_commit,
+        findings=tuple(findings),
+        repository_files=10,
+        repository_loc=repository_loc,
+        analyzed_files=8,
+        analyzed_loc=800 if repository_loc >= 800 else repository_loc,
+    )
+
+
+def test_ranked_detection_scores_top_k_noise_and_coverage(bench):
+    from archway_benchmarks.scoring.bugsinpy import score_ranked_detection
+
+    bug = next(item for item in bench.load() if item.key == "demoproj:1")
+    findings = (
+        RankedFinding(1, "unrelated.py", 2, 2, "value-constraint"),
+        RankedFinding(2, "demoproj/core.py", 11, 11, "exception-path"),
+        RankedFinding(3, "another.py", 5, 5, "bottom"),
+    )
+    scores, outcomes = score_ranked_detection(bench, {bug.key: _ranked_bundle(bug, findings)})
+
+    outcome = next(item for item in outcomes if item.bug_key == bug.key)
+    assert outcome.first_file_hit_rank == 2
+    assert outcome.first_line_hit_rank == 2
+    assert outcome.false_positive_count == 2
+    assert outcome.predicted_lines == 3
+    assert outcome.false_positive_lines == 2
+    assert outcome.reciprocal_rank == 0.5
+    assert outcome.exam_score == 0.002
+    assert scores.top_line_hits == {1: 0, 5: 1, 10: 1}
+    assert scores.total_findings == 3
+    assert scores.exact_findings == 1
+    assert scores.false_positive_findings == 2
+    assert scores.false_positive_lines == 2
+    assert scores.precision_at[1] == 0.0
+    assert scores.precision_at[5] == pytest.approx(1 / 3)
+    assert scores.findings_per_kloc == 3.0
+    assert scores.file_coverage == pytest.approx(0.8)
+    assert scores.loc_coverage == pytest.approx(0.8)
+
+
+def test_ranked_detection_charges_broad_spans_as_false_positive_lines(bench):
+    from archway_benchmarks.scoring.bugsinpy import score_ranked_detection
+
+    bug = next(item for item in bench.load() if item.key == "demoproj:1")
+    broad = (RankedFinding(1, "demoproj/core.py", 1, 100, "broad-warning"),)
+    scores, outcomes = score_ranked_detection(
+        bench, {bug.key: _ranked_bundle(bug, broad, repository_loc=100)}
+    )
+    outcome = next(item for item in outcomes if item.bug_key == bug.key)
+    assert outcome.first_line_hit_rank == 1
+    assert outcome.exam_score == 1.0
+    assert outcome.predicted_lines == 100
+    assert outcome.exact_predicted_lines == 1
+    assert outcome.false_positive_lines == 99
+    assert scores.precision_at[1] == pytest.approx(0.01)
+
+
+def test_ranked_detection_rejects_fixed_or_wrong_revision(bench):
+    from archway_benchmarks.scoring.bugsinpy import score_ranked_detection
+
+    bug = next(item for item in bench.load() if item.key == "demoproj:1")
+    bundle = RankedPredictionBundle(
+        protocol="repository-static-v1",
+        bug_key=bug.key,
+        buggy_revision=bug.fixed_commit,
+        findings=(),
+        repository_files=1,
+        repository_loc=10,
+        analyzed_files=1,
+        analyzed_loc=10,
+    )
+    with pytest.raises(ValueError, match="revision mismatch"):
+        score_ranked_detection(bench, {bug.key: bundle})
 
 
 # ----- repair mode -----

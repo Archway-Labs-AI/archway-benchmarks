@@ -17,6 +17,33 @@ version. Two standard scoring modes, both first-class in the machinery:
 
 Both modes are supported even though **neither is run here**.
 
+## Claim-grade detection validity
+
+The historical `bugsinpy-detect` flag-list path is retained for reproducibility,
+but it is not a claim-grade detector protocol. In particular, a run that selects
+or fetches `files_touched` has learned the correct files from `bug_patch.txt` before
+analysis. Such a run is engine coverage diagnostics, regardless of its score.
+
+New detection work uses the versioned contracts in `bugsinpy_protocol.py`:
+
+- `repository-static-v1` receives a complete buggy checkout and no test entrypoints.
+- `test-directed-static-v1` additionally receives declared failing tests as analysis
+  entrypoints and must be reported as test-directed fault localization.
+- Neither mode accepts the fix patch, fixed source, patch-touched files, patch-derived
+  locations, or patch-derived classifications.
+- Predictions are sealed, repository-wide ranked findings. Ground truth is joined
+  only afterward by `score_ranked_detection`.
+
+Claim-grade reports must include top-1/top-5/top-10 file and line localization,
+mean reciprocal rank, normalized inspection effort, precision at fixed inspection
+budgets, repository-wide false-positive findings, findings per KLOC, and analyzed
+file/LOC coverage. Exact patch-line overlap alone is insufficient.
+
+The internal runner must also retain an execution attestation showing the exact
+detector-visible inputs, their hashes, an isolated filesystem, disabled network,
+and an environment-variable allowlist. A declared manifest without enforced
+process isolation is not proof of a valid run.
+
 ## Vendoring (done — pinned submodule on our fork)
 Vendored as a submodule on the `Archway-Labs-AI` fork, exactly like TypeEvalPy.
 `.gitmodules` declares it and the gitlink is committed:
@@ -88,6 +115,36 @@ archway-bench bugsinpy-progress --out-md bugsinpy_progress.md
 
 # Dump per-bug metadata (for the later classification pass):
 archway-bench bugsinpy-manifest -o bugsinpy_manifest.json
+```
+
+The commands above describe the historical evaluator-facing machinery. They
+must not be used to prepare detector input: its patch-derived file selection
+crosses the ground-truth boundary. Claim-grade detection uses a sanitized
+`archway.bugsinpy.detector-input.v1` manifest and the isolated runner in
+`archway-bench-internal`.
+
+## First ground-truth-blind Archway detector
+
+`archway-bugsinpy-detect MANIFEST OUTPUT` scans every Python file in the buggy
+checkout named by the sanitized manifest. It currently emits only a narrow
+Archway signal: definite (`must_raise`) semantic-runtime exception effects with
+source provenance. It excludes explicit `raise` statements, ambient/unknown
+call effects, and all operations protected by an enclosing source `try` body.
+The broad `try` suppression is intentional until handler matching and engine
+exception-class precision are validated independently.
+
+This is an executable first detector, not a claim that exception effects cover
+the BugsInPy task. Translation or analysis failures reduce the reported
+file/LOC coverage instead of disappearing; each file also has a hard analysis
+deadline so known engine nontermination cannot consume the entire run. Findings are deterministically
+ranked by exception class and source location and retain their Archway effect
+class, origin, and provenance. The detector imports no corpus loader or scorer;
+the isolated process receives only the manifest and buggy checkout.
+
+Example detector command inside the isolated image:
+
+```bash
+archway-bugsinpy-detect /input/manifest.json /output/prediction.json
 ```
 
 - `flags.json`: `{"black:1": [{"file": "src/black.py", "lines": [120, 121]}], ...}`

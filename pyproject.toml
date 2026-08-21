@@ -53,6 +53,7 @@ dashboard = [
 ]
 [project.scripts]
 archway-bench = "archway_benchmarks.cli:main"
+archway-bugsinpy-detect = "archway_benchmarks.bugsinpy_detector:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/archway_benchmarks"]

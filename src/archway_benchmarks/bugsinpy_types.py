@@ -145,6 +145,60 @@ class DetectionScores:
         return self.detected / self.total_bugs if self.total_bugs else 0.0
 
 
+@dataclass(frozen=True)
+class RankedDetectionOutcome:
+    """Per-bug evaluation of a sealed repository-wide ranked prediction."""
+
+    bug_key: str
+    project: str
+    finding_count: int
+    exact_finding_count: int
+    false_positive_count: int
+    predicted_lines: int
+    exact_predicted_lines: int
+    false_positive_lines: int
+    first_file_hit_rank: int | None
+    first_line_hit_rank: int | None
+    reciprocal_rank: float
+    exam_score: float
+    repository_files: int
+    repository_loc: int
+    analyzed_files: int
+    analyzed_loc: int
+
+
+@dataclass(frozen=True)
+class RankedDetectionScores:
+    """Claim-grade localization and repository-wide noise metrics."""
+
+    total_bugs: int
+    top_file_hits: dict[int, int]
+    top_line_hits: dict[int, int]
+    mean_reciprocal_rank: float
+    mean_exam_score: float
+    total_findings: int
+    exact_findings: int
+    false_positive_findings: int
+    predicted_lines: int
+    exact_predicted_lines: int
+    false_positive_lines: int
+    precision_at: dict[int, float]
+    findings_per_kloc: float
+    repository_files: int
+    repository_loc: int
+    analyzed_files: int
+    analyzed_loc: int
+    macro_line_hit_rate_by_project: dict[str, float] = field(default_factory=dict)
+
+    @property
+    def file_coverage(self) -> float:
+        return self.analyzed_files / self.repository_files if self.repository_files else 0.0
+
+    @property
+    def loc_coverage(self) -> float:
+        return self.analyzed_loc / self.repository_loc if self.repository_loc else 0.0
+
+
 # ----- repair-mode scoring -----
 
 

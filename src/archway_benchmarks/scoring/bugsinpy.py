@@ -23,8 +23,11 @@ from archway_benchmarks.bugsinpy_types import (
     DetectionOutcome,
     DetectionScores,
     RepairScores,
+    RankedDetectionOutcome,
+    RankedDetectionScores,
     TestOutcome,
 )
+from archway_benchmarks.bugsinpy_protocol import RankedFinding, RankedPredictionBundle
 
 if TYPE_CHECKING:
     from archway_benchmarks.benchmarks.bugsinpy import BugsInPyBenchmark
@@ -118,6 +121,153 @@ def score_detection(
         file_level_detected=file_level,
         detected_by_project=dict(detected_by_project),
         total_by_project=dict(total_by_project),
+    )
+    return scores, outcomes
+
+
+def _finding_match(
+    finding: RankedFinding,
+    ground_truth: Iterable[BugLocation],
+) -> tuple[bool, bool, int]:
+    file_hit = False
+    line_hit = False
+    exact_lines: set[int] = set()
+    for location in ground_truth:
+        if finding.file != location.file:
+            continue
+        file_hit = True
+        gt_lines = location.lines or frozenset(range(location.start, location.end + 1))
+        if finding.lines() & gt_lines:
+            line_hit = True
+            exact_lines.update(finding.lines() & gt_lines)
+    return file_hit, line_hit, len(exact_lines)
+
+
+def score_ranked_detection(
+    benchmark: "BugsInPyBenchmark",
+    predictions: dict[str, RankedPredictionBundle],
+    *,
+    subset: set[str] | None = None,
+    cutoffs: tuple[int, ...] = (1, 5, 10),
+) -> tuple[RankedDetectionScores, list[RankedDetectionOutcome]]:
+    """Score sealed, repository-wide predictions without exposing GT to execution.
+
+    ``exam_score`` is the cumulative predicted-line span through the first exact
+    finding divided by repository LOC, capped at one; a miss receives one. It
+    therefore charges broad findings against the repository inspection budget.
+    ``precision_at`` is micro line precision across the first K findings per bug.
+    """
+    if not cutoffs or any(value < 1 for value in cutoffs):
+        raise ValueError("rank cutoffs must be positive")
+    cutoffs = tuple(sorted(set(cutoffs)))
+    bugs = benchmark.load()
+    if subset is not None:
+        bugs = [bug for bug in bugs if bug.key in subset]
+
+    outcomes: list[RankedDetectionOutcome] = []
+    top_file_hits = {cutoff: 0 for cutoff in cutoffs}
+    top_line_hits = {cutoff: 0 for cutoff in cutoffs}
+    inspected = {cutoff: 0 for cutoff in cutoffs}
+    correct = {cutoff: 0 for cutoff in cutoffs}
+    project_hits: dict[str, int] = defaultdict(int)
+    project_totals: dict[str, int] = defaultdict(int)
+
+    for bug in bugs:
+        project_totals[bug.project] += 1
+        bundle = predictions.get(bug.key)
+        if bundle is None:
+            findings: tuple[RankedFinding, ...] = ()
+            repository_files = repository_loc = analyzed_files = analyzed_loc = 0
+        else:
+            if bundle.bug_key != bug.key:
+                raise ValueError(f"prediction key mismatch: {bug.key} != {bundle.bug_key}")
+            if bundle.buggy_revision != bug.buggy_commit:
+                raise ValueError(f"prediction revision mismatch for {bug.key}")
+            findings = bundle.findings
+            repository_files = bundle.repository_files
+            repository_loc = bundle.repository_loc
+            analyzed_files = bundle.analyzed_files
+            analyzed_loc = bundle.analyzed_loc
+
+        matches = [_finding_match(finding, bug.bug_locations) for finding in findings]
+        file_ranks = [item.rank for item, match in zip(findings, matches, strict=True) if match[0]]
+        line_ranks = [item.rank for item, match in zip(findings, matches, strict=True) if match[1]]
+        first_file = min(file_ranks, default=None)
+        first_line = min(line_ranks, default=None)
+        exact_count = sum(match[1] for match in matches)
+        false_positives = len(findings) - exact_count
+        predicted_lines = sum(len(item.lines()) for item in findings)
+        exact_predicted_lines = sum(match[2] for match in matches)
+        reciprocal_rank = 0.0 if first_line is None else 1.0 / first_line
+        inspected_lines = (
+            0
+            if first_line is None
+            else sum(len(item.lines()) for item in findings[:first_line])
+        )
+        exam_score = (
+            1.0
+            if first_line is None or repository_loc <= 0
+            else min(1.0, inspected_lines / repository_loc)
+        )
+        if first_line is not None:
+            project_hits[bug.project] += 1
+        for cutoff in cutoffs:
+            top_file_hits[cutoff] += first_file is not None and first_file <= cutoff
+            top_line_hits[cutoff] += first_line is not None and first_line <= cutoff
+            prefix = matches[:cutoff]
+            inspected[cutoff] += sum(len(item.lines()) for item in findings[:cutoff])
+            correct[cutoff] += sum(match[2] for match in prefix)
+        outcomes.append(RankedDetectionOutcome(
+            bug_key=bug.key,
+            project=bug.project,
+            finding_count=len(findings),
+            exact_finding_count=exact_count,
+            false_positive_count=false_positives,
+            predicted_lines=predicted_lines,
+            exact_predicted_lines=exact_predicted_lines,
+            false_positive_lines=predicted_lines - exact_predicted_lines,
+            first_file_hit_rank=first_file,
+            first_line_hit_rank=first_line,
+            reciprocal_rank=reciprocal_rank,
+            exam_score=exam_score,
+            repository_files=repository_files,
+            repository_loc=repository_loc,
+            analyzed_files=analyzed_files,
+            analyzed_loc=analyzed_loc,
+        ))
+
+    total_findings = sum(item.finding_count for item in outcomes)
+    exact_findings = sum(item.exact_finding_count for item in outcomes)
+    repository_loc = sum(item.repository_loc for item in outcomes)
+    scores = RankedDetectionScores(
+        total_bugs=len(bugs),
+        top_file_hits=top_file_hits,
+        top_line_hits=top_line_hits,
+        mean_reciprocal_rank=(
+            sum(item.reciprocal_rank for item in outcomes) / len(outcomes) if outcomes else 0.0
+        ),
+        mean_exam_score=(
+            sum(item.exam_score for item in outcomes) / len(outcomes) if outcomes else 0.0
+        ),
+        total_findings=total_findings,
+        exact_findings=exact_findings,
+        false_positive_findings=total_findings - exact_findings,
+        predicted_lines=sum(item.predicted_lines for item in outcomes),
+        exact_predicted_lines=sum(item.exact_predicted_lines for item in outcomes),
+        false_positive_lines=sum(item.false_positive_lines for item in outcomes),
+        precision_at={
+            cutoff: correct[cutoff] / inspected[cutoff] if inspected[cutoff] else 0.0
+            for cutoff in cutoffs
+        },
+        findings_per_kloc=(total_findings * 1000 / repository_loc if repository_loc else 0.0),
+        repository_files=sum(item.repository_files for item in outcomes),
+        repository_loc=repository_loc,
+        analyzed_files=sum(item.analyzed_files for item in outcomes),
+        analyzed_loc=sum(item.analyzed_loc for item in outcomes),
+        macro_line_hit_rate_by_project={
+            project: project_hits[project] / total
+            for project, total in sorted(project_totals.items())
+        },
     )
     return scores, outcomes
 
