@@ -33,9 +33,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Mapping
 
 Edge = tuple[str, str]
-EdgeProvider = Literal[
-    "successor", "native-successor", "coordinated", "legacy"
-]
+EdgeProvider = Literal["successor"]
 
 
 class PyCGCaseExecutionError(RuntimeError):
@@ -503,16 +501,11 @@ def run_archway_pycg(
     suite: str = "micro",
     limit: int | None = None,
     case_names: tuple[str, ...] = (),
-    include_diagnostic_name_hints: bool = False,
-    analysis_product: str = "standalone",
-    callable_root_activation: str = "off",
     case_timeout_seconds: float | None = None,
-    edge_provider: EdgeProvider = "successor",
     successor_record_events: bool = False,
     successor_summarize_callee_results: bool = False,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
-    successor_callable_input_exact_limit: int | None = None,
 ) -> PyCGRunResult:
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
@@ -559,11 +552,7 @@ def run_archway_pycg(
             produced = _archway_call_edges_with_timeout(
                 case,
                 engine_root=engine_root,
-                include_diagnostic_name_hints=include_diagnostic_name_hints,
-                analysis_product=analysis_product,
-                callable_root_activation=callable_root_activation,
                 case_timeout_seconds=case_timeout_seconds,
-                edge_provider=edge_provider,
                 successor_record_events=successor_record_events,
                 successor_summarize_callee_results=(
                     successor_summarize_callee_results
@@ -571,9 +560,6 @@ def run_archway_pycg(
                 successor_sampling_rate_hz=successor_sampling_rate_hz,
                 successor_partial_graph_checkpoint_seconds=(
                     successor_partial_graph_checkpoint_seconds
-                ),
-                successor_callable_input_exact_limit=(
-                    successor_callable_input_exact_limit
                 ),
             )
             if isinstance(produced, SuccessorEdgeResult):
@@ -661,7 +647,7 @@ def run_archway_pycg(
         suite=suite,
         corpus_root=str(corpus_root),
         engine_root=str(engine_root),
-        edge_provider=edge_provider,
+        edge_provider="successor",
         cases_total=len(cases),
         cases_attempted=len(cases),
         cases_ok=sum(1 for result in results if result.status == "ok"),
@@ -686,25 +672,16 @@ def _archway_call_edges_with_timeout(
     case: PyCGCase,
     *,
     engine_root: Path,
-    include_diagnostic_name_hints: bool,
-    analysis_product: str,
-    callable_root_activation: str,
     case_timeout_seconds: float | None,
-    edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
-    successor_callable_input_exact_limit: int | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
     if case_timeout_seconds is None:
         return _produce_archway_call_edges(
             case,
             engine_root=engine_root,
-            include_diagnostic_name_hints=include_diagnostic_name_hints,
-            analysis_product=analysis_product,
-            callable_root_activation=callable_root_activation,
-            edge_provider=edge_provider,
             successor_record_events=successor_record_events,
             successor_summarize_callee_results=(
                 successor_summarize_callee_results
@@ -712,9 +689,6 @@ def _archway_call_edges_with_timeout(
             successor_sampling_rate_hz=successor_sampling_rate_hz,
             successor_partial_graph_checkpoint_seconds=(
                 successor_partial_graph_checkpoint_seconds
-            ),
-            successor_callable_input_exact_limit=(
-                successor_callable_input_exact_limit
             ),
         )
     if case_timeout_seconds <= 0:
@@ -728,15 +702,10 @@ def _archway_call_edges_with_timeout(
             result_queue,
             case,
             engine_root,
-            include_diagnostic_name_hints,
-            analysis_product,
-            callable_root_activation,
-            edge_provider,
             successor_record_events,
             successor_summarize_callee_results,
             successor_sampling_rate_hz,
             successor_partial_graph_checkpoint_seconds,
-            successor_callable_input_exact_limit,
         ),
     )
     process.start()
@@ -833,24 +802,15 @@ def _archway_call_edges_worker(
     result_queue: multiprocessing.queues.Queue,
     case: PyCGCase,
     engine_root: Path,
-    include_diagnostic_name_hints: bool,
-    analysis_product: str,
-    callable_root_activation: str,
-    edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
-    successor_callable_input_exact_limit: int | None = None,
 ) -> None:
     try:
         predicted = _produce_archway_call_edges(
             case,
             engine_root=engine_root,
-            include_diagnostic_name_hints=include_diagnostic_name_hints,
-            analysis_product=analysis_product,
-            callable_root_activation=callable_root_activation,
-            edge_provider=edge_provider,
             successor_record_events=successor_record_events,
             successor_summarize_callee_results=(
                 successor_summarize_callee_results
@@ -858,9 +818,6 @@ def _archway_call_edges_worker(
             successor_sampling_rate_hz=successor_sampling_rate_hz,
             successor_partial_graph_checkpoint_seconds=(
                 successor_partial_graph_checkpoint_seconds
-            ),
-            successor_callable_input_exact_limit=(
-                successor_callable_input_exact_limit
             ),
             successor_progress=(
                 lambda evidence: result_queue.put(("progress", evidence))
@@ -880,44 +837,23 @@ def _produce_archway_call_edges(
     case: PyCGCase,
     *,
     engine_root: Path,
-    include_diagnostic_name_hints: bool,
-    analysis_product: str,
-    callable_root_activation: str,
-    edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
-    successor_callable_input_exact_limit: int | None = None,
     successor_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
-    if edge_provider in {"successor", "native-successor"}:
-        return successor_archway_call_edge_result(
-            case,
-            engine_root=engine_root,
-            record_events=successor_record_events,
-            progress=successor_progress,
-            summarize_callee_results=successor_summarize_callee_results,
-            sampling_rate_hz=successor_sampling_rate_hz,
-            partial_graph_checkpoint_seconds=(
-                successor_partial_graph_checkpoint_seconds
-            ),
-            callable_input_exact_limit=(
-                successor_callable_input_exact_limit
-            ),
-            native_cells=edge_provider == "native-successor",
-        )
-    if edge_provider == "coordinated":
-        return coordinated_archway_call_edges(case, engine_root=engine_root)
-    if edge_provider == "legacy":
-        return archway_call_edges(
-            case,
-            engine_root=engine_root,
-            include_diagnostic_name_hints=include_diagnostic_name_hints,
-            analysis_product=analysis_product,
-            callable_root_activation=callable_root_activation,
-        )
-    raise ValueError(f"unknown edge provider: {edge_provider}")
+    return successor_archway_call_edge_result(
+        case,
+        engine_root=engine_root,
+        record_events=successor_record_events,
+        progress=successor_progress,
+        summarize_callee_results=successor_summarize_callee_results,
+        sampling_rate_hz=successor_sampling_rate_hz,
+        partial_graph_checkpoint_seconds=(
+            successor_partial_graph_checkpoint_seconds
+        ),
+    )
 
 
 def successor_archway_call_edges(
@@ -941,18 +877,11 @@ def successor_archway_call_edge_result(
     summarize_callee_results: bool = False,
     sampling_rate_hz: float | None = None,
     partial_graph_checkpoint_seconds: float | None = None,
-    callable_input_exact_limit: int | None = None,
-    native_cells: bool = False,
 ) -> SuccessorEdgeResult:
     """Project one persistent diagram-only reduced-product program session."""
 
     if not engine_root.exists():
         raise FileNotFoundError(f"engine root not found: {engine_root}")
-    if callable_input_exact_limit is not None:
-        raise ValueError(
-            "bounded callable-input partitions were removed from the "
-            "current diagram runtime"
-        )
     engine_text = str(engine_root)
     if engine_text not in sys.path:
         sys.path.insert(0, engine_text)
@@ -982,7 +911,7 @@ def successor_archway_call_edge_result(
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
         ),
-        enable_coarse_fallback=not native_cells,
+        enable_coarse_fallback=False,
     )
     session_construction_seconds = (
         time.perf_counter() - session_construction_started
@@ -1318,7 +1247,6 @@ def successor_archway_call_edge_result(
             ),
             "native_call_graph_refusals": (
                 list(session.native_call_graph_refusals())
-                if native_cells else []
             ),
             "resolved_fact_count": len(snapshot.resolved_facts),
             "fact_family_counts": dict(sorted(family_counts.items())),
@@ -1703,14 +1631,7 @@ def successor_archway_call_edge_result(
     )
     try:
         with profile_context as sampling_profile:
-            forward = (
-                session.run_native_semantic_call_graph()
-                if native_cells
-                else session.run_semantic_call_graph(
-                    include_callable_bodies=include_callable_bodies,
-                    summarize_callee_results=summarize_callee_results,
-                )
-            )
+            forward = session.run_native_semantic_call_graph()
     except Exception as exc:
         evidence = current_evidence(phase="error")
         partial = current_partial_graph_evidence()
@@ -1935,195 +1856,6 @@ def _attach_source_line(
     }
 
 
-def coordinated_archway_call_edges(
-    case: PyCGCase,
-    *,
-    engine_root: Path,
-) -> set[Edge]:
-    """Project the demand-driven semantic graph into PyCG's edge vocabulary."""
-
-    if not engine_root.exists():
-        raise FileNotFoundError(f"engine root not found: {engine_root}")
-    engine_text = str(engine_root)
-    if engine_text not in sys.path:
-        sys.path.insert(0, engine_text)
-
-    from sd_core.analysis.runtime.call_targets import (
-        BoundMethod,
-        BuiltinBoundary,
-        ClassConstruction,
-        ExternalSummaryBoundary,
-        LocalFunction,
-    )
-    from sd_core.analysis.runtime.contracts import BoundarySubject, ModuleKey
-    from sd_core.analysis.runtime.semantic_call_graph import (
-        EntrySeed,
-        SemanticCallGraphRequest,
-        SemanticCallGraphRuntime,
-    )
-    from sd_core.runners.contextual_call_resolution import (
-        build_python_program_callable_indexes,
-    )
-
-    sources = _load_case_sources(case)
-    program = build_python_program_callable_indexes(sources)
-    root_modules = _coordinated_root_modules(case, sources)
-    roots = tuple(
-        EntrySeed(
-            f"module:{module_name}",
-            BoundarySubject(
-                ModuleKey("workspace:program", module_name),
-                f"{module_name}:<module>",
-            ),
-        )
-        for module_name in root_modules
-    )
-    result = SemanticCallGraphRuntime(program).build(SemanticCallGraphRequest(
-        program.revision,
-        roots,
-        requester=f"pycg:{case.suite}:{case.suite_path}",
-    ))
-    declared_initializers = {
-        boundary.declaration
-        for boundary, _parameters in program.signatures
-        if boundary.declaration.endswith(".__init__")
-    }
-    edges: set[Edge] = set()
-    for edge in result.edges:
-        caller = _coordinated_local_display_name(edge.caller.boundary.declaration)
-        target = edge.target
-        if isinstance(target, (LocalFunction, BoundMethod)):
-            callee = _coordinated_local_display_name(target.boundary.declaration)
-        elif isinstance(target, ClassConstruction):
-            initializer = f"{target.boundary.declaration}.__init__"
-            callee = (
-                _coordinated_local_display_name(initializer)
-                if initializer in declared_initializers
-                else None
-            )
-        elif isinstance(target, BuiltinBoundary):
-            qualified = target.boundary.qualified_name.removeprefix("builtins.")
-            callee = f"<builtin>.{qualified}"
-        elif isinstance(target, ExternalSummaryBoundary):
-            callee = target.boundary.qualified_name
-        else:
-            callee = None
-        if callee is not None:
-            edges.add((caller, callee))
-    return edges
-
-
-def _coordinated_root_modules(
-    case: PyCGCase,
-    sources: Mapping[str, str],
-) -> tuple[str, ...]:
-    if case.suite == "micro" and "main" in sources:
-        return ("main",)
-    return tuple(sorted(sources))
-
-
-def _coordinated_local_display_name(declaration: str) -> str:
-    module_name, local_name = declaration.split(":", 1)
-    return module_name if local_name == "<module>" else f"{module_name}.{local_name}"
-
-
-def archway_call_edges(
-    case: PyCGCase,
-    *,
-    engine_root: Path,
-    include_diagnostic_name_hints: bool = False,
-    analysis_product: str = "standalone",
-    callable_root_activation: str = "off",
-    callable_root_body_ids: frozenset[str] | None = None,
-) -> set[Edge]:
-    """Project Archway call-relation facts to PyCG edge strings.
-
-    This is intentionally thin. It imports the engine from ``engine_root`` and
-    reads Archway's call relation. It does not parse Python source directly to
-    invent edges.
-    """
-
-    if not engine_root.exists():
-        raise FileNotFoundError(f"engine root not found: {engine_root}")
-    engine_text = str(engine_root)
-    if engine_text not in sys.path:
-        sys.path.insert(0, engine_text)
-
-    from sd_core.analysis.callloops.call_relation import project_call_relation
-    from sd_core.analysis.callloops.runner import analyze_morphism
-    from sd_core.runners.types import analyze_program_result
-    from sd_core.tooling.harness import ProgramResult
-
-    sources = _load_case_sources(case)
-    program = ProgramResult.from_sources(sources)
-    edges: set[Edge] = set()
-    program_run = analyze_program_result(
-        program,
-        body_summary_consumption="safe",
-        analysis_product=analysis_product,
-        external_from_import_fallback=True,
-        callable_root_activation=callable_root_activation,
-        callable_root_body_ids=callable_root_body_ids,
-    )
-    structural_runs = {
-        module_name: analyze_morphism(
-            translation.morphism,
-            registry=program_run.modules[module_name].target.registry,
-        )
-        for module_name, translation in sorted(program.modules.items())
-        if module_name in program_run.modules
-        and program_run.modules[module_name].target.registry is not None
-    }
-    function_names: dict[str, str] = {}
-    for module_name, structural in structural_runs.items():
-        type_run = program_run.modules[module_name]
-        function_names.update(
-            _function_display_names(module_name, structural.functions, type_run.target)
-        )
-
-    for module_name, structural in sorted(structural_runs.items()):
-        type_run = program_run.modules.get(module_name)
-        if type_run is None:
-            continue
-        registry = type_run.target.registry
-        if registry is None:
-            continue
-        projection = project_call_relation(
-            structural,
-            seed_id=f"sid:v1:pycg-seed:{case.suite_path}:{module_name}",
-            context_id=f"sid:v1:pycg-context:{case.suite_path}:module-load",
-            registry=registry,
-        )
-        for edge in projection.edges:
-            if edge.precision in {"name_hint", "unresolved"}:
-                if not include_diagnostic_name_hints:
-                    continue
-                caller = (
-                    module_name
-                    if edge.caller_body_id is None
-                    else function_names.get(edge.caller_body_id)
-                )
-                if caller is None:
-                    continue
-                for callee_id in edge.callee_body_ids:
-                    callee = function_names.get(callee_id)
-                    if callee is not None:
-                        edges.add((caller, callee))
-                continue
-            caller = (
-                module_name
-                if edge.caller_body_id is None
-                else function_names.get(edge.caller_body_id)
-            )
-            if caller is None:
-                continue
-            for callee_id in edge.callee_body_ids:
-                callee = _callee_display_name(callee_id, function_names)
-                if callee is not None:
-                    edges.add((caller, callee))
-    return _inline_synthetic_frame_edges(edges)
-
-
 def _load_case_sources(case: PyCGCase) -> dict[str, str]:
     sources: dict[str, str] = {}
     for path in case.source_paths:
@@ -2299,82 +2031,6 @@ def _method_owner_name(target: object, body_id: str) -> str | None:
     return name if isinstance(name, str) and name else None
 
 
-def _function_display_names(
-    module_name: str,
-    functions: Iterable[object],
-    target: object,
-) -> dict[str, str]:
-    by_id = {
-        getattr(function, "body_id"): function
-        for function in functions
-        if isinstance(getattr(function, "body_id", None), str)
-    }
-    lambda_names: dict[str, str] = {}
-    lambda_index = 0
-    for function in functions:
-        body_id = getattr(function, "body_id", None)
-        if not isinstance(body_id, str):
-            continue
-        if getattr(function, "name", None) == "<lambda>":
-            lambda_index += 1
-            lambda_names[body_id] = f"<lambda{lambda_index}>"
-
-    resolved: dict[str, str] = {}
-    resolving: set[str] = set()
-
-    def resolve(body_id: str) -> str | None:
-        if body_id in resolved:
-            return resolved[body_id]
-        if body_id in resolving:
-            return None
-        function = by_id.get(body_id)
-        if function is None:
-            return None
-        resolving.add(body_id)
-        raw_name = getattr(function, "name", None)
-        if not isinstance(raw_name, str) or not raw_name:
-            resolving.remove(body_id)
-            return None
-        function_name = lambda_names.get(body_id, raw_name)
-        lexical_parent = getattr(function, "lexical_parent_body_id", None)
-        parent_name = (
-            resolve(lexical_parent)
-            if isinstance(lexical_parent, str)
-            else None
-        )
-        if parent_name is not None:
-            display = f"{parent_name}.{function_name}"
-        else:
-            display = _qualify_function_name(
-                module_name,
-                function_name,
-                owner_name=_method_owner_name(target, body_id),
-            )
-        resolving.remove(body_id)
-        resolved[body_id] = display
-        return display
-
-    for body_id in by_id:
-        resolve(body_id)
-    return resolved
-
-
-def _qualify_function_name(
-    module_name: str,
-    function_name: str,
-    *,
-    owner_name: str | None = None,
-) -> str:
-    if function_name.startswith(module_name + "."):
-        return function_name
-    if owner_name is not None:
-        owner = owner_name
-        if owner.startswith(module_name + "."):
-            owner = owner.removeprefix(module_name + ".")
-        return f"{module_name}.{owner}.{function_name}"
-    return f"{module_name}.{function_name}"
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m archway_benchmarks.pycg")
     parser.add_argument("--corpus-root", required=True)
@@ -2395,44 +2051,6 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Optional per-case wall-clock timeout. Timed-out cases are recorded "
             "with status=timeout and zero predicted edges; the run continues."
-        ),
-    )
-    parser.add_argument(
-        "--edge-provider",
-        choices=("successor", "native-successor", "coordinated", "legacy"),
-        default="successor",
-        help=(
-            "Call-edge producer. successor uses the coarse comparison runtime; "
-            "native-successor uses the typed-cell diagram runtime; "
-            "coordinated is the quarantined source-index runtime; legacy "
-            "projects the reduced-product call relation."
-        ),
-    )
-    parser.add_argument(
-        "--analysis-product",
-        choices=("standalone", "type_requirements_product"),
-        default="standalone",
-        help=(
-            "Archway program analysis product mode. The default preserves the "
-            "legacy program-level type runner; type_requirements_product runs "
-            "the fuller reduced-product participant path."
-        ),
-    )
-    parser.add_argument(
-        "--callable-root-activation",
-        choices=("off", "all"),
-        default="off",
-        help=(
-            "Opt-in engine root policy. 'all' analyzes every uncalled "
-            "parameter-bearing source callable with conservative arguments."
-        ),
-    )
-    parser.add_argument(
-        "--include-diagnostic-name-hints",
-        action="store_true",
-        help=(
-            "Include structural name-hint edges. These are diagnostic only and "
-            "must not be treated as claim-grade semantic call targets."
         ),
     )
     parser.add_argument(
@@ -2470,15 +2088,6 @@ def main(argv: list[str] | None = None) -> int:
             "because projection has measurable cost."
         ),
     )
-    parser.add_argument(
-        "--successor-callable-input-exact-limit",
-        type=int,
-        default=None,
-        help=(
-            "Opt into bounded callable-input partitions with this many exact "
-            "patterns per compatible interface before an overflow partition."
-        ),
-    )
     args = parser.parse_args(argv)
 
     result = run_archway_pycg(
@@ -2487,11 +2096,7 @@ def main(argv: list[str] | None = None) -> int:
         suite=args.suite,
         limit=args.limit,
         case_names=tuple(args.case),
-        include_diagnostic_name_hints=args.include_diagnostic_name_hints,
-        analysis_product=args.analysis_product,
-        callable_root_activation=args.callable_root_activation,
         case_timeout_seconds=args.case_timeout_seconds,
-        edge_provider=args.edge_provider,
         successor_record_events=args.successor_record_events,
         successor_summarize_callee_results=(
             args.successor_summarize_callee_results
@@ -2499,9 +2104,6 @@ def main(argv: list[str] | None = None) -> int:
         successor_sampling_rate_hz=args.successor_sampling_rate_hz,
         successor_partial_graph_checkpoint_seconds=(
             args.successor_partial_graph_checkpoint_seconds
-        ),
-        successor_callable_input_exact_limit=(
-            args.successor_callable_input_exact_limit
         ),
     )
     payload = result.to_jsonable()
