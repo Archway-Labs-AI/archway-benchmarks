@@ -212,6 +212,7 @@ class EmitStats:
     params_annotated: int
     returns_annotated: int
     variables_annotated: int = 0
+    seconds_engine_probe: float = 0.0
     failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
     file_profiles: tuple[FileProfile, ...] = field(default_factory=tuple)
     engine_sha: str | None = None
@@ -304,7 +305,9 @@ def emit_archway_predictions(
             rel_s = str(rel)
             dest = dest_root / rel
             record = repo_record
-            seconds_probe = seconds_repo_probe
+            # The engine probe is one repository-wide persistent session.
+            # Per-file rows must not each claim its complete wall time.
+            seconds_probe = 0.0
             # Preserve the probe's compact phase/cohort evidence when the
             # repository-wide subprocess itself consumed the timeout.  The
             # elapsed-budget check below used to replace this richer failure
@@ -454,6 +457,7 @@ def emit_archway_predictions(
         params_annotated=params_annotated,
         returns_annotated=returns_annotated,
         variables_annotated=variables_annotated,
+        seconds_engine_probe=round(seconds_repo_probe, 6),
         failures=tuple(failures),
         file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
