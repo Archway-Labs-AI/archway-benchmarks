@@ -1,0 +1,25 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "sublist3r:incorrect-dict-receiver:v1",
+      "residual_ids": [
+        "pycg-residual:v1:87988c0465f2beb3c98e1ce3aa2c6960249715807fe6fee5573a2b8edbc98b6c",
+        "pycg-residual:v1:2ac65bc835eb3c9b5b818410af8719d015c43b47c27d6b0ec4e31b2da405bfa7",
+        "pycg-residual:v1:f603a095394fd731619d99c190ea5d053150077b3f6832b051fde1061870053a",
+        "pycg-residual:v1:9605814c54f145dc1eaa2d9c28af883be5390178fc801808b4c7ecef0e3313a6",
+        "pycg-residual:v1:372cb44d3397ca0ebe63e13efab4f5ea217f70719a8503f5cd0be446d86a5dc8",
+        "pycg-residual:v1:299d2c744d3b8312ad82a3d993fbdb648e7344ad779a1b2bcae7c5d0253717cf",
+        "pycg-residual:v1:e274b6f4c9927e56c6220da5c792443aefae05262cdc174843f254bdc4027f05"
+      ],
+      "disposition": "archway_unsoundness",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway emits dict.get at callsites whose source-visible and expected receivers are Queue or requests.Session. The paired FN set misses queue.Queue.get or requests.Session.get at the same callers. This is receiver-type pollution, not a benchmark naming convention.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "review:sublist3r-fp-fn-receiver-pairs:2026-08-12"
+      ]
+    }
+  ]
+}

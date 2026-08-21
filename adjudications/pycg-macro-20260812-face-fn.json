@@ -1,0 +1,117 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:99e3915ce4a19c476bdb724e004e71545a04144cbd064303ae267d853726bc6a",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The source uses a bare except clause; it does not call Exception.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:56791329a38347d039683df35143ab5bfa55a30f29b8c618977f5b48dc96c413",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected target is misspelled; source calls numpy.expand_dims, which Archway reports.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:148e95056bb91b5bd32a7d07c83dfc27fc8453f18a5ab0d89d820c60f80ca66e",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected owner is wrong; source imports load_image from utils.inference, which Archway reports.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:edca980a07b7dcf3cacc58f5fd19ade225301ff4838390be338e628413d4dcfc",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The executed path returns Sequential; Archway reports keras.models.Sequential.summary rather than the benchmark's Model.summary.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:77d0b91e7c4b61e7ff0d879932a25a3ad1c86ba2271d2b6689070a2dc9f35fbb",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The big_XCEPTION body in the retained corpus contains no l2 call.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6564b5ab680fa1bcd645d6e1c3666eaf1c6a147036c8f41d168279f33722a04b",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected preprocessor._imresize function is absent from the retained corpus version.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:f82db6023ee11fe43e255c9fad4ee91a457ace339696625686f1cce1f6151f26",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected preprocessor._imresize function is absent from the retained corpus version.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:99faa1d7b286dcf0474b2b4d08939508aa76374028e35add56c1db8fbdee5e40",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected preprocessor._imresize function is absent from the retained corpus version.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:7d6f11d9d6d0dd7dc0d5a300ba595d0d67726e825c3c339b277acb4b12b77b76",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected preprocessor._imresize function is absent from the retained corpus version.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:f84e737afbcfe54b593ed4929a65ec449a5d94887f34d4e507c758ee054263fe",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected preprocessor._imresize function is absent from the retained corpus version.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:adef6bb0697b259e8e267aeaf9085cf879a7c165e1bf0ee992be717059d855f9",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected preprocessor._imresize function is absent from the retained corpus version.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:619ef3a063b9a8fd6abdc29dbc5db486ca07003c9b04c82e7c33b3daa9279c22",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected namespace is wrong; source calls numpy.ones_like rather than numpy.random.ones_like.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:3a15cb3c3457c6fb2440b892a3e73ce43d1ff5d0b172436dd30ac398102112ef",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected namespace is misspelled; Archway reports source-correct keras.models.Model.get_layer.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:59ee126ab8248635f075b890707c4a1e95ec2dbac27113c4ade09939c8243edb",
+      "disposition": "archway_precision_gap",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The retained source directly calls hasattr inside modify_backprop's list comprehension, but Archway produces no hasattr semantic edge before adapter projection.",
+      "evidence_refs": ["projects/face_classification/src/utils/grad_cam.py:64", "analysis_evidence:no-hasattr-edge"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:ba3d2f0c8119efb1df07ae7e6c718ae3a64b05eb9fc1a9beabbdb664e5737fa3",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Source invokes ndarray.astype; Archway reports numpy.ndarray.astype rather than the benchmark's module-level numpy.astype.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:eba582283920ed4ba368d12cc0824fffc83e2fec0e094ca905fc35da31a2b89b",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Source invokes ndarray.tolist; Archway reports numpy.ndarray.tolist rather than the benchmark's module-level numpy.tolist.",
+      "evidence_refs": ["SUCCESSOR-FACE-CONTAINER-MUTATION-AND-RESIDUAL-AUDIT.md:Face residual adjudication"]
+    }
+  ]
+}

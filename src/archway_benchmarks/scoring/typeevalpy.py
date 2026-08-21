@@ -16,6 +16,7 @@ lives upstream and any future change in their `check_match` is inherited.
 """
 from __future__ import annotations
 
+import os
 import sys
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -33,7 +34,10 @@ if TYPE_CHECKING:
 # ----- vendor scorer bootstrap -----
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_VENDOR_SRC = _REPO_ROOT / "extras" / "TypeEvalPy" / "src"
+_VENDOR_SRC = Path(os.environ.get(
+    "ARCHWAY_TYPEEVALPY_ROOT",
+    _REPO_ROOT / "extras" / "TypeEvalPy",
+)) / "src"
 if str(_VENDOR_SRC) not in sys.path:
     sys.path.insert(0, str(_VENDOR_SRC))
 

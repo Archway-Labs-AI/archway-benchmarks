@@ -1,0 +1,55 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:2f65b3330c729eab88c3d8fc9c3a7863fd35ad50163f626d89c735b3c8ef1f79",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The expected sys.stderr.write edge is a coarse alias for the precise <**PyFile**>.write receiver-method edge Archway reports for the same caller.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "review:sublist3r-ground-truth-conventions:2026-08-12"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "sublist3r:remaining-real-target-misses:v1",
+      "residual_ids": [
+        "pycg-residual:v1:22b0ce78315deaf7c7f4d754c56cf5db5b8617965440f90f1c760eed86796a94",
+        "pycg-residual:v1:fa9336ba0c200ac8759005590b3f251663c8f71ee9a6e1c768f7c55f439405d7",
+        "pycg-residual:v1:97a29928db8953b65afa2f1b11e3947c841a5c73a85a3884068f59a2f3c27942",
+        "pycg-residual:v1:3d4be44295fbe0d810eb639ce8ff6b874131a438814b3537d6843dc591f5b05a",
+        "pycg-residual:v1:0c45ca4f8070db846c65139c289290ea26aeda3cc20e2982a3c2853ce2c0b93e",
+        "pycg-residual:v1:9dcc6d3096948d528f64febd864edf45596fe8499d5c4b8acbbdf3e47aea3108",
+        "pycg-residual:v1:98c211dd462cbc16ec06df160226ca74f0a31377c3a0da6d0baffd8383f2bd52",
+        "pycg-residual:v1:df0728d1e9fb565f12dfadf8a358c6f604a938b50dbb70a0dbd10f9e3aa5c6a9",
+        "pycg-residual:v1:323af8c3f9300da9fe899dbf4080a255adb6f8279729fa45553b7cdbca7d7d8a",
+        "pycg-residual:v1:24f71b427fd26ac74d5d3f863be637f4c7b5bb4b5db477339a9b556e99347f2b",
+        "pycg-residual:v1:4af2edaf859aa7fe662f8570828807b8c5a9a8e3a0100433685d9395d30d1029",
+        "pycg-residual:v1:f8257653eeaec11ff50bd50c3407f1e90273fb0b81602c3271aa1b6f08144a07",
+        "pycg-residual:v1:3bb6e5152bc3460cb64b241d314263d348e22ded3d326c9f50603be0e50df402",
+        "pycg-residual:v1:45933998a50d30b17e71be9ec6f6970684df98be21f0a5110f3b12fb0594d7c3",
+        "pycg-residual:v1:47231cf84d0b9724df6401aabd5315b48d7015026f7d3306b31bc10a3cea58b5",
+        "pycg-residual:v1:39c3d4ddbf0f8649b4a8355874be86d3df64e57a6fecc6319b20a1e1def1d31b",
+        "pycg-residual:v1:92b7e44801cdf7125e994efea8202ffab85a23209e1e6c190e2b5cdade930167",
+        "pycg-residual:v1:c4c2d2c39e5df20634c43685c3b37c0d2876ed3a30763a9d06366b3fd8fa5125",
+        "pycg-residual:v1:176d35831873531a3a7063de3effb966b913ebbef9c3e257f5ece44e6949aff4",
+        "pycg-residual:v1:afc53c5cfec12ecff1a766590f5c8d95d8743f94e5994bfe9300350e3623f5ef",
+        "pycg-residual:v1:b615b3d4d653342f708a787bcb349c3a2467252a8d52ad6b2dc2ae4f34b67f65",
+        "pycg-residual:v1:74228924e55714980f29af22e6c97f476e4c59a87621269eba01383302831618",
+        "pycg-residual:v1:95f04c0bb4b9e50edd62bc58b1ef7a8008d3aefac18896a82f373eacbb67edb6",
+        "pycg-residual:v1:d149a95ca51de2fd9bfc9b815ac58c96cc015f47300e24e560fbac1e3ff6860e",
+        "pycg-residual:v1:7037fa029dacb3618074599f47617df14adc8faea547e3630e916e56b66ff7f0",
+        "pycg-residual:v1:418334142fd758c383d2ffac49414523fce74c3ac5324b684a0ff3fc0a8261e6"
+      ],
+      "disposition": "archway_precision_gap",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Each exact member is a source-visible or semantically required target that Archway does not report: builtin/string operations, nested callable flow, Queue methods, external constructors and methods, synchronization operations, or ctypes calls. These are analysis coverage gaps rather than adapter naming mismatches.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "review:sublist3r-remaining-fn:2026-08-12"
+      ]
+    }
+  ]
+}

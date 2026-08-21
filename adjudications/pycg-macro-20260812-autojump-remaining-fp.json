@@ -1,0 +1,80 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:5529a0969ebb82b515a8a946909c90376b273df05f3c0d0e07b49858ff67fd4d",
+      "disposition": "archway_unsoundness",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "The isupper call occurs inside has_uppercase.<genexpr>, but Archway attributes it to the enclosing has_uppercase boundary. The target is real; the emitted caller boundary is not.",
+      "evidence_refs": [
+        "analysis_evidence:synthetic_frame_contextual_evidence",
+        "review:autojump-generator-caller-attribution:2026-08-12"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "autojump:retained-contextual-valid-extras:v1",
+      "residual_ids": [
+        "pycg-residual:v1:57edbf3ca1c3c98bd63ed067b22e0011de0e3c882207aaf276e62ec97f6b97b5",
+        "pycg-residual:v1:071bb985c058b0d143aef82b22f21899517986a6d24ba2ad1a2df7c895c794d2",
+        "pycg-residual:v1:6f8ab3af540f3b6ddf5e6cf32623652270934ca4c10f392871ce9ce5924dfed2",
+        "pycg-residual:v1:17e048920ad8b589b1abb8f1470106dcf9617601e5844e97ca92a5289a79f938",
+        "pycg-residual:v1:b8dbc59faa2555b76f6d9a0652a009d1c9b329e2d1356309fad85d80d41b5d8a",
+        "pycg-residual:v1:d91bf5df8e1d87dae08d333b1482e317bcb7a296b07d37b56dd9d261ea452a6c",
+        "pycg-residual:v1:526e7c39c6429ecd1fc996ec05efafa502c83856badcca94ed4007360b9f3cb2",
+        "pycg-residual:v1:1a6b89d8d6ad3b7f4b22d73264aed65abb612846d13c3cd4321e1c420cc4ec72",
+        "pycg-residual:v1:6cc8f255f004d060b7ad68b8ea3ab2e0b65227752384575e38965bdf80be0584",
+        "pycg-residual:v1:03aa29e5d7d6250eadfafc94b07d249953c0d2b28cb836a074bba587cb215158",
+        "pycg-residual:v1:9d173a5aec376d136dc7548c946109b30607df67b65e9d98171f2af3e0aefca2",
+        "pycg-residual:v1:5dbf3427ea02b37ee1dc800325ace5d8c86c8d793832c44430f2964c1699e8ef",
+        "pycg-residual:v1:06171fd14d332b1bfb63cb3eba48ef619f65e8b9bc333992cf964ddcddb23ed4",
+        "pycg-residual:v1:0e5030e3c2f040bf6875ef92bbd3f97fe983d000307bd7f1d7fd44ea36d8540a",
+        "pycg-residual:v1:51e30fb623dde6286dec1740b65669302dbff6f561a75f5e8e823a57977f681f",
+        "pycg-residual:v1:eba7e6235c8ff6bcc7d53f552b0483358a21ed6b59aea55592306d82091126db",
+        "pycg-residual:v1:f777b955dfb51af23b7b44de52708b6dafdd912006d4d69d37e2d4fff99785f0",
+        "pycg-residual:v1:7d7f0ab6e22e8845a77a62a2b9b1bb5ccb1879168c6005918ec1b586dca4c2b5",
+        "pycg-residual:v1:df1cd577a620fc38149b48395a0aa45951baf329c1cc2567ee3bbe798df80025",
+        "pycg-residual:v1:d3ea64db64d1917104fe55d5c6afb957e41962a9044fb0d16d8e405370cd4f33",
+        "pycg-residual:v1:cd85409f8c678688a912e94ff03d776e2d07b1c29e583579f30838ee2d4ce212",
+        "pycg-residual:v1:c3cfb53277a72b15b450730c16c1d5dccd05dc315a88beb16f7fce4db919dadc",
+        "pycg-residual:v1:bf110cdcf8fba6e23d06b8e021ebaffb0f019ac76b206f317482554bdaed8b4c",
+        "pycg-residual:v1:ecadd56bfd2c0439933862beab286b3661a8f96e034d4dfe67e9242635be093f",
+        "pycg-residual:v1:8f3282009e757bbee8b88d7aa5fd6c021d3faaa0a2edbd893a5679010e6009ac",
+        "pycg-residual:v1:2f4393f1912145735dee678784697d86c377525dadb01a2e1a09bc309312cf02",
+        "pycg-residual:v1:1023d5ba0c3aa822445b711ceabee9611a7570b8055e6f49eefd92cce7978a36",
+        "pycg-residual:v1:e346282fbc5042d766f7beb2a91a8af0dadefde6aebd41ed0498924d28413c74",
+        "pycg-residual:v1:90d89b161e67dbff74db6ba92db87123b53ab70cc15912a1de70d8b2a5fdfc64",
+        "pycg-residual:v1:f63febc4e7052d70e1bddcd07f0ceaf61d50c037ab95591e7dbdb66ab63b4208",
+        "pycg-residual:v1:91704c721f44fd57b246458ca4a88e9c4f28b4ebf3a949f03c032368c2f73937",
+        "pycg-residual:v1:7d1a8ae2834117f769a522a5f2b3d8a65463ecb2a297aaa7ee79bea0e5419359",
+        "pycg-residual:v1:4cb8281cf3ad9fb80889224545f2391204e5fae42b0705fe9c6bbd2eff94732a",
+        "pycg-residual:v1:cce37f87d704f10517345cd306875564a70ba993fbeabdfd427d15462be3eed9",
+        "pycg-residual:v1:0d1718ed62c783e942aaf203f2a9fb80f4f10d1a430fcea63f3e2758ded95fab",
+        "pycg-residual:v1:faa8d9bb3101bbc17043b2f0025ea56d8a150731b6edcf349fb6028b70154303",
+        "pycg-residual:v1:856accf9605d680765c3d77825b257c8b416081ef32d406b2fc83d6f0eec974f",
+        "pycg-residual:v1:6a75b8677a043d29cb256160321f54934a2ea30f9a0129283f4e1085efac013c",
+        "pycg-residual:v1:11893cbf793c62f8463d60a3e4c5fc4d3020dfd2fd39919d5e54428ed72b25d5",
+        "pycg-residual:v1:ba1b286a5bc44db445bbaecd5d602d98dbf259fc592f3b2c784a45473cce0ce4",
+        "pycg-residual:v1:355cd9571783b549cc44a1f6bf13f42d6ff1c82df1d2538679e825d1da4e4d4c",
+        "pycg-residual:v1:d5af82d1c23c9c3d741a508b76f5da0f68ad0871e813f2f92afb4fe4154d9396",
+        "pycg-residual:v1:279ab51b09a5acd3a7ba463f3ba0c6c93690e3d00df5df9970f173e1e5fc5821",
+        "pycg-residual:v1:cbd739bf5ac2304180c3772531a61bc4da0ba20ba279bc66e50d94825c0eba94",
+        "pycg-residual:v1:610fd92244f8ea4fa26b06e5eafd3ee416ced088c579f8f8d79faa5074eac32d",
+        "pycg-residual:v1:194379d417b75ac46bf9442622b0cef9e6fa9c20e9346d2362d378b16dcc87ff",
+        "pycg-residual:v1:0397358bda0a344fb18c28f9ad3b43fa4a9278f32221cdccb9dfcd6968764b89",
+        "pycg-residual:v1:88ab83fceb966c24fa451c69135bf575d0973c860422d547a80af6d4384d9dca",
+        "pycg-residual:v1:d24d6343601a8514ac9765f2acb8e73a67c4f8918db8dd33cc2bcaf337238a20",
+        "pycg-residual:v1:3943739ed8223b11565178accc1b4ff85b267b5e2fea8a22baf8d733012a212d",
+        "pycg-residual:v1:14886fb95d7c6eb61dfd22cbe26633fc9560a5a2681aaf2b2f7b10b1d2cf6d96"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Each exact edge has retained contextual semantic evidence at a source-visible callsite. The set consists of real builtin/container/file operations, precise external receiver calls, context-manager protocol calls, or resolved project calls omitted by PyCG.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "review:autojump-contextual-extra-edges:2026-08-12"
+      ]
+    }
+  ]
+}

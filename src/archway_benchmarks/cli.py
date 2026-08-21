@@ -64,12 +64,38 @@ def _build_archway_engines(
     )
 
 
+def _build_successor_engines(
+    benchmark: Benchmark,
+    accuracy: float,
+    seed: int | None,
+):
+    """Construct the in-process diagram-only successor engine triple."""
+
+    from archway_benchmarks.engines.archway import ArchwayTranslationEngine
+    from archway_benchmarks.engines.successor_archway import (
+        SuccessorArchwayAnalysisEngine,
+        SuccessorTypeEvalPyAdapter,
+    )
+
+    return (
+        ArchwayTranslationEngine(
+            corpus_root=getattr(benchmark, "corpus_root", None),
+            dependency_roots=tuple(
+                getattr(benchmark, "dependency_roots", ())
+            ),
+        ),
+        SuccessorArchwayAnalysisEngine(record_events=False),
+        SuccessorTypeEvalPyAdapter(),
+    )
+
+
 ENGINES: dict[
     str,
     Callable[[Benchmark, float, int | None], tuple[TranslationEngine, AnalysisEngine, object]],
 ] = {
     "stub": _build_stub_engines,
     "archway": _build_archway_engines,
+    "successor": _build_successor_engines,
 }
 
 
@@ -79,6 +105,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_run = sub.add_parser("run", help="Run a benchmark end-to-end and persist a run")
     p_run.add_argument("--benchmark", default="typeevalpy", choices=list(BENCHMARKS))
+    p_run.add_argument(
+        "--corpus-root",
+        default=None,
+        help="Explicit benchmark corpus root; recorded workflows should not rely on checkout-relative discovery.",
+    )
     p_run.add_argument("--engine", default="stub", choices=list(ENGINES))
     p_run.add_argument("--stub-accuracy", type=float, default=0.67)
     p_run.add_argument("--seed", type=int, default=None)
@@ -187,7 +218,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_run(args) -> int:
-    bench = BENCHMARKS[args.benchmark]()
+    bench = BENCHMARKS[args.benchmark](
+        **(
+            {"corpus_root": Path(args.corpus_root)}
+            if args.corpus_root else {}
+        )
+    )
     metadata = None
     if args.engine == "archway":
         cfg = resolve_archway_server_config(
@@ -213,6 +249,12 @@ def _cmd_run(args) -> int:
         translator, analyzer, adapter = ENGINES[args.engine](
             bench, args.stub_accuracy, args.seed
         )
+        if args.engine == "successor":
+            metadata = {
+                "analysis_surface": "diagram-only",
+                "record_events": False,
+                "session_policy": "persistent-forward-then-targeted",
+            }
     result = run_pipeline(
         benchmark=bench,
         translator=translator,

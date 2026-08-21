@@ -1,0 +1,68 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:afb9756f96d5d716940687c669fe2477e6fc532ec07b125be6abfaa7f891c0b1",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected dict.update edge at the direct defaults update callsite; the adapter explicitly omits it as a synthetic implementation target.",
+      "evidence_refs": ["sid:v1:box:3b6b068070554734d45060adcad14918ee4afaabd175ebe2e5183f342d3585a4", "projection:omit_synthetic_target"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:2fb117763aa9067034e7e8f9b626b73356f9bac52cbee4d0d3fd658fea4bde1c",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected iter edge for the explicit iter(arg_strings) call; the adapter explicitly omits it as a synthetic implementation target.",
+      "evidence_refs": ["sid:v1:box:dc0540624f5a4b9b0cc50ddaa8cd3e3ada0674945bccf30ad718fb9e08982724", "projection:omit_synthetic_target"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:d86c81562f577b87b4039f025b924bfa2f40d9961391caa98dbcc3dbe7951472",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected dict.update edge at the direct kwargs update callsite; the adapter explicitly omits it as a synthetic implementation target.",
+      "evidence_refs": ["sid:v1:box:1621744e5bc283daa9302a62859de143fd1d4280c047c98d690d35fd86f91aca", "projection:omit_synthetic_target"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:1ff987cfd7d84719f5b9d4bac2904e7d4a461dd9eef7377d646eff85e0818133",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected iter edge for the explicit iterator construction in first; the adapter explicitly omits it.",
+      "evidence_refs": ["sid:v1:box:28ce8fe267425d69bfc28c05db6b036dbc837e2d4bf3b70ce696cda662831411", "projection:omit_synthetic_target"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:16027bcfc59240767cbf489e9884dea849cb9d68e34aa5044de49b26e827d510",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected iter edge for the explicit iterator construction in last; the adapter explicitly omits it.",
+      "evidence_refs": ["sid:v1:box:9cfe36d20de999734b2a676490c2c081b2ba42e5845329d9c678829b4e7cd551", "projection:omit_synthetic_target"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:e398b2aa71c8a1b5059a7df39f305990cccdc8e5a3c963792d903ade3120eab4",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected iter edge for the explicit iterator construction in second; the adapter explicitly omits it.",
+      "evidence_refs": ["sid:v1:box:1726233a5c142ca97f9d02c9096aae0b5013907be85600cb03beef24f5d1ac99", "projection:omit_synthetic_target"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:fc5c56c513a508b70b43ba1df77d07425d70e6d0cfdb3d87314e96ea31fe9f01",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected dict.update edge in build_header; the adapter explicitly omits it as a synthetic implementation target.",
+      "evidence_refs": ["sid:v1:box:fbe4e27351d8a9a0249c3292a1d5020fb837b229bacb0ece907e70cd086557d2", "projection:omit_synthetic_target"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:7492687da39e2b379b79fc642f71e074b1b431e6a19f591510eca63e265dc10b",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected explicit iter edge in async_worker.run; the adapter explicitly omits it.",
+      "evidence_refs": ["sid:v1:box:01f9d8c1dc33feacebbb4affaf20c8902f2004241164072d788d07c1f0b6e9ad", "projection:omit_synthetic_target"]
+    },
+    {
+      "residual_id": "pycg-residual:v1:320302b50909668cceda78f3a0d3d22ebe108b0b1c7bc53aa5f30f3c1b25a82f",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "codex:analysis-workbench",
+      "rationale": "Archway retains the exact expected explicit iter edge in async_writer.run; the adapter explicitly omits it.",
+      "evidence_refs": ["sid:v1:box:8f6d77815619be91fdf69cca74ee48460b4a7fdbbdb8303bdae5d99ca6decd3c", "projection:omit_synthetic_target"]
+    }
+  ]
+}
