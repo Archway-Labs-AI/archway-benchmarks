@@ -45,6 +45,13 @@ def test_protected_operation_filter_suppresses_try_body():
     assert not bugsinpy_detector._guarded_by_enclosing_try(tree, 4)
 
 
+def test_import_effect_filter_excludes_runtime_version_compatibility():
+    tree = bugsinpy_detector.ast.parse("from collections import Mapping\nvalue = obj.missing\n")
+
+    assert bugsinpy_detector._import_statement_at(tree, 1)
+    assert not bugsinpy_detector._import_statement_at(tree, 2)
+
+
 def test_cli_writes_bound_prediction(tmp_path, monkeypatch):
     (tmp_path / "only.py").write_text("x = 1\n")
     manifest_path = tmp_path / "manifest.json"

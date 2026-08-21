@@ -129,7 +129,8 @@ crosses the ground-truth boundary. Claim-grade detection uses a sanitized
 checkout named by the sanitized manifest. It currently emits only a narrow
 Archway signal: definite (`must_raise`) semantic-runtime exception effects with
 source provenance. It excludes explicit `raise` statements, ambient/unknown
-call effects, and all operations protected by an enclosing source `try` body.
+call effects, import statements (until target-runtime modeling is available),
+and all operations protected by an enclosing source `try` body.
 The broad `try` suppression is intentional until handler matching and engine
 exception-class precision are validated independently.
 

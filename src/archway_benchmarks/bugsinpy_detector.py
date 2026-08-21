@@ -123,7 +123,7 @@ def _analyze_file(source: str, relative_path: str) -> tuple[ExceptionFindingEvid
         if position is None or position.row < 1:
             continue
         classes = tuple(sorted(effect.classes))
-        if _guarded_by_enclosing_try(tree, position.row):
+        if _guarded_by_enclosing_try(tree, position.row) or _import_statement_at(tree, position.row):
             continue
         findings.append(
             ExceptionFindingEvidence(
@@ -168,6 +168,14 @@ def _guarded_by_enclosing_try(tree: ast.AST, line: int) -> bool:
         if start <= line <= end:
             return True
     return False
+
+
+def _import_statement_at(tree: ast.AST, line: int) -> bool:
+    return any(
+        isinstance(node, (ast.Import, ast.ImportFrom))
+        and node.lineno <= line <= getattr(node, "end_lineno", node.lineno)
+        for node in ast.walk(tree)
+    )
 
 
 def _python_sources(root: Path) -> Iterable[Path]:
