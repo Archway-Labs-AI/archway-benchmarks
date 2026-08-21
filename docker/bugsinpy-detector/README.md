@@ -12,6 +12,7 @@ arguments are simply:
 /input/detector-input.json /output/predictions.json
 ```
 
-The pinned base image and exact dependency versions make the build inputs
-reviewable. Benchmark claims must additionally retain the build attestation,
+The pinned base image, exact runtime dependency, and revision-archived source
+trees make the build inputs reviewable without transient wheel-build tooling.
+Benchmark claims must additionally retain the build attestation,
 image ID, detector manifest, execution attestation, and prediction artifact.
