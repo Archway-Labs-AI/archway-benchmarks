@@ -27,6 +27,7 @@ import resource
 import sys
 import threading
 import time
+import traceback
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1648,6 +1649,7 @@ def successor_archway_call_edge_result(
             )
     except Exception as exc:
         evidence = current_evidence(phase="error")
+        evidence["failure_traceback"] = traceback.format_exc()
         if progress is not None:
             progress(evidence)
         raise PyCGCaseExecutionError(
