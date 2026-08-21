@@ -1199,6 +1199,10 @@ try:
                 session.scheduler.production_operation_telemetry
                 if diagnostic_details else {"executions": {}, "seconds": {}}
             )
+            production_phase_before = (
+                session.scheduler.production_phase_telemetry
+                if diagnostic_details else {"counts": {}, "seconds": {}}
+            )
             body_id = getattr(root_address.subject, "body_morphism_id", "")
             body_label = body_labels.get(body_id, "?")
             print(
@@ -1303,6 +1307,24 @@ try:
                     operation, 0.0
                 ) > 0
             }
+            production_phase_after = (
+                session.scheduler.production_phase_telemetry
+                if diagnostic_details else {"counts": {}, "seconds": {}}
+            )
+            production_phase_count_deltas = {
+                label: count - production_phase_before["counts"].get(label, 0)
+                for label, count in production_phase_after["counts"].items()
+                if count - production_phase_before["counts"].get(label, 0) > 0
+            }
+            production_phase_second_deltas = {
+                label: seconds - production_phase_before["seconds"].get(
+                    label, 0.0
+                )
+                for label, seconds in production_phase_after["seconds"].items()
+                if seconds - production_phase_before["seconds"].get(
+                    label, 0.0
+                ) > 0
+            }
             workload_relevance = []
             if diagnostic_details:
                 for workload_root in root_batch:
@@ -1373,6 +1395,14 @@ try:
                     production_operation_second_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
                 )[:12],
+                "top_production_phases": sorted(
+                    production_phase_count_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:20],
+                "top_production_phase_seconds": sorted(
+                    production_phase_second_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:20],
                 "top_transfer_seconds": sorted(
                     transfer_second_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
