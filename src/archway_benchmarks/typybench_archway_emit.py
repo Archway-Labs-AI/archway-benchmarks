@@ -121,6 +121,8 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                     for key in (
                         "top_execution_families",
                         "top_family_seconds",
+                        "top_production_operations",
+                        "top_production_seconds",
                         "top_transfer_operations",
                         "top_transfer_seconds",
                         "topology_change_counts",
@@ -1193,6 +1195,10 @@ try:
                 dict(session.scheduler.transfer_operation_seconds)
                 if diagnostic_details else {}
             )
+            production_operation_before = (
+                session.scheduler.production_operation_telemetry
+                if diagnostic_details else {"executions": {}, "seconds": {}}
+            )
             body_id = getattr(root_address.subject, "body_morphism_id", "")
             body_label = body_labels.get(body_id, "?")
             print(
@@ -1271,6 +1277,32 @@ try:
                 )
                 if seconds - transfer_seconds_before.get(operation, 0.0) > 0
             } if diagnostic_details else {}
+            production_operation_after = (
+                session.scheduler.production_operation_telemetry
+                if diagnostic_details else {"executions": {}, "seconds": {}}
+            )
+            production_operation_deltas = {
+                operation: count - production_operation_before[
+                    "executions"
+                ].get(operation, 0)
+                for operation, count in production_operation_after[
+                    "executions"
+                ].items()
+                if count - production_operation_before["executions"].get(
+                    operation, 0
+                ) > 0
+            }
+            production_operation_second_deltas = {
+                operation: seconds - production_operation_before[
+                    "seconds"
+                ].get(operation, 0.0)
+                for operation, seconds in production_operation_after[
+                    "seconds"
+                ].items()
+                if seconds - production_operation_before["seconds"].get(
+                    operation, 0.0
+                ) > 0
+            }
             workload_relevance = []
             if diagnostic_details:
                 for workload_root in root_batch:
@@ -1331,6 +1363,14 @@ try:
                 )[:8],
                 "top_transfer_operations": sorted(
                     transfer_count_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:12],
+                "top_production_operations": sorted(
+                    production_operation_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:12],
+                "top_production_seconds": sorted(
+                    production_operation_second_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
                 )[:12],
                 "top_transfer_seconds": sorted(
@@ -1423,6 +1463,12 @@ try:
                         ],
                         "top_family_seconds": body_profile[
                             "top_family_seconds"
+                        ],
+                        "top_production_operations": body_profile[
+                            "top_production_operations"
+                        ],
+                        "top_production_seconds": body_profile[
+                            "top_production_seconds"
                         ],
                         "top_transfer_operations": body_profile[
                             "top_transfer_operations"
