@@ -1,0 +1,25 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-calibration-audit.v1",
+  "cohort": "cohorts/bugsinpy-agent-pilot-v1.json",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "oracle_used": true,
+  "calibration_only": true,
+  "detector_received_oracle": false,
+  "cases": [
+    {"bug_key": "PySnooper:1", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": "open encoding argument", "technical_status": "blocked_builtin_signature"},
+    {"bug_key": "PySnooper:2", "sealed_hypothesis_relation": "partly_related", "direct_query_candidate": "open encoding argument", "technical_status": "blocked_builtin_signature"},
+    {"bug_key": "PySnooper:3", "sealed_hypothesis_relation": "direct", "direct_query_candidate": "open path argument source", "technical_status": "no_evidence_builtin_signature"},
+    {"bug_key": "black:1", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": null, "technical_status": "no_current_query"},
+    {"bug_key": "black:2", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": null, "technical_status": "no_current_query"},
+    {"bug_key": "cookiecutter:1", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": "open encoding argument", "technical_status": "blocked_builtin_signature"},
+    {"bug_key": "cookiecutter:2", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": null, "technical_status": "requires_repeated_effect_evidence"},
+    {"bug_key": "fastapi:1", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": null, "technical_status": "coincidental_line_hit_only"},
+    {"bug_key": "fastapi:2", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": "APIWebSocketRoute dependency_overrides_provider omission", "technical_status": "missing_fact_provider"},
+    {"bug_key": "httpie:1", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": null, "technical_status": "no_current_query"},
+    {"bug_key": "httpie:2", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": null, "technical_status": "no_current_query"},
+    {"bug_key": "tqdm:1", "sealed_hypothesis_relation": "unrelated", "direct_query_candidate": "start argument assigned to enumerate rather than tqdm_class", "technical_status": "no_diagram_callsite"}
+  ],
+  "eligible_cases": 0,
+  "decision": "do_not_launch_agent_on_this_cohort",
+  "rationale": "No case combines a direct sealed hypothesis, a benchmark-direct question, and an answered current evidence query. Technical gaps are engine handoffs; unrelated hypotheses and coincidental patch-line hits are validity refusals."
+}
