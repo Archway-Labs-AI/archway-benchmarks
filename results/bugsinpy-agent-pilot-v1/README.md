@@ -1,20 +1,23 @@
 # BugsInPy agent evidence pilot v1
 
-This is the first validity-controlled paired evaluation of an agent that may ask
-Archway for targeted static-analysis evidence while localizing a bug. It is a
-12-case pilot, not a population estimate for BugsInPy and not evidence that the
-current query set can independently detect bugs.
+**Invalidated — excluded from effectiveness claims.** The evidence executable
+recorded in this run resolved its virtual-environment interpreter symlink to bare
+system Python and omitted the engine root from `PYTHONPATH`. Had an agent invoked
+it, it would have failed before analysis. The aggregate numbers remain below as
+diagnostic evidence about the prompt conditions and to make the invalidation
+independently visible; they are not a valid comparison of an agent with versus
+without a working Archway tool.
 
 ## Result
 
-The baseline and evidence-offered arms each localized 2/12 fixes at top-1 line
+The baseline and nominal evidence-offered arms each localized 2/12 fixes at top-1 line
 rank (MRR 0.1667; mean normalized inspection effort 0.8338). No evidence-arm
 agent invoked Archway. Offering the optional tool therefore produced no measured
 accuracy change, while costing a paired mean of 89,416 additional tokens and
 15.24 additional seconds per case.
 
-This is evidence about the current **agent/tool policy and interface**, not the
-counterfactual quality of evidence that was never requested. A deterministic
+Because the treatment executable was not usable, this does not establish an
+agent/tool effect even though no agent attempted a query. A deterministic
 post-seal diagnostic consequently asked one `possible-calls` question at each
 already-sealed evidence-arm top finding. One query answered, one returned
 `no_evidence`, three timed out at 60 seconds, and seven failed at a translation,
@@ -22,7 +25,7 @@ analysis, or serialization boundary. Ground-truth review classified the one
 answer as correct but irrelevant to distinguishing the defect: 0 useful,
 1 irrelevant, 0 misleading, and 11 unusable.
 
-The paired and diagnostic results must not be combined. The diagnostic could not
+The invalid paired and diagnostic results must not be combined. The diagnostic could not
 change predictions and does not estimate an agent treatment effect.
 
 ## Validity controls
@@ -36,7 +39,7 @@ change predictions and does not estimate an agent treatment effect.
 - Predictions were sealed before ground truth was joined for scoring.
 - Model identity, model-cache hash, corpus revision, commands, repository
   revisions, raw streams, audit records, token usage, and durations are retained
-  by the private runner. Hashes of the claim inputs are published in
+  by the private runner. Hashes of the excluded run inputs are published in
   [`summary.json`](summary.json).
 
 An earlier otherwise-complete run is excluded because its raw provider stream
@@ -63,10 +66,9 @@ cohort outcome and its validity controls.
 
 ## Interpretation
 
-Do not invest further in a broad non-agentic BugsInPy detector on the strength of
-this pilot. The more promising next experiment is an agentic interface that makes
-query use deliberate—such as requiring a small evidence triage step or offering
-queries selected from a concrete hypothesis—after the recorded usability blockers
-are handed to engine owners. The next cohort should test whether queries are used
-and whether useful evidence changes a diagnosis; simply exposing optional commands
-again is not justified by this result.
+No investment decision may rest on this invalid paired comparison. Its post-seal
+diagnostic still supplies useful engineering reproductions, but a corrected fresh
+root is required before evaluating agentic versus non-agentic direction. The fixed
+runner preserves the virtual-environment entry path, adds the engine root to
+`PYTHONPATH`, and requires the exact treatment executable to advertise both query
+capabilities before launching an agent.

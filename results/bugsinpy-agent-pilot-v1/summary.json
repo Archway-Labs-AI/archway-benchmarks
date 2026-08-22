@@ -1,6 +1,8 @@
 {
   "schema": "archway.bugsinpy.agent-pilot-result.v1",
-  "claim": "paired_agent_bug_identification_with_optional_archway_evidence",
+  "validity_status": "invalidated",
+  "invalidation_reason": "The evidence executable was configured with a virtual-environment interpreter resolved to bare system Python and omitted the engine root from PYTHONPATH; exact treatment availability was therefore not established.",
+  "claim": "excluded_prompt_condition_diagnostic_only",
   "cohort": "cohorts/bugsinpy-agent-pilot-v1.json",
   "cohort_sha256": "28c6a618de3b9768d18ca69e25cc868d44cc4a902f6765622c552092560515be",
   "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",

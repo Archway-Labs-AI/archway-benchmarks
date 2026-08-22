@@ -15,6 +15,8 @@ def test_published_pilot_result_is_internally_consistent() -> None:
     adjudication = json.loads(ADJUDICATION.read_text())
 
     assert result["pair_count"] == len(cohort["bug_keys"]) == 12
+    assert result["validity_status"] == "invalidated"
+    assert result["claim"] == "excluded_prompt_condition_diagnostic_only"
     assert result["cohort_sha256"] == hashlib.sha256(COHORT.read_bytes()).hexdigest()
     assert result["post_seal_diagnostic"]["queries"] == 12
     assert sum(result["post_seal_diagnostic"]["response_status_counts"].values()) == 12
