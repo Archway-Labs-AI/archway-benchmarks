@@ -1,0 +1,89 @@
+{
+  "schema": "archway.bugsinpy.agent-pilot-result.v1",
+  "validity_status": "diagnostic_non_claim_grade_missing_launch_command",
+  "claim": "retained_internal_observation_working_interface_available_but_not_queried",
+  "claim_limitations": [
+    "Zero queries means the localization, token, and duration deltas do not estimate an Archway evidence effect.",
+    "The two conditions used independent model invocations, so prompt priming and provider variance can explain their differences.",
+    "The normalized run configuration is retained, but the exact initiating command vector for the resumable execution was not; this fails the public baseline provenance requirement.",
+    "The cohort is a six-project interface pilot and is not representative of BugsInPy-wide performance."
+  ],
+  "cohort": "cohorts/bugsinpy-agent-pilot-v1.json",
+  "cohort_sha256": "28c6a618de3b9768d18ca69e25cc868d44cc4a902f6765622c552092560515be",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "model": "gpt-5.6-sol",
+  "pair_count": 12,
+  "conditions": {
+    "baseline": {
+      "top_1_line_hits": 2,
+      "top_1_file_hits": 8,
+      "mean_reciprocal_rank": 0.16666666666666666,
+      "mean_exam_score": 0.8338466692176306,
+      "mean_tokens": 169785.08333333334,
+      "mean_duration_seconds": 52.343401385558536,
+      "mean_query_count": 0.0
+    },
+    "archway_evidence_available": {
+      "top_1_line_hits": 3,
+      "top_1_file_hits": 9,
+      "mean_reciprocal_rank": 0.25,
+      "mean_exam_score": 0.7504665808397232,
+      "mean_tokens": 249083.16666666666,
+      "mean_duration_seconds": 60.46085815291735,
+      "mean_query_count": 0.0
+    }
+  },
+  "paired_mean_delta_available_minus_baseline": {
+    "line_hit": 0.08333333333333333,
+    "reciprocal_rank": 0.08333333333333333,
+    "exam_score": -0.0833800883779075,
+    "tokens": 79298.08333333333,
+    "duration_seconds": 8.117456767358817
+  },
+  "paired_evidence_dispositions": {
+    "useful": 0,
+    "irrelevant": 0,
+    "misleading": 0,
+    "unusable": 0,
+    "explanation": "No evidence-arm agent invoked Archway, so no agent-consumed evidence exists to adjudicate."
+  },
+  "validity_audit": {
+    "sealed_cases": 12,
+    "provider_streams": 24,
+    "successful_exact_wrapper_preflights": 12,
+    "queries": 0,
+    "hosted_web_search_events": 0,
+    "issues": []
+  },
+  "execution_provenance": {
+    "entrypoint": "archway-bugsinpy-agent-pilot",
+    "normalized_run_config_retained": true,
+    "exact_initiating_command_retained": false,
+    "artifact_root": "/private/tmp/bugsinpy-agent-pilot-definitive-v2",
+    "disposition": "not a claim-grade public baseline"
+  },
+  "post_seal_diagnostic": {
+    "role": "deterministic answerability diagnostic, not an agent or effectiveness arm",
+    "response_status_counts": {
+      "answered": 1,
+      "no_evidence": 1,
+      "timeout": 4,
+      "tool_error": 6
+    },
+    "interpretation": "The only answer was a call-target result that could not distinguish its defect. The diagnostic was frozen and is not rerun without changed inputs."
+  },
+  "pinned_revisions": {
+    "archway_benchmarks": "6f425b1751161591d53ef7e94fa498315c522897",
+    "archway_bench_internal_runner": "2c461dea500668bc24259759620a949b1f25e41f",
+    "archway_agent_harness": "766dbe6273189bc5a5320927548ee8abda18794c",
+    "archway_analysis_workbench": "674d30daf937131984c55579edd1397cf3fd5f34",
+    "archway_engine": "0980a58840086d5729b5fa005892b7331c37b505"
+  },
+  "private_artifact_hashes": {
+    "run_config_sha256": "e4429c0397b9a1fd0d3458fe4f859b15e084de2835d96d3f9f65bc6c60f7a853",
+    "scores_sha256": "c899e99aa6eec37d11879865610b45700d76f3e2aa5a869fd9a1b021f49cd893",
+    "audit_sha256": "96e6d272975133890a19b7cf260a9bf2235975ebef5724dec31b1f2d08c687d4",
+    "sealed_pair_hash_list_sha256": "8c603424c9e52f5641d27f9bed273dcbf2918bb00a3a36d886e85a007309d789",
+    "post_seal_diagnostic_sha256": "e6e2283ab6b3e75c27f0be57d15f9b10b6f3580f442beffc00e5863dedf926ab"
+  }
+}
