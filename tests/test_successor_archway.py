@@ -35,7 +35,8 @@ def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
     assert result.forward is not None
-    assert result.forward.cache_hit is False
+    assert result.forward.cache_hits == 0
+    assert len(result.forward.roots) >= 2
 
 
 def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
@@ -84,7 +85,7 @@ def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     assert result.gaps == []
 
 
-def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
+def test_successor_native_workload_batches_uninvoked_returns_before_adapter(
     tmp_path,
 ):
     snippet = _snippet(
@@ -103,7 +104,7 @@ def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
     )
 
     assert all(
-        result.session.store.resolved(item.address) is None
+        result.session.store.resolved(item.address) is not None
         for item in result.session.type_observations()
         if item.kind == "return"
     )
@@ -112,9 +113,9 @@ def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
 
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
-    assert len(result.targeted_runs) == 1
-    assert len(result.targeted_runs[0].roots) == 2
-    assert result.targeted_runs[0].knowledge_deltas
+    assert result.targeted_runs == []
+    assert len(result.forward.roots) >= 3
+    assert result.forward.knowledge_deltas
 
 
 def test_successor_adapter_remaps_contexts_discovered_by_refinement(tmp_path):
@@ -337,7 +338,7 @@ def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
     assert progress == [(1, 1)]
 
 
-def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
+def test_gap_audit_reports_no_adapter_refinement_after_native_workload(tmp_path):
     _snippet(
         tmp_path,
         "def untouched(value):\n"
@@ -353,16 +354,14 @@ def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
     )
 
     assert audit.exact == 1
-    assert audit.targeted_roots == 1
+    assert audit.targeted_roots == 0
     assert audit.targeted_cache_hits == 0
     assert audit.targeted_events == 0
-    # The targeted body demand adds its root/input/output fact batches to the
-    # already-open persistent session.
-    assert audit.targeted_knowledge_deltas >= 4
-    assert audit.targeted_topology_changes > 0
+    assert audit.targeted_knowledge_deltas == 0
+    assert audit.targeted_topology_changes == 0
 
 
-def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
+def test_successor_adapter_uses_route_feasibility_for_precise_answer(tmp_path):
     snippet = _snippet(
         tmp_path,
         "def choose(flag):\n"
@@ -380,7 +379,5 @@ def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
 
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
-    assert predictions[0].types == frozenset(("int", "str"))
-    assert [gap.classification for gap in result.gaps] == [
-        "mapped_imprecise"
-    ]
+    assert predictions == list(snippet.annotations)
+    assert result.gaps == []

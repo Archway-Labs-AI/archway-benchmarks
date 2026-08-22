@@ -924,6 +924,7 @@ def successor_archway_call_edge_result(
         entry_module,
         record_events=record_events,
         catalog_observations=False,
+        enable_coarse_fallback=False,
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
         ),
@@ -1643,10 +1644,7 @@ def successor_archway_call_edge_result(
     )
     try:
         with profile_context as sampling_profile:
-            forward = session.run_semantic_call_graph(
-                include_callable_bodies=include_callable_bodies,
-                summarize_callee_results=summarize_callee_results,
-            )
+            forward = session.run_native_semantic_call_graph()
     except Exception as exc:
         evidence = current_evidence(phase="error")
         evidence["failure_traceback"] = traceback.format_exc()
