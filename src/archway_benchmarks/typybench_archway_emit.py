@@ -1680,6 +1680,10 @@ try:
         session.scheduler.component_hotspots()
         if diagnostic_details else ()
     )
+    region_quotient = (
+        session.scheduler.region_quotient()
+        if diagnostic_details else {}
+    )
     if component_hotspots and summary_registry is not None:
         callable_labels = {
             body_id: f"{boundary.module_name}:{boundary.qualified_name}"
@@ -1778,6 +1782,7 @@ try:
             "component_hotspots": (
                 component_hotspots
             ),
+            "region_quotient": region_quotient,
             "gc": gc_profile_snapshot(),
             "production_replay_hotspots": (
                 session.scheduler.production_replay_hotspots()
