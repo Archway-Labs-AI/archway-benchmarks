@@ -13,6 +13,7 @@ from .bugsinpy_protocol import (
 
 
 AGENT_PAIR_SCHEMA = "archway.bugsinpy.agent-pair.v1"
+CAUSAL_INTERACTION_SCHEMA = "archway.bugsinpy.agent-causal-interaction.v1"
 AgentCondition = Literal["baseline", "archway-evidence"]
 EvidenceDisposition = Literal["useful", "irrelevant", "misleading", "unusable"]
 _CONDITIONS = frozenset({"baseline", "archway-evidence"})
@@ -290,3 +291,121 @@ class EvidenceAdjudication:
             "evidence adjudication",
         )
         return cls(**value)
+
+
+@dataclass(frozen=True, slots=True)
+class CausalStage:
+    invocation_id: str
+    prediction: RankedPredictionBundle
+    diagnosis: str
+    duration_seconds: float
+    usage: AgentUsage
+
+    def __post_init__(self) -> None:
+        if not self.invocation_id or not self.diagnosis or self.duration_seconds < 0:
+            raise ProtocolViolation("invalid causal stage identity or metrics")
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "invocation_id": self.invocation_id,
+            "prediction": self.prediction.to_json(),
+            "diagnosis": self.diagnosis,
+            "duration_seconds": self.duration_seconds,
+            "usage": self.usage.to_json(),
+        }
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> "CausalStage":
+        _require_fields(
+            value, {"invocation_id", "prediction", "diagnosis", "duration_seconds", "usage"},
+            "causal stage",
+        )
+        return cls(
+            invocation_id=value["invocation_id"],
+            prediction=RankedPredictionBundle.from_json(value["prediction"]),
+            diagnosis=value["diagnosis"],
+            duration_seconds=value["duration_seconds"],
+            usage=AgentUsage.from_json(value["usage"]),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class CausalEvidenceInteraction:
+    interaction_id: str
+    model_id: str
+    model_config: Mapping[str, Any]
+    detector_input_sha256: str
+    proposal: CausalStage
+    review: CausalStage
+    query: EvidenceQueryRecord
+    hypothesis_before: str
+    hypothesis_after: str
+    evidence_impact: str
+    evidence_cited_in_diagnosis: bool
+    evidence_disposition: EvidenceDisposition
+    adjudication_rationale: str
+    schema: str = CAUSAL_INTERACTION_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != CAUSAL_INTERACTION_SCHEMA or not self.interaction_id:
+            raise ProtocolViolation("invalid causal interaction identity")
+        if not self.model_id or len(self.detector_input_sha256) != 64:
+            raise ProtocolViolation("causal interaction lacks pinned model or input identity")
+        if self.proposal.invocation_id == self.review.invocation_id:
+            raise ProtocolViolation("causal stages require independent invocation identities")
+        for name in ("protocol", "bug_key", "buggy_revision"):
+            if getattr(self.proposal.prediction, name) != getattr(self.review.prediction, name):
+                raise ProtocolViolation(f"causal stage predictions differ in {name}")
+        if not self.hypothesis_before or not self.hypothesis_after:
+            raise ProtocolViolation("causal interaction requires before/after hypotheses")
+        if self.evidence_impact not in {"confirmed", "contradicted", "reranked"}:
+            raise ProtocolViolation("invalid causal evidence impact")
+        if self.evidence_cited_in_diagnosis is not True:
+            raise ProtocolViolation("causal review must cite the evidence disposition")
+        if self.evidence_disposition not in {
+            "useful", "irrelevant", "misleading", "unusable"
+        } or not self.adjudication_rationale:
+            raise ProtocolViolation("causal interaction requires evidence adjudication")
+        _reject_forbidden_fields(self.model_config)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "schema": self.schema,
+            "interaction_id": self.interaction_id,
+            "model_id": self.model_id,
+            "model_config": dict(self.model_config),
+            "detector_input_sha256": self.detector_input_sha256,
+            "proposal": self.proposal.to_json(),
+            "review": self.review.to_json(),
+            "query": self.query.to_json(),
+            "hypothesis_before": self.hypothesis_before,
+            "hypothesis_after": self.hypothesis_after,
+            "evidence_impact": self.evidence_impact,
+            "evidence_cited_in_diagnosis": self.evidence_cited_in_diagnosis,
+            "evidence_disposition": self.evidence_disposition,
+            "adjudication_rationale": self.adjudication_rationale,
+        }
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> "CausalEvidenceInteraction":
+        _require_fields(value, {
+            "schema", "interaction_id", "model_id", "model_config",
+            "detector_input_sha256", "proposal", "review", "query",
+            "hypothesis_before", "hypothesis_after", "evidence_impact",
+            "evidence_cited_in_diagnosis", "evidence_disposition",
+            "adjudication_rationale",
+        }, "causal interaction")
+        return cls(
+            schema=value["schema"], interaction_id=value["interaction_id"],
+            model_id=value["model_id"], model_config=value["model_config"],
+            detector_input_sha256=value["detector_input_sha256"],
+            proposal=CausalStage.from_json(value["proposal"]),
+            review=CausalStage.from_json(value["review"]),
+            query=EvidenceQueryRecord.from_json(value["query"]),
+            hypothesis_before=value["hypothesis_before"],
+            hypothesis_after=value["hypothesis_after"],
+            evidence_impact=value["evidence_impact"],
+            evidence_cited_in_diagnosis=value["evidence_cited_in_diagnosis"],
+            evidence_disposition=value["evidence_disposition"],
+            adjudication_rationale=value["adjudication_rationale"],
+        )

@@ -6,6 +6,8 @@ from archway_benchmarks.bugsinpy_agent_protocol import (
     AgentPair,
     AgentTrial,
     AgentUsage,
+    CausalEvidenceInteraction,
+    CausalStage,
     EvidenceQueryRecord,
 )
 from archway_benchmarks.bugsinpy_protocol import (
@@ -99,3 +101,21 @@ def test_pair_json_rejects_unknown_fields() -> None:
     pair["ground_truth"] = {"file": "answer.py"}
     with pytest.raises(ProtocolViolation, match="fields"):
         AgentPair.from_json(pair)
+
+
+def test_causal_interaction_roundtrip_requires_independent_stages() -> None:
+    interaction = CausalEvidenceInteraction(
+        "interaction-1", "model-v1", {"max_output_tokens": 2000}, "b" * 64,
+        CausalStage("inv-proposal", prediction(), "before", 2.0, AgentUsage(100, 20)),
+        CausalStage("inv-review", prediction(), "after", 1.0, AgentUsage(50, 10)),
+        query(), "output path may be wrong", "output_path is undefined",
+        "confirmed", True, "useful", "The argument evidence identifies output_path.",
+    )
+    assert CausalEvidenceInteraction.from_json(interaction.to_json()) == interaction
+    with pytest.raises(ProtocolViolation, match="independent"):
+        CausalEvidenceInteraction(
+            "interaction-1", "model-v1", {}, "b" * 64,
+            CausalStage("same", prediction(), "before", 1.0, AgentUsage(1, 1)),
+            CausalStage("same", prediction(), "after", 1.0, AgentUsage(1, 1)),
+            query(), "before", "after", "confirmed", True, "useful", "reason",
+        )
