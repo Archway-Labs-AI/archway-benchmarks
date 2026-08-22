@@ -117,18 +117,13 @@ class SuccessorArchwayAnalysisEngine:
                 name: item.morphism
                 for name, item in program.modules.items()
             }
-            # The sparse lifted product is the authoritative local carrier
-            # for a type-priority workload. Native scalar cells remain the
-            # targeted projection mechanism for observations not emitted at
-            # a forward or summary boundary; they are not a replacement for
-            # coordinated local interpretation of each diagram morphism.
             session = open_hybrid_program_session(
                 modules,
                 "main",
                 record_events=self.record_events,
-                enable_coarse_fallback=True,
+                enable_coarse_fallback=False,
             )
-            forward = session.run_forward()
+            forward = session.run_native_type_workload()
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
