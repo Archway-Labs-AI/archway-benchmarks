@@ -1,0 +1,27 @@
+{
+  "schema": "archway.bugsinpy.agent-cohort.v1",
+  "cohort_id": "bugsinpy-agent-pilot-v1",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "protocol": "repository-static-v1",
+  "precommitted_at": "2026-08-21",
+  "selection": {
+    "rule": "All three PySnooper bugs, the first two numeric bug IDs from black, cookiecutter, fastapi, and httpie, and the first numeric bug ID from tqdm.",
+    "ground_truth_used": false,
+    "prior_agent_outcomes_used": false,
+    "scope": "Six-project, 12-case pilot for interface and paired-effect estimation; not representative of BugsInPy-wide performance."
+  },
+  "bug_keys": [
+    "PySnooper:1",
+    "PySnooper:2",
+    "PySnooper:3",
+    "black:1",
+    "black:2",
+    "cookiecutter:1",
+    "cookiecutter:2",
+    "fastapi:1",
+    "fastapi:2",
+    "httpie:1",
+    "httpie:2",
+    "tqdm:1"
+  ]
+}
