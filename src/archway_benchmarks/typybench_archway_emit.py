@@ -1702,6 +1702,31 @@ try:
                 )
             })),
         } for item in component_hotspots)
+    if component_hotspots:
+        callable_labels = {
+            body_id: f"{boundary.module_name}:{boundary.qualified_name}"
+            for body_id, boundary
+            in session.callable_boundaries_by_body.items()
+        }
+        native_context_labels = {
+            admission.application.callee_context: callable_labels.get(
+                admission.application.body_morphism_id,
+                admission.application.body_morphism_id,
+            )
+            for admission in session.native_callable_cell_admissions()
+        }
+        native_context_labels.update({
+            f"context:uninvoked-body:{body_id}": label
+            for body_id, label in callable_labels.items()
+        })
+        component_hotspots = tuple({
+            **item,
+            "semantic_contexts": tuple({
+                "context": context,
+                "label": native_context_labels.get(context, context),
+                "members": members,
+            } for context, members in item.get("contexts", {}).items()),
+        } for item in component_hotspots)
     unresolved_summary_bodies = Counter()
     if diagnostic_details and collect_predictions and summary_registry is not None:
         callable_labels = {
