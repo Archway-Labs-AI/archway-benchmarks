@@ -1,0 +1,12 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-calibration-eligibility.v1",
+  "bug_key": "fastapi:1",
+  "buggy_revision": "766157bfb4e7dfccba09ab398e8ec444d14e947c",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "probe_sha256": "13513ab68df7e0d711f6fa26286f01c639e2566d686a7c3f0e345277e0b8fab9",
+  "oracle_patch_sha256": "40e55072eef89b48cccc23c6ed1e7c303850450c20be67618eb768334a8b48f1",
+  "evidence_relation": "unrelated",
+  "rationale": "The query observes omitted by_alias forwarding. The fastapi:1 patch instead adds and forwards exclude_defaults and exclude_none. Although both touch recursive calls at routing.py lines 63 and 67, the queried omission is not the benchmark defect.",
+  "calibration_only": true,
+  "detector_received_oracle": false
+}
