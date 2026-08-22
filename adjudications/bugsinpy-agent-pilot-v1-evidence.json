@@ -1,0 +1,26 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-adjudication.v1",
+  "reviewer": "codex:bugsinpy-agent-evidence",
+  "selection_rule": "First call inside the evidence arm's sealed top finding; otherwise first stored name; repeat within five lines if needed. Selection preceded access to the fix patch.",
+  "labels": {
+    "useful": "materially supports the true bug location or mechanism",
+    "irrelevant": "valid evidence that does not discriminate the true defect",
+    "misleading": "incorrect or overconfident evidence that would steer diagnosis away from the defect",
+    "unusable": "no answer was available to an agent within the diagnostic contract"
+  },
+  "counts": {"useful": 0, "irrelevant": 1, "misleading": 0, "unusable": 11},
+  "entries": [
+    {"bug_key":"PySnooper:1","status":"tool_error","label":"unusable","gap":"serialization","rationale":"The response could not serialize ModuleValue evidence."},
+    {"bug_key":"PySnooper:2","status":"tool_error","label":"unusable","gap":"analysis","rationale":"Analysis failed on an unsupported binding cell: a function load had no preceding store."},
+    {"bug_key":"PySnooper:3","status":"answered","label":"irrelevant","gap":null,"rationale":"Archway correctly identified builtin open and file context-manager targets at the sealed finding. The fix changes open(output_path, ...) to open(output, ...); target identity does not distinguish those arguments and adds no defect-discriminating evidence."},
+    {"bug_key":"black:1","status":"timeout","label":"unusable","gap":"scale_or_nontermination","rationale":"No response was produced within 60 seconds."},
+    {"bug_key":"black:2","status":"timeout","label":"unusable","gap":"scale_or_nontermination","rationale":"No response was produced within 60 seconds."},
+    {"bug_key":"cookiecutter:1","status":"tool_error","label":"unusable","gap":"translation_input_boundary","rationale":"Repository-wide translation attempted to parse a Jinja template containing Python fragments as Python and raised SyntaxError."},
+    {"bug_key":"cookiecutter:2","status":"tool_error","label":"unusable","gap":"translation_input_boundary","rationale":"Repository-wide translation attempted to parse a Jinja template containing Python fragments as Python and raised SyntaxError."},
+    {"bug_key":"fastapi:1","status":"tool_error","label":"unusable","gap":"serialization","rationale":"The response could not serialize an ellipsis-valued analysis contribution."},
+    {"bug_key":"fastapi:2","status":"tool_error","label":"unusable","gap":"serialization","rationale":"The response could not serialize an ellipsis-valued analysis contribution."},
+    {"bug_key":"httpie:1","status":"no_evidence","label":"unusable","gap":"analysis_coverage","rationale":"The query completed but returned no possible-call targets near the sealed finding; the fix adds filename-length handling elsewhere."},
+    {"bug_key":"httpie:2","status":"tool_error","label":"unusable","gap":"analysis","rationale":"Analysis required an InternalContainerCell fact for which no provider existed."},
+    {"bug_key":"tqdm:1","status":"timeout","label":"unusable","gap":"scale_or_nontermination","rationale":"No response was produced within 60 seconds."}
+  ]
+}

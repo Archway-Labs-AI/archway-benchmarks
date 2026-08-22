@@ -1,9 +1,12 @@
 # BugsInPy benchmark — machinery overview
 
 BugsInPy is hosted here **in the same pattern as TypeEvalPy**: a vendored corpus
-submodule, a loader, a scorer, a run store, and a progress report. It is
-**machinery only** — no scoring run, no numbers, no bug classification, and no
-Archway+agent experiment live in this layer.
+submodule, a loader, a scorer, a run store, and a progress report. The first
+precommitted Archway+agent pilot is published under
+[`results/bugsinpy-agent-pilot-v1`](../results/bugsinpy-agent-pilot-v1/README.md).
+Its internal provider runner and raw traces remain private; its cohort, contracts,
+scorer, revisions, aggregate result, artifact hashes, and evidence adjudication
+are public.
 
 ## What BugsInPy is
 ~501 real Python bugs across ~17 real projects. Each bug ships a buggy version,
@@ -15,7 +18,8 @@ version. Two standard scoring modes, both first-class in the machinery:
 - **Repair** (Track 2, the later agent experiment): did a candidate fix make the
   failing tests pass? Scored by the test-suite-passes metric.
 
-Both modes are supported even though **neither is run here**.
+Both modes are supported. The published pilot is a repository-static agent
+localization run, not the historical flag-list detector or a repair run.
 
 ## Claim-grade detection validity
 

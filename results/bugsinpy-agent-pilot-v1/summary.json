@@ -1,0 +1,75 @@
+{
+  "schema": "archway.bugsinpy.agent-pilot-result.v1",
+  "claim": "paired_agent_bug_identification_with_optional_archway_evidence",
+  "cohort": "cohorts/bugsinpy-agent-pilot-v1.json",
+  "cohort_sha256": "28c6a618de3b9768d18ca69e25cc868d44cc4a902f6765622c552092560515be",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "model": "gpt-5.6-sol",
+  "pair_count": 12,
+  "conditions": {
+    "baseline": {
+      "top_1_line_hits": 2,
+      "top_1_file_hits": 8,
+      "mean_reciprocal_rank": 0.16666666666666666,
+      "mean_exam_score": 0.8337556846651576,
+      "mean_tokens": 161311.91666666666,
+      "mean_duration_seconds": 43.70133880192103,
+      "mean_query_count": 0.0
+    },
+    "archway_evidence_offered": {
+      "top_1_line_hits": 2,
+      "top_1_file_hits": 8,
+      "mean_reciprocal_rank": 0.16666666666666666,
+      "mean_exam_score": 0.8337556846651576,
+      "mean_tokens": 250727.5,
+      "mean_duration_seconds": 58.94237125016904,
+      "mean_query_count": 0.0
+    }
+  },
+  "paired_mean_delta_evidence_minus_baseline": {
+    "line_hit": 0.0,
+    "reciprocal_rank": 0.0,
+    "exam_score": 0.0,
+    "tokens": 89415.58333333333,
+    "duration_seconds": 15.241032448248006
+  },
+  "paired_evidence_dispositions": {
+    "useful": 0,
+    "irrelevant": 0,
+    "misleading": 0,
+    "unusable": 0,
+    "explanation": "No evidence-arm agent invoked Archway; these counters therefore contain no observations."
+  },
+  "post_seal_diagnostic": {
+    "role": "answerability diagnostic, not a paired-effectiveness arm",
+    "timeout_seconds_per_query": 60,
+    "queries": 12,
+    "query_kind_counts": {"possible-calls": 12, "binding-types": 0},
+    "response_status_counts": {
+      "answered": 1,
+      "no_evidence": 1,
+      "timeout": 3,
+      "tool_error": 7
+    },
+    "adjudicated_quality_counts": {
+      "useful": 0,
+      "irrelevant": 1,
+      "misleading": 0,
+      "unusable": 11
+    },
+    "adjudication": "adjudications/bugsinpy-agent-pilot-v1-evidence.json"
+  },
+  "pinned_revisions": {
+    "archway_benchmarks": "dd293778b738fb4af3343826c1a4861c392ff18d",
+    "archway_bench_internal_runner": "a3242efec0f131ff07e5e2c91ca35782292a944e",
+    "archway_bench_internal_diagnostic": "4d922ed1ca0659e3c2f86e9f814733cb5d031337",
+    "archway_agent_harness": "766dbe6273189bc5a5320927548ee8abda18794c",
+    "archway_analysis_workbench": "06b3855958391cea6d3f5965d53e0fef0c3e3144",
+    "archway_engine": "0980a58840086d5729b5fa005892b7331c37b505"
+  },
+  "private_artifact_hashes": {
+    "run_config_sha256": "b3e0a17162c30f102a3b15760094ee52f8383c77be22e2ea2188f1f08d5266c2",
+    "scores_sha256": "4ca064723679252d51bcd6dd45e3fe4ccde095e5a1d28b5e4d70bf5c4424394f",
+    "post_seal_diagnostic_sha256": "2efb446e5b054fdb337d648c5361a8a45dc7047d2e3efce4898e17326e09c902"
+  }
+}
