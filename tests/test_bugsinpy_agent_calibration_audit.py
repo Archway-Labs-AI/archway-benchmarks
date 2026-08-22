@@ -33,10 +33,28 @@ def test_fastapi_calibration_search_is_ordered_and_stops_without_agent() -> None
     assert search["calibration_only"] is True
     assert search["detector_received_oracle"] is False
     assert [case["bug_key"] for case in search["candidates"]] == [
-        f"fastapi:{bug_id}" for bug_id in range(3, 14)
+        f"fastapi:{bug_id}" for bug_id in range(3, 17)
     ]
     assert [case["bug_key"] for case in search["candidates"] if case["decision"] == "probe"] == [
-        "fastapi:9", "fastapi:13",
+        "fastapi:9", "fastapi:13", "fastapi:16",
     ]
     assert search["eligible_cases"] == 0
-    assert search["decision"] == "engine_handoff_required_before_more_agent_runs"
+    assert search["decision"].startswith("fastapi_search_exhausted_without_an_eligible_case")
+
+
+def test_post_fastapi_search_obeys_precommitted_probe_limit() -> None:
+    search = json.loads((
+        ROOT / "calibrations/bugsinpy-agent-evidence/post-fastapi-call-argument-search.json"
+    ).read_text())
+
+    assert search["schema"] == "archway.bugsinpy.agent-evidence-calibration-search.v1"
+    assert search["calibration_only"] is True
+    assert search["detector_received_oracle"] is False
+    assert search["project_order"][:2] == ["httpie", "keras"]
+    probes = [case for case in search["candidates"] if case["decision"] == "probe"]
+    assert [case["bug_key"] for case in probes] == ["keras:4", "keras:7", "keras:15"]
+    assert all(case["result"] in {"not_collected", "unsupported"} for case in probes)
+    assert search["qualifying_probes_run"] == search["maximum_probe_candidates"] == 3
+    assert search["eligible_cases"] == 0
+    assert search["status"] == "stopped_at_precommitted_probe_limit"
+    assert search["decision"].startswith("do_not_launch_agent")

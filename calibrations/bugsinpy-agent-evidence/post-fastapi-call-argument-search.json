@@ -21,6 +21,30 @@
   "calibration_only": true,
   "detector_received_oracle": false,
   "maximum_probe_candidates": 3,
-  "candidates": [],
-  "status": "precommitted_before_patch_inspection"
+  "candidates": [
+    {"bug_key": "httpie:1", "decision": "exclude_screening_error", "reason": "the fix changes the value expression passed to exists but not its actual-to-formal mapping; the probe was run and returned not_collected but does not count toward maximum_probe_candidates", "selector": {"kind": "call-arguments", "module": "httpie.downloads", "row": 142, "col": 15}, "run": "run://workbench-local/calibration-httpie-1-ec1da9db/call-arguments-row142"},
+    {"bug_key": "httpie:2", "decision": "skip", "reason": "fix changes session state and comments; no buggy call argument mapping changes"},
+    {"bug_key": "httpie:3", "decision": "skip", "reason": "fix adds a guard for an explicitly unset header; no buggy call argument mapping changes"},
+    {"bug_key": "httpie:4", "decision": "skip", "reason": "fix changes a membership-test operand; no buggy call argument mapping changes"},
+    {"bug_key": "httpie:5", "decision": "skip", "reason": "fix replaces regex search control flow; no existing call's actual-to-formal mapping is changed"},
+    {"bug_key": "keras:1", "decision": "skip", "reason": "fix changes TensorFlow state/control behavior and replaces calls; no existing buggy call's argument mapping is repaired"},
+    {"bug_key": "keras:2", "decision": "skip", "reason": "fix adds a missing NumPy backend function"},
+    {"bug_key": "keras:3", "decision": "skip", "reason": "fix adds exception handling around existing compute_mask calls without changing their argument mapping"},
+    {"bug_key": "keras:4", "decision": "probe", "question": "Does compute_gradients receive params as an unnamed second actual rather than an explicit var_list binding?", "selector": {"kind": "call-arguments", "module": "keras.optimizers", "row": 706, "col": 16}, "result": "not_collected", "reason": "the external TensorFlow optimizer receiver retains open call-target knowledge", "run": "run://workbench-local/calibration-keras-4-ec1da9db/call-arguments-row706"},
+    {"bug_key": "keras:5", "decision": "skip", "reason": "fix changes cache-directory selection control flow"},
+    {"bug_key": "keras:6", "decision": "skip", "reason": "fix adds an epsilon term outside the existing mean call"},
+    {"bug_key": "keras:7", "decision": "probe", "question": "Does numpy.squeeze omit the axis=-1 binding?", "selector": {"kind": "call-arguments", "module": "keras.wrappers.scikit_learn", "row": 323, "col": 15}, "result": "not_collected", "reason": "the external NumPy receiver retains open call-target knowledge", "run": "run://workbench-local/calibration-keras-7-ec1da9db/call-arguments-row323"},
+    {"bug_key": "keras:8", "decision": "skip", "reason": "fix changes deferred node-processing control flow"},
+    {"bug_key": "keras:9", "decision": "skip", "reason": "fix changes documentation slicing logic"},
+    {"bug_key": "keras:10", "decision": "skip", "reason": "fix changes sample-weight and class-weight control/value semantics"},
+    {"bug_key": "keras:11", "decision": "skip", "reason": "fix changes sequence detection and validation control flow"},
+    {"bug_key": "keras:12", "decision": "skip", "reason": "corpus patch is empty"},
+    {"bug_key": "keras:13", "decision": "skip", "reason": "fix changes the value passed to iter_sequence_infinite but not its actual-to-formal mapping"},
+    {"bug_key": "keras:14", "decision": "skip", "reason": "fix replaces a nested max call with flatten; it does not repair an existing call's argument mapping"},
+    {"bug_key": "keras:15", "decision": "probe", "question": "Do the CSVLogger open calls lack the fixed platform-sensitive keyword bindings?", "selector": {"kind": "call-arguments", "module": "keras.callbacks", "row": 1133, "col": 28}, "result": "unsupported", "reason": "builtin open has no represented formal signature", "run": "run://workbench-local/calibration-keras-15-ec1da9db/call-arguments-row1133"}
+  ],
+  "qualifying_probes_run": 3,
+  "eligible_cases": 0,
+  "status": "stopped_at_precommitted_probe_limit",
+  "decision": "do_not_launch_agent; no answered benchmark-direct calibration was found"
 }
