@@ -985,7 +985,7 @@ try:
         # admits concrete/control/call coordinates when type production needs
         # them, without eagerly evaluating the full executable product.
         forward = (
-            session.run_type_priority_forward()
+            session.run_native_type_workload()
             if run_forward_seed else None
         )
     except TimeoutError:
