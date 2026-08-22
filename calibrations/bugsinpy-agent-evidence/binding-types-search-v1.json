@@ -1,0 +1,27 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-calibration-search.v1",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "engine_commit": "ec1da9db",
+  "query_kind": "binding-types",
+  "selection_rule": "Resume at keras:18, then continue in ascending bug ID and lexicographic project order. Select a candidate only when the fix changes a type-sensitive predicate, None guard, cast, or type-dependent branch applied to an existing named function input parameter. The affected parameter name must identify exactly one function-input boundary in the buggy module under the current binding-types selector. Query the first qualifying parameter in patch order. Skip fixes that change only values, calls, outputs, local temporaries, or parameters whose names are ambiguous within the module. Stop at the first answered benchmark-direct query or after three bounded probe candidates.",
+  "project_order": [
+    "keras",
+    "luigi",
+    "matplotlib",
+    "pandas",
+    "sanic",
+    "scrapy",
+    "spacy",
+    "thefuck",
+    "tornado",
+    "tqdm",
+    "youtube-dl"
+  ],
+  "first_bug_id_by_project": {"keras": 18},
+  "oracle_used": true,
+  "calibration_only": true,
+  "detector_received_oracle": false,
+  "maximum_probe_candidates": 3,
+  "candidates": [],
+  "status": "precommitted_before_patch_inspection"
+}
