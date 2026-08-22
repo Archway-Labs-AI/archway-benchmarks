@@ -925,6 +925,15 @@ try:
             modules, entry, record_events=False,
             record_timings=record_timings,
             record_telemetry=diagnostic_details,
+            # Retain an explicit benchmark-only equivalence oracle while the
+            # hierarchical region worklist is being validated. Production
+            # analysis defaults to the new ordering; setting this variable to
+            # ``0`` asks the same engine revision to use its flat deque.
+            hierarchical_region_worklist=(
+                os.environ.get(
+                    "ARCHWAY_HIERARCHICAL_REGION_WORKLIST", "1"
+                ) != "0"
+            ),
             # TypyBench observes a repository as an importable library surface;
             # it does not identify an executable entry point.  Keep one root
             # for bulk import seeding, but bind every module's ``__name__`` to
