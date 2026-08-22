@@ -1,0 +1,27 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-calibration-search.v1",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "engine_commit": "ec1da9db",
+  "query_kind": "possible-calls",
+  "selection_rule": "Resume at keras:16, then continue in ascending bug ID and lexicographic project order. Select a candidate only when the fix changes the callee or receiver expression of an existing buggy call while preserving that call result's surrounding program role. Query the first changed buggy callsite in source order. Skip fixes that only add or remove calls, change arguments without changing the callee or receiver, or alter non-call semantics. Stop at the first answered benchmark-direct query or after three bounded probe candidates.",
+  "project_order": [
+    "keras",
+    "luigi",
+    "matplotlib",
+    "pandas",
+    "sanic",
+    "scrapy",
+    "spacy",
+    "thefuck",
+    "tornado",
+    "tqdm",
+    "youtube-dl"
+  ],
+  "first_bug_id_by_project": {"keras": 16},
+  "oracle_used": true,
+  "calibration_only": true,
+  "detector_received_oracle": false,
+  "maximum_probe_candidates": 3,
+  "candidates": [],
+  "status": "precommitted_before_patch_inspection"
+}
