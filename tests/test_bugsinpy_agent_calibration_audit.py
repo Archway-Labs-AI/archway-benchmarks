@@ -78,3 +78,23 @@ def test_possible_calls_search_pauses_on_unbounded_tool_failure() -> None:
     assert search["bounded_probe_results"] == search["eligible_cases"] == 0
     assert search["status"] == "paused_on_engine_serialization_handoff"
     assert search["decision"].startswith("do_not_launch_agent")
+
+
+def test_binding_types_search_pauses_when_function_input_is_not_addressable() -> None:
+    search = json.loads((
+        ROOT / "calibrations/bugsinpy-agent-evidence/binding-types-search-v1.json"
+    ).read_text())
+
+    assert search["query_kind"] == "binding-types"
+    assert search["calibration_only"] is True
+    assert search["detector_received_oracle"] is False
+    probe = next(case for case in search["candidates"] if case["decision"] == "probe")
+    assert probe["bug_key"] == "matplotlib:11"
+    assert probe["selector"] == {
+        "kind": "binding-types", "module": "matplotlib.text", "binding": "dpi",
+    }
+    assert probe["result"] == "tool_error"
+    assert search["qualifying_probes_attempted"] == 1
+    assert search["bounded_probe_results"] == search["eligible_cases"] == 0
+    assert search["status"] == "paused_on_function_input_observation_handoff"
+    assert search["decision"].startswith("do_not_launch_agent")

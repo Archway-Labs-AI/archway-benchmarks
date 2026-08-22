@@ -22,6 +22,20 @@
   "calibration_only": true,
   "detector_received_oracle": false,
   "maximum_probe_candidates": 3,
-  "candidates": [],
-  "status": "precommitted_before_patch_inspection"
+  "screening": {
+    "method": "ordered patch inspection with type-sensitive-change search followed by exact buggy-module AST input-name counts",
+    "ranges_reached": ["keras:18-45", "luigi:1-33", "matplotlib:1-11"]
+  },
+  "candidates": [
+    {"bug_key": "keras:25", "decision": "skip", "reason": "affected formal x identifies three function-input boundaries in keras.applications.imagenet_utils"},
+    {"bug_key": "luigi:6", "decision": "skip", "reason": "affected formal value identifies eleven function-input boundaries in luigi.parameter"},
+    {"bug_key": "luigi:21", "decision": "skip", "reason": "affected formal cmdline_args identifies four function-input boundaries in luigi.interface"},
+    {"bug_key": "matplotlib:5", "decision": "skip", "reason": "affected formal linewidths identifies three function-input boundaries in matplotlib.axes._axes"},
+    {"bug_key": "matplotlib:11", "decision": "probe", "question": "What type possibilities reach the dpi input whose None handling is repaired by the patch?", "selector": {"kind": "binding-types", "module": "matplotlib.text", "binding": "dpi"}, "result": "tool_error", "reason": "the syntactically unique function formal matched zero engine store boundaries", "attempted_run": "run://workbench-local/calibration-matplotlib-11-ec1da9db/binding-types-dpi-v2"}
+  ],
+  "qualifying_probes_attempted": 1,
+  "bounded_probe_results": 0,
+  "eligible_cases": 0,
+  "status": "paused_on_function_input_observation_handoff",
+  "decision": "do_not_launch_agent; binding-types produced no bounded evidence disposition"
 }
