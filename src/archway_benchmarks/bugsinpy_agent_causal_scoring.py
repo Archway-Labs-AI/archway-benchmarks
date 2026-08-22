@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import argparse
 import dataclasses
+import json
+import os
 from collections import Counter
+from pathlib import Path
 from typing import TYPE_CHECKING, Iterable
 
 from .bugsinpy_agent_protocol import CausalEvidenceInteraction
@@ -42,6 +46,10 @@ def score_causal_interactions(
         benchmark, {item.review.prediction.bug_key: item.review.prediction for item in interactions},
         subset=subset,
     )
+    if {item.bug_key for item in proposal_outcomes} != subset or {
+        item.bug_key for item in review_outcomes
+    } != subset:
+        raise ProtocolViolation("causal score corpus does not contain every interaction bug")
     before = {item.bug_key: item for item in proposal_outcomes}
     after = {item.bug_key: item for item in review_outcomes}
     rows = []
@@ -105,3 +113,34 @@ def score_causal_interactions(
         },
         "interactions": rows,
     }
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--corpus-root", type=Path, required=True)
+    parser.add_argument("--interaction", type=Path, action="append", required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args(argv)
+    if args.output.exists():
+        parser.error("output must not already exist")
+    from .benchmarks.bugsinpy import BugsInPyBenchmark
+    try:
+        interactions = tuple(
+            CausalEvidenceInteraction.from_json(json.loads(path.read_text(encoding="utf-8")))
+            for path in args.interaction
+        )
+        score = score_causal_interactions(BugsInPyBenchmark(args.corpus_root), interactions)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        temporary = args.output.with_name(f".{args.output.name}.partial")
+        temporary.write_text(
+            json.dumps(score, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(temporary, args.output)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    print(json.dumps({"output": str(args.output)}, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

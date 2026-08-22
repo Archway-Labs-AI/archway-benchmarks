@@ -1,0 +1,151 @@
+{
+  "conditions": {
+    "proposal": {
+      "localization": {
+        "analyzed_files": 502,
+        "analyzed_loc": 28839,
+        "exact_findings": 1,
+        "exact_predicted_lines": 2,
+        "false_positive_findings": 0,
+        "false_positive_lines": 6,
+        "findings_per_kloc": 0.03467526613266757,
+        "macro_line_hit_rate_by_project": {
+          "fastapi": 1.0
+        },
+        "mean_exam_score": 0.00027740212906134055,
+        "mean_reciprocal_rank": 1.0,
+        "precision_at": {
+          "1": 0.25,
+          "5": 0.25,
+          "10": 0.25
+        },
+        "predicted_lines": 8,
+        "repository_files": 502,
+        "repository_loc": 28839,
+        "top_file_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "top_line_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "total_bugs": 1,
+        "total_findings": 1
+      }
+    },
+    "review": {
+      "localization": {
+        "analyzed_files": 502,
+        "analyzed_loc": 28839,
+        "exact_findings": 2,
+        "exact_predicted_lines": 2,
+        "false_positive_findings": 0,
+        "false_positive_lines": 0,
+        "findings_per_kloc": 0.06935053226533514,
+        "macro_line_hit_rate_by_project": {
+          "fastapi": 1.0
+        },
+        "mean_exam_score": 3.467526613266757e-05,
+        "mean_reciprocal_rank": 1.0,
+        "precision_at": {
+          "1": 1.0,
+          "5": 1.0,
+          "10": 1.0
+        },
+        "predicted_lines": 2,
+        "repository_files": 502,
+        "repository_loc": 28839,
+        "top_file_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "top_line_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "total_bugs": 1,
+        "total_findings": 2
+      }
+    }
+  },
+  "efficiency": {
+    "mean_proposal_tokens": 105311.0,
+    "mean_query_count": 1.0,
+    "mean_query_seconds": 15.84873366705142,
+    "mean_review_increment_tokens": 60074.0,
+    "mean_total_seconds": 91.2720652091084,
+    "mean_total_tokens": 165385.0
+  },
+  "evidence_dispositions": {
+    "irrelevant": 1,
+    "misleading": 0,
+    "unusable": 0,
+    "useful": 0
+  },
+  "interaction_count": 1,
+  "interactions": [
+    {
+      "bug_key": "fastapi:1",
+      "delta": {
+        "exam_score": -0.00024272686292867298,
+        "line_hit": 0,
+        "reciprocal_rank": 0.0
+      },
+      "evidence": {
+        "disposition": "irrelevant",
+        "duration_seconds": 15.84873366705142,
+        "impact": "confirmed",
+        "kind": "call-arguments",
+        "response_status": "answered"
+      },
+      "interaction_id": "bugsinpy-causal-fastapi-1-v2",
+      "proposal": {
+        "analyzed_files": 502,
+        "analyzed_loc": 28839,
+        "bug_key": "fastapi:1",
+        "exact_finding_count": 1,
+        "exact_predicted_lines": 2,
+        "exam_score": 0.00027740212906134055,
+        "false_positive_count": 0,
+        "false_positive_lines": 6,
+        "finding_count": 1,
+        "first_file_hit_rank": 1,
+        "first_line_hit_rank": 1,
+        "predicted_lines": 8,
+        "project": "fastapi",
+        "reciprocal_rank": 1.0,
+        "repository_files": 502,
+        "repository_loc": 28839
+      },
+      "review": {
+        "analyzed_files": 502,
+        "analyzed_loc": 28839,
+        "bug_key": "fastapi:1",
+        "exact_finding_count": 2,
+        "exact_predicted_lines": 2,
+        "exam_score": 3.467526613266757e-05,
+        "false_positive_count": 0,
+        "false_positive_lines": 0,
+        "finding_count": 2,
+        "first_file_hit_rank": 1,
+        "first_line_hit_rank": 1,
+        "predicted_lines": 2,
+        "project": "fastapi",
+        "reciprocal_rank": 1.0,
+        "repository_files": 502,
+        "repository_loc": 28839
+      }
+    }
+  ],
+  "mean_delta": {
+    "exam_score": -0.00024272686292867298,
+    "line_hit": 0.0,
+    "reciprocal_rank": 0.0
+  },
+  "schema": "archway.bugsinpy.agent-causal-score.v1"
+}
