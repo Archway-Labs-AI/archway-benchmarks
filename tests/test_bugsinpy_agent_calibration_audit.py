@@ -58,3 +58,23 @@ def test_post_fastapi_search_obeys_precommitted_probe_limit() -> None:
     assert search["eligible_cases"] == 0
     assert search["status"] == "stopped_at_precommitted_probe_limit"
     assert search["decision"].startswith("do_not_launch_agent")
+
+
+def test_possible_calls_search_pauses_on_unbounded_tool_failure() -> None:
+    search = json.loads((
+        ROOT / "calibrations/bugsinpy-agent-evidence/possible-calls-search-v1.json"
+    ).read_text())
+
+    assert search["query_kind"] == "possible-calls"
+    assert search["calibration_only"] is True
+    assert search["detector_received_oracle"] is False
+    assert [case["bug_key"] for case in search["candidates"]] == [
+        "keras:16", "keras:17",
+    ]
+    probe = search["candidates"][1]
+    assert probe["decision"] == "probe"
+    assert probe["result"] == "tool_error"
+    assert search["qualifying_probes_attempted"] == 1
+    assert search["bounded_probe_results"] == search["eligible_cases"] == 0
+    assert search["status"] == "paused_on_engine_serialization_handoff"
+    assert search["decision"].startswith("do_not_launch_agent")

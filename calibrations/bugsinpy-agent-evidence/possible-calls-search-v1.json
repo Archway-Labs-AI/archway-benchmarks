@@ -22,6 +22,13 @@
   "calibration_only": true,
   "detector_received_oracle": false,
   "maximum_probe_candidates": 3,
-  "candidates": [],
-  "status": "precommitted_before_patch_inspection"
+  "candidates": [
+    {"bug_key": "keras:16", "decision": "skip", "reason": "fix changes sequential-model configuration and state; no existing buggy call changes callee or receiver"},
+    {"bug_key": "keras:17", "decision": "probe", "question": "Can the selected nested call target be identified as K.max rather than the fixed K.flatten target?", "selector": {"kind": "possible-calls", "module": "keras.metrics", "row": 37, "col": 26}, "result": "tool_error", "reason": "engine native-run serialization failed because ModuleValue in a knowledge delta is not JSON serializable", "attempted_run": "run://workbench-local/calibration-keras-17-ec1da9db/possible-calls-row37-col26-v2"}
+  ],
+  "qualifying_probes_attempted": 1,
+  "bounded_probe_results": 0,
+  "eligible_cases": 0,
+  "status": "paused_on_engine_serialization_handoff",
+  "decision": "do_not_launch_agent; possible-calls produced no bounded evidence disposition"
 }
