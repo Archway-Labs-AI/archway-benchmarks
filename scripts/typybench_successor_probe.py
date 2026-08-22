@@ -226,7 +226,7 @@ def main() -> None:
         "requested_body_roots": summary.get("requested_body_roots"),
         "signature_body_roots": summary.get("signature_body_roots"),
         "component_hotspots": summary.get("component_hotspots"),
-        "region_quotient": summary.get("region_quotient"),
+        "region_quotient_summary": summary.get("region_quotient_summary"),
         "morphism_transfer_reuse": (
             summary.get("morphism_transfer_reuse")
         ),

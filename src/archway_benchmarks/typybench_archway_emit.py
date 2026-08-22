@@ -1680,8 +1680,8 @@ try:
         session.scheduler.component_hotspots()
         if diagnostic_details else ()
     )
-    region_quotient = (
-        session.scheduler.region_quotient()
+    region_quotient_summary = (
+        session.scheduler.region_quotient_summary()
         if diagnostic_details else {}
     )
     if component_hotspots and summary_registry is not None:
@@ -1782,7 +1782,7 @@ try:
             "component_hotspots": (
                 component_hotspots
             ),
-            "region_quotient": region_quotient,
+            "region_quotient_summary": region_quotient_summary,
             "gc": gc_profile_snapshot(),
             "production_replay_hotspots": (
                 session.scheduler.production_replay_hotspots()
