@@ -5,6 +5,7 @@
   "oracle_used": true,
   "calibration_only": true,
   "detector_received_oracle": false,
+  "latest_engine_commit": "ec1da9db",
   "candidates": [
     {"bug_key": "fastapi:3", "decision": "skip", "reason": "fix adds missing response-preparation machinery; no disputed buggy call argument exists"},
     {"bug_key": "fastapi:4", "decision": "skip", "reason": "fix changes parameter deduplication value semantics"},
@@ -12,12 +13,15 @@
     {"bug_key": "fastapi:6", "decision": "skip", "reason": "fix changes a sequence-type predicate"},
     {"bug_key": "fastapi:7", "decision": "skip", "reason": "fix adds a missing jsonable_encoder call"},
     {"bug_key": "fastapi:8", "decision": "skip", "reason": "fix adds a new route_class_override formal and forwarding path absent from the buggy signature"},
-    {"bug_key": "fastapi:9", "decision": "probe", "question": "Does BodySchema receive a literal None rather than media-type configuration?", "result": "no_evidence", "reason": "dynamic target lacks a diagram-owned signature"},
+    {"bug_key": "fastapi:9", "decision": "probe", "question": "Does BodySchema receive a literal None rather than media-type configuration?", "result": "unsupported", "reason": "stable empty call-target knowledge exposes an unrepresented dynamic callable signature boundary"},
     {"bug_key": "fastapi:10", "decision": "skip", "reason": "fix adds missing control flow and serialization"},
     {"bug_key": "fastapi:11", "decision": "skip", "reason": "fix changes scalar-field predicate logic"},
     {"bug_key": "fastapi:12", "decision": "skip", "reason": "fix changes auto_error control flow"},
-    {"bug_key": "fastapi:13", "decision": "probe", "question": "Does add_api_route receive responses rather than combined_responses?", "result": "tool_error", "reason": "missing fact provider for the repository-defined method call"}
+    {"bug_key": "fastapi:13", "decision": "probe", "question": "Does add_api_route receive responses rather than combined_responses?", "result": "not_collected", "reason": "semantic call-target knowledge remains open under requested-module-only collection"},
+    {"bug_key": "fastapi:14", "decision": "skip", "reason": "fix changes type annotations; no disputed buggy call argument exists"},
+    {"bug_key": "fastapi:15", "decision": "skip", "reason": "fix adds a missing WebSocket route branch and call absent from the buggy source"},
+    {"bug_key": "fastapi:16", "decision": "probe", "question": "Does the first recursive jsonable_encoder call omit custom_encoder forwarding?", "selector": {"kind": "call-arguments", "module": "fastapi.encoders", "row": 19, "col": 19}, "result": "not_collected", "reason": "call-target collection reached an unsupported scalar producer for branch truth", "run": "run://workbench-local/calibration-fastapi-16-ec1da9db/call-arguments-row19"}
   ],
   "eligible_cases": 0,
-  "decision": "engine_handoff_required_before_more_agent_runs"
+  "decision": "fastapi_search_exhausted_without_an_eligible_case; continue_only_under_a_new_precommitted_search_rule"
 }

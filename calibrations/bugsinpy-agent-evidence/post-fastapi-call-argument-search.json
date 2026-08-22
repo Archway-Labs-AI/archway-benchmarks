@@ -1,0 +1,26 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-calibration-search.v1",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "engine_commit": "ec1da9db",
+  "selection_rule": "Continue after fastapi in lexicographic project order, then ascending numeric bug ID. Probe only the first existing buggy call in each qualifying patch whose actual-to-formal argument mapping is directly changed by the fix. Skip fixes that only add an absent call, alter non-call semantics, or change tests and documentation. Stop at the first answered benchmark-direct query or after three bounded probe candidates, whichever comes first.",
+  "project_order": [
+    "httpie",
+    "keras",
+    "luigi",
+    "matplotlib",
+    "pandas",
+    "sanic",
+    "scrapy",
+    "spacy",
+    "thefuck",
+    "tornado",
+    "tqdm",
+    "youtube-dl"
+  ],
+  "oracle_used": true,
+  "calibration_only": true,
+  "detector_received_oracle": false,
+  "maximum_probe_candidates": 3,
+  "candidates": [],
+  "status": "precommitted_before_patch_inspection"
+}
