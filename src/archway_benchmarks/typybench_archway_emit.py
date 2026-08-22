@@ -1068,12 +1068,13 @@ try:
         )
     else:
         requested = missing[:demand_limit] if demand_limit is not None else missing
-    signature_roots = session.observation_workload_roots(requested)
-    if requested_root_ids:
-        signature_roots = tuple(
-            root_address for root_address in signature_roots
-            if root_address.id in requested_root_ids
-        )
+    # The native workload above already performs collective targeted waves for
+    # every supported observation in the persistent session.  Anything still
+    # unresolved is either an explicit native bottom or a superseded
+    # uninvoked-body view for which a contextual body instance exists.  Do not
+    # reinterpret those outcomes as requests for the removed coarse
+    # body-summary runtime.
+    signature_roots = ()
     print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
     if diagnostic_details and len(signature_roots) <= 32:
         print(
