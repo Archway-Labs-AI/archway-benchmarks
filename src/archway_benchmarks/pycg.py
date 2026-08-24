@@ -1369,6 +1369,21 @@ def successor_archway_call_edge_result(
                     "factored_phase_seconds", {}
                 ).items()
             )),
+            "factored_admission_size_counts": dict(sorted(
+                aggregate_production.get(
+                    "factored_admission_size_counts", {}
+                ).items()
+            )),
+            "factored_max_admitted_productions": (
+                aggregate_production.get(
+                    "factored_max_admitted_productions", 0
+                )
+            ),
+            "factored_max_admitted_components": (
+                aggregate_production.get(
+                    "factored_max_admitted_components", 0
+                )
+            ),
             "factored_boundary_regressions": list(
                 aggregate_production.get(
                     "factored_boundary_regressions", ()
@@ -1646,6 +1661,17 @@ def successor_archway_call_edge_result(
             "factored_phase_seconds": dict(sorted(
                 production.get("factored_phase_seconds", {}).items()
             )),
+            "factored_admission_size_counts": dict(sorted(
+                production.get(
+                    "factored_admission_size_counts", {}
+                ).items()
+            )),
+            "factored_max_admitted_productions": production.get(
+                "factored_max_admitted_productions", 0
+            ),
+            "factored_max_admitted_components": production.get(
+                "factored_max_admitted_components", 0
+            ),
             "factored_boundary_regressions": list(
                 production.get("factored_boundary_regressions", ())
             ),
