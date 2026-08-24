@@ -1331,6 +1331,9 @@ def successor_archway_call_edge_result(
             "native_call_graph_refusals": (
                 list(session.native_call_graph_refusals())
             ),
+            "native_call_graph_cohort_fallbacks": (
+                list(session.native_call_graph_cohort_fallbacks())
+            ),
             "resolved_fact_count": len(snapshot.resolved_facts),
             "fact_family_counts": dict(sorted(family_counts.items())),
             "demand_node_count": session.scheduler.graph.node_count,
@@ -1659,6 +1662,9 @@ def successor_archway_call_edge_result(
             "root_details": described_root_details(query_progress),
             "native_call_graph_refusals": (
                 list(session.native_call_graph_refusals())
+            ),
+            "native_call_graph_cohort_fallbacks": (
+                list(session.native_call_graph_cohort_fallbacks())
             ),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
