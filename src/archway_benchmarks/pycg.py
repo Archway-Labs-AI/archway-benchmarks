@@ -888,6 +888,10 @@ def successor_archway_call_edge_result(
         sys.path.insert(0, engine_text)
 
     from sd_core.analysis.diagram_analysis import open_hybrid_program_session
+    from sd_core.analysis.diagram_analysis.runtime_catalog import (
+        callsite_operation_catalog,
+        source_anchor_catalog,
+    )
     from sd_core.tooling.harness import ProgramResult
     from sd_core.tooling.sampling_profile import SamplingProfiler
 
@@ -943,6 +947,64 @@ def successor_archway_call_edge_result(
         for name, address in session.callable_roots.items()
         if (body_id := getattr(address.subject, "body_morphism_id", None))
     }
+    native_provider = session.native_scalar_provider
+    if native_provider is not None and hasattr(
+        native_provider, "callable_body_labels"
+    ):
+        body_labels.update(native_provider.callable_body_labels())
+    source_anchors = source_anchor_catalog(modules)
+    callsite_operations = callsite_operation_catalog(modules)
+
+    def described_root_details(
+        query_progress: Mapping[str, object],
+    ) -> dict[str, object]:
+        """Attach diagram-owned source and callable context to root evidence."""
+
+        described: dict[str, object] = {}
+        for root_id, raw_detail in dict(
+            query_progress.get("root_details", {})
+        ).items():
+            detail = dict(raw_detail)
+            subject = detail.get("subject", {})
+            morphism_id = (
+                subject.get("morphism_id", "")
+                if isinstance(subject, Mapping) else ""
+            )
+            owner = session.callable_owner_for(
+                str(detail.get("context", "")), morphism_id
+            )
+            if owner is not None:
+                detail["callable"] = owner.display_name
+                detail["callable_body_morphism_id"] = owner.body_morphism_id
+            else:
+                context = str(detail.get("context", ""))
+                uninvoked_prefix = "context:uninvoked-body:"
+                if context.startswith(uninvoked_prefix):
+                    body_id = context.removeprefix(uninvoked_prefix)
+                    detail["callable"] = body_labels.get(body_id)
+                    detail["callable_body_morphism_id"] = body_id
+            anchor = source_anchors.get(morphism_id)
+            operation = callsite_operations.get(morphism_id)
+            if operation is not None:
+                detail["operation"] = operation
+            if anchor is not None:
+                detail["source_anchor"] = {
+                    "module": (
+                        ".".join(anchor.module.parts)
+                        if anchor.module is not None else None
+                    ),
+                    "position": (
+                        {
+                            "row": anchor.position.row,
+                            "col": anchor.position.col,
+                            "end_row": anchor.position.end_row,
+                            "end_col": anchor.position.end_col,
+                        }
+                        if anchor.position is not None else None
+                    ),
+                }
+            described[str(root_id)] = detail
+        return described
     sampling_profile = None
 
     def current_evidence(*, phase: str) -> dict[str, object]:
@@ -1216,7 +1278,11 @@ def successor_archway_call_edge_result(
                                 query_progress["active_root_id"])
             ),
             "active_root_seconds": query_progress["active_root_seconds"],
-            "root_details": query_progress.get("root_details", {}),
+            "active_root_count": query_progress.get("active_root_count", 0),
+            "active_root_ids": list(
+                query_progress.get("active_root_ids", ())
+            ),
+            "root_details": described_root_details(query_progress),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
                 "completed_root_seconds_total"
@@ -1536,7 +1602,11 @@ def successor_archway_call_edge_result(
                 query_progress["active_root_id"],
             ),
             "active_root_seconds": query_progress["active_root_seconds"],
-            "root_details": query_progress.get("root_details", {}),
+            "active_root_count": query_progress.get("active_root_count", 0),
+            "active_root_ids": list(
+                query_progress.get("active_root_ids", ())
+            ),
+            "root_details": described_root_details(query_progress),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
                 "completed_root_seconds_total"
