@@ -27,6 +27,7 @@ import resource
 import sys
 import threading
 import time
+import traceback
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1636,6 +1637,7 @@ def successor_archway_call_edge_result(
             forward = session.run_native_semantic_call_graph()
     except Exception as exc:
         evidence = current_evidence(phase="error")
+        evidence["exception_traceback"] = traceback.format_exc()
         partial = current_partial_graph_evidence()
         evidence.update(partial)
         if progress is not None:
