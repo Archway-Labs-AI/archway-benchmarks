@@ -1369,6 +1369,16 @@ def successor_archway_call_edge_result(
                     "factored_phase_seconds", {}
                 ).items()
             )),
+            "factored_rebase_outcome_counts": dict(sorted(
+                aggregate_production.get(
+                    "factored_rebase_outcome_counts", {}
+                ).items()
+            )),
+            "factored_rebase_outcome_seconds": dict(sorted(
+                aggregate_production.get(
+                    "factored_rebase_outcome_seconds", {}
+                ).items()
+            )),
             "factored_admission_size_counts": dict(sorted(
                 aggregate_production.get(
                     "factored_admission_size_counts", {}
@@ -1665,6 +1675,16 @@ def successor_archway_call_edge_result(
             )),
             "factored_phase_seconds": dict(sorted(
                 production.get("factored_phase_seconds", {}).items()
+            )),
+            "factored_rebase_outcome_counts": dict(sorted(
+                production.get(
+                    "factored_rebase_outcome_counts", {}
+                ).items()
+            )),
+            "factored_rebase_outcome_seconds": dict(sorted(
+                production.get(
+                    "factored_rebase_outcome_seconds", {}
+                ).items()
             )),
             "factored_admission_size_counts": dict(sorted(
                 production.get(
