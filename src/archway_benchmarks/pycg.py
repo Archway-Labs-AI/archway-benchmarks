@@ -1189,8 +1189,13 @@ def successor_archway_call_edge_result(
                 "modules": module_names,
             },
             "root_inventory": {
-                "module_count": len(session.module_roots),
-                "module_names": sorted(session.module_roots),
+                # Module cohorts are now admitted by semantic region rather
+                # than by the legacy per-root registry. The translated module
+                # closure above is the authoritative inventory; projecting
+                # the retired registry here made valid cohort runs appear to
+                # contain no module roots.
+                "module_count": len(module_names),
+                "module_names": module_names,
                 "callable_body_count": len(callable_root_names),
                 "callable_body_names": callable_root_names,
             },
@@ -1287,6 +1292,16 @@ def successor_archway_call_edge_result(
             )),
             "worklist_schedule_counts": dict(sorted(
                 aggregate_production["worklist_schedule_counts"].items()
+            )),
+            "factored_phase_counts": dict(sorted(
+                aggregate_production.get(
+                    "factored_phase_counts", {}
+                ).items()
+            )),
+            "factored_phase_seconds": dict(sorted(
+                aggregate_production.get(
+                    "factored_phase_seconds", {}
+                ).items()
             )),
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
@@ -1549,6 +1564,12 @@ def successor_archway_call_edge_result(
             )),
             "worklist_schedule_counts": dict(sorted(
                 production["worklist_schedule_counts"].items()
+            )),
+            "factored_phase_counts": dict(sorted(
+                production.get("factored_phase_counts", {}).items()
+            )),
+            "factored_phase_seconds": dict(sorted(
+                production.get("factored_phase_seconds", {}).items()
             )),
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
