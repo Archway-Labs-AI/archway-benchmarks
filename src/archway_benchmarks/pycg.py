@@ -925,28 +925,11 @@ def successor_archway_call_edge_result(
     analysis_started = time.perf_counter()
     include_callable_bodies = case.suite == "macro"
     stop_sampling = threading.Event()
-    root_labels = {
-        address.id: f"module:{name}"
-        for name, address in session.module_roots.items()
-    }
-    root_labels.update({
-        address.id: "callable:" + (
-            session.callable_boundaries_by_body[body_id].display_name
-            if body_id in session.callable_boundaries_by_body
-            else name
-        )
-        for name, address in session.callable_roots.items()
-        if (body_id := getattr(address.subject, "body_morphism_id", None))
-    })
-    body_labels = {
-        body_id: (
-            session.callable_boundaries_by_body[body_id].display_name
-            if body_id in session.callable_boundaries_by_body
-            else name
-        )
-        for name, address in session.callable_roots.items()
-        if (body_id := getattr(address.subject, "body_morphism_id", None))
-    }
+    # Native roots are typed cells materialized on demand, not entries in the
+    # retired whole-body root registries.  Address descriptions below derive
+    # labels from the diagram-owned body catalog and address subjects.
+    root_labels: dict[str, str] = {}
+    body_labels: dict[str, str] = {}
     native_provider = session.native_scalar_provider
     if native_provider is not None and hasattr(
         native_provider, "callable_body_labels"
@@ -1044,22 +1027,6 @@ def successor_archway_call_edge_result(
         def growth_for(key) -> dict[str, int]:
             return dict(sorted(growth_by_production.get(key, {}).items()))
 
-        boundaries_by_definition = {
-            boundary.definition_morphism_id: boundary
-            for boundary in session.callable_boundaries_by_body.values()
-        }
-
-        def callable_application_for(key):
-            registry = session.invocation_registry
-            summaries = (
-                registry.callable_summaries
-                if registry is not None else None
-            )
-            return (
-                summaries.applications.get(key.address)
-                if summaries is not None else None
-            )
-
         def callable_for(key) -> str | None:
             owner = session.callable_owner_for(
                 key.address.context,
@@ -1072,20 +1039,7 @@ def successor_archway_call_edge_result(
             )
             if body_id in body_labels:
                 return body_labels[body_id]
-            application = callable_application_for(key)
-            if application is None:
-                return None
-            boundary = boundaries_by_definition.get(
-                application.callable_value.definition_morphism_id
-            )
-            return boundary.display_name if boundary is not None else None
-
-        def callable_value_for(key) -> dict[str, object] | None:
-            application = callable_application_for(key)
-            return (
-                dict(application.callable_value.canonical_data())
-                if application is not None else None
-            )
+            return None
 
         hottest_productions = [
             {
@@ -1093,7 +1047,6 @@ def successor_archway_call_edge_result(
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
                 "callable": callable_for(key),
-                "callable_value": callable_value_for(key),
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "executions": executions,
@@ -1112,7 +1065,6 @@ def successor_archway_call_edge_result(
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
                 "callable": callable_for(key),
-                "callable_value": callable_value_for(key),
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "seconds": seconds,
@@ -1249,7 +1201,7 @@ def successor_archway_call_edge_result(
             if count > 1
         )
         module_names = sorted(modules)
-        callable_root_names = sorted(session.callable_roots)
+        callable_body_names = sorted(body_labels.values())
         evidence = {
             "phase": phase,
             "source_module_count": len(sources),
@@ -1268,11 +1220,11 @@ def successor_archway_call_edge_result(
                 # contain no module roots.
                 "module_count": len(module_names),
                 "module_names": module_names,
-                "callable_body_count": len(callable_root_names),
-                "callable_body_names": callable_root_names,
+                "callable_body_count": len(callable_body_names),
+                "callable_body_names": callable_body_names,
             },
             "callable_body_root_count": (
-                len(session.callable_roots) if include_callable_bodies else 0
+                len(callable_body_names) if include_callable_bodies else 0
             ),
             "root_policy": (
                 "all_modules_possible_entries_and_callable_bodies"
@@ -1315,19 +1267,6 @@ def successor_archway_call_edge_result(
                 for root_id, seconds
                 in query_progress["slowest_completed_roots"]
             ],
-            "invocation_context_counts": session.invocation_context_counts(),
-            "invocation_input_growth_counts": (
-                session.invocation_input_growth_counts()
-            ),
-            "invocation_admission_counts": (
-                session.invocation_admission_counts()
-            ),
-            "invocation_summary_telemetry": (
-                session.invocation_summary_telemetry()
-            ),
-            "deferred_materialization_counts": (
-                session.deferred_materialization_counts()
-            ),
             "native_call_graph_refusals": (
                 list(session.native_call_graph_refusals())
             ),
@@ -1470,9 +1409,6 @@ def successor_archway_call_edge_result(
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
-            "morphism_transfer_reuse_counts": (
-                session.morphism_transfer_reuse_counts()
-            ),
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
             ),
@@ -1487,11 +1423,6 @@ def successor_archway_call_edge_result(
                 ),
                 "module_semantic_summary_count": family_counts.get(
                     "ModuleSemanticSummary", 0
-                ),
-                "registered_invocation_summary_count": (
-                    session.invocation_context_counts().get(
-                        "summary_registered", 0
-                    )
                 ),
             },
             "knowledge_commit_counts": session.store.commit_counts,
@@ -1571,54 +1502,6 @@ def successor_archway_call_edge_result(
         query_progress = session.scheduler.query_progress
         production_counts = session.scheduler.production_counts
         production_seconds = session.scheduler.production_seconds
-
-        summaries = (
-            session.invocation_registry.callable_summaries
-            if session.invocation_registry is not None else None
-        )
-        hottest_callable_applications: list[dict[str, object]] = []
-        if summaries is not None:
-            for address, spec in summaries.applications.items():
-                providers = session.scheduler.graph.providers(address)
-                executions = sum(
-                    production_counts.get(provider, 0)
-                    for provider in providers
-                )
-                if not executions:
-                    continue
-                prerequisites = {
-                    prerequisite
-                    for provider in providers
-                    for prerequisite in session.scheduler.graph.node(
-                        provider
-                    ).prerequisites
-                }
-                hottest_callable_applications.append({
-                    "address_id": address.id,
-                    "callable": body_labels.get(
-                        spec.callable_value.body_morphism_id
-                    ),
-                    "body_morphism_id": (
-                        spec.callable_value.body_morphism_id
-                    ),
-                    "input_pattern_id": address.subject.input_pattern_id,
-                    "executions": executions,
-                    "seconds": sum(
-                        production_seconds.get(provider, 0.0)
-                        for provider in providers
-                    ),
-                    "prerequisite_count": len(prerequisites),
-                    "prerequisites_by_family": dict(sorted(Counter(
-                        prerequisite.family
-                        for prerequisite in prerequisites
-                    ).items())),
-                })
-            hottest_callable_applications.sort(
-                key=lambda item: (
-                    -int(item["executions"]), str(item["address_id"])
-                )
-            )
-            del hottest_callable_applications[20:]
 
         def top_counts(values: Counter[str]) -> dict[str, int | float]:
             return dict(values.most_common(20))
@@ -1771,20 +1654,12 @@ def successor_archway_call_edge_result(
                     "production_replay_operation_hotspots", ()
                 )
             ),
-            "hottest_callable_applications": hottest_callable_applications,
             "transfer_operation_counts": dict(sorted(
                 session.scheduler.transfer_operation_counts.items()
             )),
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
-            "morphism_transfer_reuse_counts": (
-                session.morphism_transfer_reuse_counts()
-            ),
-            "invocation_context_counts": session.invocation_context_counts(),
-            "deferred_materialization_counts": (
-                session.deferred_materialization_counts()
-            ),
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 * (1024 if sys.platform.startswith("linux") else 1)

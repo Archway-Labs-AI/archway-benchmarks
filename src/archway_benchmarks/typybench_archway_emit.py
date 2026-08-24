@@ -626,9 +626,6 @@ def _observation_admission_group(session, root_address) -> tuple[object, str]:
     body_id = session.observation_workload_body_id(root_address)
     if body_id is None:
         return ("unowned", root_address.id)
-    for provider in session.targeted_body_providers:
-        if body_id in provider.bodies_by_id:
-            return (id(provider), body_id)
     return ("callable", body_id)
 
 
@@ -1147,9 +1144,6 @@ try:
             body_id = session.observation_workload_body_id(root_address)
             if body_id is None:
                 return ("unowned", root_address.id)
-            for provider in session.targeted_body_providers:
-                if body_id in provider.bodies_by_id:
-                    return (id(provider), body_id)
             return ("callable", body_id)
 
         def admission_batches(roots):
@@ -1216,15 +1210,6 @@ try:
                 session.scheduler.graph.topology_change_counts
             )
             gc_before = gc_profile_snapshot()
-            summary_registry = session.invocation_registry.callable_summaries
-            applications_before = frozenset(
-                summary_registry.applications
-            ) if diagnostic_details and summary_registry is not None else frozenset()
-            initialized_modules_before = frozenset(
-                module_name
-                for module_name, module_root in session.module_roots.items()
-                if session.store.resolved(module_root) is not None
-            ) if diagnostic_details else frozenset()
             telemetry_before = (
                 session.scheduler.production_family_telemetry
                 if diagnostic_details else None
@@ -1430,42 +1415,6 @@ try:
                     transfer_second_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
                 )[:12],
-                "top_new_application_callers": (
-                    Counter(
-                        (
-                            spec.invocation.caller_context,
-                            spec.callable_value.body_morphism_id,
-                        )
-                        for application, spec
-                        in summary_registry.applications.items()
-                        if application not in applications_before
-                    ).most_common(12)
-                    if diagnostic_details and summary_registry is not None
-                    else []
-                ),
-                "top_new_application_bodies": (
-                    Counter(
-                        body_labels.get(
-                            spec.callable_value.body_morphism_id,
-                            spec.callable_value.body_morphism_id,
-                        )
-                        for application, spec
-                        in summary_registry.applications.items()
-                        if application not in applications_before
-                    ).most_common(24)
-                    if diagnostic_details and summary_registry is not None
-                    else []
-                ),
-                "new_initialized_modules": (
-                    sorted(
-                        module_name
-                        for module_name, module_root
-                        in session.module_roots.items()
-                        if module_name not in initialized_modules_before
-                        and session.store.resolved(module_root) is not None
-                    )
-                    if diagnostic_details else []
-                ),
                 "workload_relevance": workload_relevance,
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
@@ -1681,10 +1630,6 @@ try:
             ),
         }
     )
-    summary_registry = (
-        session.invocation_registry.callable_summaries
-        if session.invocation_registry is not None else None
-    )
     component_hotspots = (
         session.scheduler.component_hotspots()
         if diagnostic_details else ()
@@ -1693,28 +1638,6 @@ try:
         session.scheduler.region_quotient_summary()
         if diagnostic_details else {}
     )
-    if component_hotspots and summary_registry is not None:
-        callable_labels = {
-            body_id: f"{boundary.module_name}:{boundary.qualified_name}"
-            for body_id, boundary
-            in session.callable_boundaries_by_body.items()
-        }
-        application_labels = {
-            address.context: callable_labels.get(
-                spec.callable_value.body_morphism_id,
-                spec.callable_value.body_morphism_id,
-            )
-            for address, spec in summary_registry.applications.items()
-        }
-        component_hotspots = tuple({
-            **item,
-            "callable_application_bodies": tuple(sorted({
-                application_labels.get(context, context)
-                for context in item.get(
-                    "callable_application_contexts", ()
-                )
-            })),
-        } for item in component_hotspots)
     if component_hotspots:
         callable_labels = {
             body_id: f"{boundary.module_name}:{boundary.qualified_name}"
@@ -1740,25 +1663,6 @@ try:
                 "members": members,
             } for context, members in item.get("contexts", {}).items()),
         } for item in component_hotspots)
-    unresolved_summary_bodies = Counter()
-    if diagnostic_details and collect_predictions and summary_registry is not None:
-        callable_labels = {
-            body_id: f"{boundary.module_name}:{boundary.qualified_name}"
-            for body_id, boundary
-            in session.callable_boundaries_by_body.items()
-        }
-        for application_address, spec in summary_registry.applications.items():
-            if session.store.resolved(application_address) is not None:
-                continue
-            unresolved_summary_bodies[
-                body_labels.get(
-                    spec.callable_value.body_morphism_id,
-                    callable_labels.get(
-                        spec.callable_value.body_morphism_id,
-                        spec.callable_value.body_morphism_id,
-                    ),
-                )
-            ] += 1
     scheduler_telemetry.pop("production_executions_by_provider", None)
     out = {
         "ok": True,
@@ -1801,69 +1705,7 @@ try:
                 session.scheduler.production_replay_operation_hotspots()
                 if diagnostic_details else ()
             ),
-            "morphism_transfer_reuse": dict(
-                session.morphism_transfer_reuse_counts()
-            ) if diagnostic_details else {},
-            "morphism_transfer_reuse_by_operation": dict(
-                session.morphism_transfer_reuse_by_operation()
-            ) if diagnostic_details else {},
-            "atomic_effect_gaps": dict(
-                session.atomic_effect_gap_counts()
-            ) if diagnostic_details else {},
-            "morphism_fact_output_barriers": dict(
-                session.morphism_fact_output_barriers()
-            ) if diagnostic_details else {},
-            "morphism_read_intersections": dict(
-                session.morphism_read_intersections()
-            ) if diagnostic_details else {},
-            "invocation_contexts": dict(
-                session.invocation_context_counts()
-            ),
-            "invocation_inputs": dict(
-                session.invocation_input_growth_counts()
-            ),
-            "invocation_admissions": dict(
-                session.invocation_admission_counts()
-            ),
-            "invocation_application_hotspots": list(
-                session.invocation_application_hotspots()
-            ),
-            "invocation_product_demand_hotspots": list(
-                session.invocation_product_demand_hotspots()
-            ),
-            "invocation_application_runtime_hotspots": list(
-                session.invocation_application_runtime_hotspots()
-            ) if diagnostic_details else [],
-            "invocation_application_invalidation_hotspots": list(
-                session.invocation_application_invalidation_hotspots()
-            ) if diagnostic_details else [],
             "sampling_profile": sampling_profile,
-            "unresolved_summary_bodies": dict(
-                unresolved_summary_bodies.most_common(32)
-            ),
-            "targeted_provider_diagnostics": (
-                [
-                    counts
-                    for provider in session.targeted_body_providers
-                    if (
-                        counts := provider.diagnostic_counts()
-                    )["registered_workloads"]
-                    or counts["definition_environment_plans"]
-                    or counts["nested_definition_environment_plans"]
-                ]
-                if diagnostic_details else []
-            ),
-            "module_provider_diagnostics": (
-                [
-                    provider.diagnostic_counts()
-                    for provider in {
-                        id(targeted.module_provider): targeted.module_provider
-                        for targeted in session.targeted_body_providers
-                    }.values()
-                    if provider.diagnostic_counts()["requested_exports"]
-                ]
-                if diagnostic_details else []
-            ),
             "observation_modules": sorted({
                 item.module.dotted for item in observations
                 if item.module is not None

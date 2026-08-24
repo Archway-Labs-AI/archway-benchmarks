@@ -149,7 +149,7 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.topology_growth > 0
     assert result.evidence["root_demand_count"] == 2
     assert result.evidence["resolved_fact_count"] > 0
-    assert "invocation_input_growth_counts" in result.evidence
+    assert "invocation_input_growth_counts" not in result.evidence
     assert result.evidence["module_closure"] == {
         "policy": "translated-corpus-program",
         "count": 1,
