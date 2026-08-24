@@ -56,8 +56,85 @@ def test_successor_adapter_reads_written_container_lvalue(tmp_path):
 
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
-    assert predictions == list(snippet.annotations)
+    assert result.error is None
     assert result.gaps == []
+    assert predictions == list(snippet.annotations)
+
+
+def test_successor_adapter_retains_recursive_return_observations(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def recursive(value):\n"
+        "    if value == 1:\n"
+        "        return value\n"
+        "    return value * recursive(value - 1)\n"
+        "result = recursive(5)\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":5,"function":"recursive","type":["int"]},
+          {"file":"main.py","line_number":5,"col_offset":1,"variable":"result","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert result.gaps == []
+    assert predictions == list(snippet.annotations)
+
+
+def test_successor_adapter_reports_generator_function_result(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "def generate():\n"
+        "    yield 1\n"
+        "values = generate()\n",
+        """[
+          {"file":"main.py","line_number":1,"col_offset":5,"function":"generate","type":["generator"]},
+          {"file":"main.py","line_number":3,"col_offset":1,"variable":"values","type":["generator"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert result.gaps == []
+    assert predictions == list(snippet.annotations)
+
+
+def test_successor_adapter_keeps_initializer_attribute_type_with_iteration(
+    tmp_path,
+):
+    snippet = _snippet(
+        tmp_path,
+        "class Counter:\n"
+        "    def __init__(self, max=0):\n"
+        "        self.max = max\n"
+        "    def __iter__(self):\n"
+        "        return self\n"
+        "    def __next__(self):\n"
+        "        if self.max:\n"
+        "            return 1\n"
+        "        raise StopIteration\n"
+        "values = [item for item in Counter(1)]\n",
+        """[
+          {"file":"main.py","line_number":3,"col_offset":9,"function":"Counter.__init__","variable":"self.max","type":["int"]}
+        ]""",
+    )
+    result = SuccessorArchwayAnalysisEngine().analyze(
+        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
+    )
+
+    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
+
+    assert result.error is None
+    assert result.gaps == []
+    assert predictions == list(snippet.annotations)
 
 
 def test_successor_adapter_preserves_reachability_after_refused_call(tmp_path):
