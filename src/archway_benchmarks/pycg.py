@@ -916,7 +916,6 @@ def successor_archway_call_edge_result(
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
         ),
-        enable_coarse_fallback=False,
     )
     session_construction_seconds = (
         time.perf_counter() - session_construction_started

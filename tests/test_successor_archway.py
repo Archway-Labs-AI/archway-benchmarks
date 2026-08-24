@@ -35,7 +35,7 @@ def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
     assert result.forward is not None
-    assert result.forward.cache_hit is False
+    assert result.forward.cache_hits == 0
 
 
 def test_successor_adapter_reads_written_container_lvalue(tmp_path):
@@ -307,7 +307,7 @@ def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     assert result.gaps == []
 
 
-def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
+def test_successor_adapter_reuses_forward_uninvoked_returns_in_same_session(
     tmp_path,
 ):
     snippet = _snippet(
@@ -330,7 +330,7 @@ def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
         if item.kind == "return"
     )
     assert all(
-        result.session.store.resolved(item.address) is None
+        result.session.store.resolved(item.address) is not None
         for item in return_observations
     )
 
@@ -343,7 +343,7 @@ def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
 
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
-    assert len(result.targeted_runs) == 1
+    assert result.targeted_runs == []
 
 
 def test_successor_adapter_maps_contexts_discovered_in_shared_session(tmp_path):
@@ -564,7 +564,7 @@ def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
     assert progress == [(1, 1)]
 
 
-def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
+def test_gap_audit_does_not_invent_targeted_cost_for_forward_knowledge(tmp_path):
     _snippet(
         tmp_path,
         "def untouched(value):\n"
@@ -580,11 +580,11 @@ def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
     )
 
     assert audit.exact == 1
-    assert audit.targeted_roots == 1
+    assert audit.targeted_roots == 0
     assert audit.targeted_cache_hits == 0
     assert audit.targeted_events == 0
-    assert audit.targeted_knowledge_deltas > 0
-    assert audit.targeted_topology_changes > 0
+    assert audit.targeted_knowledge_deltas == 0
+    assert audit.targeted_topology_changes == 0
 
 
 def test_sequence_pattern_slot_observations_reuse_forward_container_state(
@@ -615,8 +615,11 @@ def test_sequence_pattern_slot_observations_reuse_forward_container_state(
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
     assert predictions == list(snippet.annotations)
-    assert result.targeted_runs == []
-    assert len(result.session.scheduler.graph.nodes) < 500
+    assert len(result.targeted_runs) == 1
+    assert (
+        result.targeted_runs[0].topology_generation_before
+        == result.forward.topology_generation_after
+    )
 
 
 def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
