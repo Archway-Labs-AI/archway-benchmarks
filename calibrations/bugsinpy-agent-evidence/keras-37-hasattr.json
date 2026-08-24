@@ -1,0 +1,12 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-calibration-eligibility.v1",
+  "bug_key": "keras:37",
+  "buggy_revision": "81f6b3aa5b2b6215a533180e848a3b4dff851d03",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "probe_sha256": "9e790743e54a17b9e3785a85337e39658a8f02af762a477e329e58ffdce81a20",
+  "oracle_patch_sha256": "158d8a1988e54659832f8181d2f082910293e4d781833f31ccc0af7d93b800d0",
+  "evidence_relation": "direct",
+  "rationale": "The selected buggy predicate calls builtin hasattr to classify whether additional RNN inputs are Keras tensors. The fix replaces that exact callsite with K.is_keras_tensor, so the stable singleton call-target answer directly identifies the benchmark-defining wrong predicate target.",
+  "calibration_only": true,
+  "detector_received_oracle": false
+}

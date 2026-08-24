@@ -60,7 +60,7 @@ def test_post_fastapi_search_obeys_precommitted_probe_limit() -> None:
     assert search["decision"].startswith("do_not_launch_agent")
 
 
-def test_possible_calls_search_pauses_on_unbounded_tool_failure() -> None:
+def test_possible_calls_search_stops_at_first_answered_case() -> None:
     search = json.loads((
         ROOT / "calibrations/bugsinpy-agent-evidence/possible-calls-search-v1.json"
     ).read_text())
@@ -68,19 +68,23 @@ def test_possible_calls_search_pauses_on_unbounded_tool_failure() -> None:
     assert search["query_kind"] == "possible-calls"
     assert search["calibration_only"] is True
     assert search["detector_received_oracle"] is False
-    assert [case["bug_key"] for case in search["candidates"]] == [
-        "keras:16", "keras:17",
+    probes = [case for case in search["candidates"] if case["decision"] == "probe"]
+    assert [case["bug_key"] for case in probes] == ["keras:17", "keras:37"]
+    assert [case["result"] for case in probes] == ["no_evidence", "answered"]
+    excluded = [
+        case for case in search["candidates"]
+        if case["decision"] == "exclude_post_stop_probe"
     ]
-    probe = search["candidates"][1]
-    assert probe["decision"] == "probe"
-    assert probe["result"] == "tool_error"
-    assert search["qualifying_probes_attempted"] == 1
-    assert search["bounded_probe_results"] == search["eligible_cases"] == 0
-    assert search["status"] == "paused_on_engine_serialization_handoff"
-    assert search["decision"].startswith("do_not_launch_agent")
+    assert [case["bug_key"] for case in excluded] == ["keras:41"]
+    assert search["qualifying_probes_attempted"] == 2
+    assert search["excluded_post_stop_probes"] == 1
+    assert search["bounded_probe_results"] == 2
+    assert search["eligible_cases"] == 1
+    assert search["status"] == "stopped_at_first_answered_case"
+    assert search["decision"].startswith("keras:37 is the sole calibration candidate")
 
 
-def test_binding_types_search_pauses_when_function_input_is_not_addressable() -> None:
+def test_binding_types_search_records_bounded_no_evidence_and_continues() -> None:
     search = json.loads((
         ROOT / "calibrations/bugsinpy-agent-evidence/binding-types-search-v1.json"
     ).read_text())
@@ -93,8 +97,23 @@ def test_binding_types_search_pauses_when_function_input_is_not_addressable() ->
     assert probe["selector"] == {
         "kind": "binding-types", "module": "matplotlib.text", "binding": "dpi",
     }
-    assert probe["result"] == "tool_error"
+    assert probe["result"] == "no_evidence"
     assert search["qualifying_probes_attempted"] == 1
-    assert search["bounded_probe_results"] == search["eligible_cases"] == 0
-    assert search["status"] == "paused_on_function_input_observation_handoff"
+    assert search["bounded_probe_results"] == 1
+    assert search["eligible_cases"] == 0
+    assert search["status"] == "search_in_progress"
     assert search["decision"].startswith("do_not_launch_agent")
+
+
+def test_keras_37_calibration_is_oracle_isolated_and_direct() -> None:
+    calibration = json.loads((
+        ROOT / "calibrations/bugsinpy-agent-evidence/keras-37-hasattr.json"
+    ).read_text())
+
+    assert calibration["schema"] == "archway.bugsinpy.agent-evidence-calibration-eligibility.v1"
+    assert calibration["bug_key"] == "keras:37"
+    assert calibration["evidence_relation"] == "direct"
+    assert calibration["calibration_only"] is True
+    assert calibration["detector_received_oracle"] is False
+    assert len(calibration["probe_sha256"]) == 64
+    assert len(calibration["oracle_patch_sha256"]) == 64

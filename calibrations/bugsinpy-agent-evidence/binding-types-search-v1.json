@@ -31,11 +31,11 @@
     {"bug_key": "luigi:6", "decision": "skip", "reason": "affected formal value identifies eleven function-input boundaries in luigi.parameter"},
     {"bug_key": "luigi:21", "decision": "skip", "reason": "affected formal cmdline_args identifies four function-input boundaries in luigi.interface"},
     {"bug_key": "matplotlib:5", "decision": "skip", "reason": "affected formal linewidths identifies three function-input boundaries in matplotlib.axes._axes"},
-    {"bug_key": "matplotlib:11", "decision": "probe", "question": "What type possibilities reach the dpi input whose None handling is repaired by the patch?", "selector": {"kind": "binding-types", "module": "matplotlib.text", "binding": "dpi"}, "result": "tool_error", "reason": "the syntactically unique function formal matched zero engine store boundaries", "attempted_run": "run://workbench-local/calibration-matplotlib-11-ec1da9db/binding-types-dpi-v2"}
+    {"bug_key": "matplotlib:11", "decision": "probe", "question": "What type possibilities reach the dpi input whose None handling is repaired by the patch?", "selector": {"kind": "binding-types", "module": "matplotlib.text", "binding": "dpi"}, "result": "no_evidence", "reason": "the exact formal is addressable but its TypeOf fact remains open with no possibilities", "run": "run://workbench-local/replay-matplotlib-11-ffaa7b09/binding-types-dpi"}
   ],
   "qualifying_probes_attempted": 1,
-  "bounded_probe_results": 0,
+  "bounded_probe_results": 1,
   "eligible_cases": 0,
-  "status": "paused_on_function_input_observation_handoff",
-  "decision": "do_not_launch_agent; binding-types produced no bounded evidence disposition"
+  "status": "search_in_progress",
+  "decision": "do_not_launch_agent; continue to the precommitted bounded probe limit"
 }

@@ -24,11 +24,17 @@
   "maximum_probe_candidates": 3,
   "candidates": [
     {"bug_key": "keras:16", "decision": "skip", "reason": "fix changes sequential-model configuration and state; no existing buggy call changes callee or receiver"},
-    {"bug_key": "keras:17", "decision": "probe", "question": "Can the selected nested call target be identified as K.max rather than the fixed K.flatten target?", "selector": {"kind": "possible-calls", "module": "keras.metrics", "row": 37, "col": 26}, "result": "tool_error", "reason": "engine native-run serialization failed because ModuleValue in a knowledge delta is not JSON serializable", "attempted_run": "run://workbench-local/calibration-keras-17-ec1da9db/possible-calls-row37-col26-v2"}
+    {"bug_key": "keras:17", "decision": "probe", "question": "Can the selected nested call target be identified as K.max rather than the fixed K.flatten target?", "selector": {"kind": "possible-calls", "module": "keras.metrics", "row": 37, "col": 26}, "result": "no_evidence", "reason": "the exact source-linked CallTargetsAt fact is stable and empty; no semantic call edge was recovered", "run": "run://workbench-local/replay-keras-17-ffaa7b09/possible-calls-row37-col26"},
+    {"bug_key": "keras:18-34", "decision": "skip_range", "reason": "ordered patches do not change an existing callsite callee or receiver while preserving its surrounding role"},
+    {"bug_key": "keras:35", "decision": "skip", "reason": "the preprocessing call is moved between methods rather than changing the existing buggy callsite in place"},
+    {"bug_key": "keras:36", "decision": "skip", "reason": "fix changes tuple construction, not a call target"},
+    {"bug_key": "keras:37", "decision": "probe", "question": "Does the selected Keras-tensor predicate call builtin hasattr rather than K.is_keras_tensor?", "selector": {"kind": "possible-calls", "module": "keras.layers.recurrent", "row": 521, "col": 26}, "result": "answered", "reason": "the exact source-linked stable singleton CallTargetsAt fact identifies <builtin>.hasattr with semantic evidence", "run": "run://workbench-local/replay-keras-37-ffaa7b09/possible-calls-row521-col26"},
+    {"bug_key": "keras:41", "decision": "exclude_post_stop_probe", "reason": "the query was incorrectly launched after keras:37 had already satisfied the precommitted stop condition; its answered result cannot influence selection or eligibility", "selector": {"kind": "possible-calls", "module": "keras.utils.data_utils", "row": 556, "col": 18}, "result": "answered", "run": "run://workbench-local/replay-keras-41-ffaa7b09/possible-calls-row556-col18"}
   ],
-  "qualifying_probes_attempted": 1,
-  "bounded_probe_results": 0,
-  "eligible_cases": 0,
-  "status": "paused_on_engine_serialization_handoff",
-  "decision": "do_not_launch_agent; possible-calls produced no bounded evidence disposition"
+  "qualifying_probes_attempted": 2,
+  "excluded_post_stop_probes": 1,
+  "bounded_probe_results": 2,
+  "eligible_cases": 1,
+  "status": "stopped_at_first_answered_case",
+  "decision": "keras:37 is the sole calibration candidate; require exact probe, oracle-isolated eligibility, and scale-gate approval before an agent trial"
 }
