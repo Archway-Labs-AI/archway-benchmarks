@@ -101,3 +101,44 @@ def test_checkpoint_resume_retries_failed_snippet(tmp_path):
 
     assert header == {"kind": "header", "schema_version": 2}
     assert records == {}
+
+
+def test_checkpoint_summary_separates_slow_and_failed_snippets():
+    module = _checkpoint_module()
+    records = {
+        "fast": {
+            "seconds": 1.0,
+            "annotations": 2,
+            "predictions": 2,
+            "exact": 2,
+            "classifications": {"exact": 2},
+            "slow": False,
+        },
+        "slow": {
+            "seconds": 31.0,
+            "annotations": 1,
+            "predictions": 1,
+            "exact": 1,
+            "classifications": {"exact": 1},
+            "slow": True,
+        },
+    }
+    failures = {
+        "timed-out": {
+            "seconds": 120.0,
+            "error": "TimeoutError: exceeded hard limit",
+            "slow": True,
+        }
+    }
+
+    summary = module._summary(records, total_snippets=10, failures=failures)
+
+    assert summary["snippets_complete"] == 2
+    assert summary["slow_snippets"] == 2
+    assert summary["failed_snippets"] == 1
+    assert summary["elapsed_seconds"] == 152.0
+    assert summary["failures"] == [{
+        "suite_path": "timed-out",
+        "seconds": 120.0,
+        "error": "TimeoutError: exceeded hard limit",
+    }]
