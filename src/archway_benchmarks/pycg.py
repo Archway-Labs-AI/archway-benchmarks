@@ -960,6 +960,16 @@ def successor_archway_call_edge_result(
     ) -> dict[str, object]:
         """Attach diagram-owned source and callable context to root evidence."""
 
+        # Native body planners are materialized lazily.  The initial catalog
+        # above names eager callable roots, but open-body fallback can create
+        # additional planners while analysis is running.  Refresh their
+        # diagram-owned labels at diagnostic read time so a live root does not
+        # degrade to an opaque body identity merely because it was lazy.
+        if native_provider is not None and hasattr(
+            native_provider, "callable_body_labels"
+        ):
+            body_labels.update(native_provider.callable_body_labels())
+
         described: dict[str, object] = {}
         for root_id, raw_detail in dict(
             query_progress.get("root_details", {})
@@ -1637,6 +1647,9 @@ def successor_archway_call_edge_result(
                 query_progress.get("active_root_ids", ())
             ),
             "root_details": described_root_details(query_progress),
+            "native_call_graph_refusals": (
+                list(session.native_call_graph_refusals())
+            ),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
                 "completed_root_seconds_total"
