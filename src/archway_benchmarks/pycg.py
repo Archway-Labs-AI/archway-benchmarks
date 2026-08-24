@@ -1210,6 +1210,7 @@ def successor_archway_call_edge_result(
                                 query_progress["active_root_id"])
             ),
             "active_root_seconds": query_progress["active_root_seconds"],
+            "root_details": query_progress.get("root_details", {}),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
                 "completed_root_seconds_total"
@@ -1514,6 +1515,7 @@ def successor_archway_call_edge_result(
                 query_progress["active_root_id"],
             ),
             "active_root_seconds": query_progress["active_root_seconds"],
+            "root_details": query_progress.get("root_details", {}),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
                 "completed_root_seconds_total"
