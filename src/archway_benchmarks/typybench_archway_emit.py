@@ -852,10 +852,26 @@ def bounded_scheduler_snapshot(session):
     """Retain monotone progress counters even when a diagnostic cutoff fires."""
     scheduler = session.scheduler
     graph = scheduler.graph
+    def largest(mapping, limit=30):
+        return dict(sorted(
+            mapping.items(), key=lambda item: (-item[1], item[0])
+        )[:limit])
     return {
+        "topology_generation": graph.topology_generation,
         "unique_production_count": scheduler.unique_production_count,
         "production_execution_count": scheduler.production_execution_count,
         "repeated_production_count": scheduler.repeated_production_count,
+        "production_executions_by_family": largest(
+            scheduler._production_executions_by_family
+        ),
+        "production_repeats_by_family": largest(
+            scheduler._production_repeats_by_family
+        ),
+        "worklist_schedule_counts": largest(
+            scheduler._worklist_schedule_counts
+        ),
+        "factored_phases": scheduler._factored_telemetry.summary(),
+        "topology_change_counts": largest(graph.topology_change_counts),
         "component_recompute_count": graph.component_recompute_count,
         "component_node_visits": graph.component_node_visits,
         "component_edge_visits": graph.component_edge_visits,
