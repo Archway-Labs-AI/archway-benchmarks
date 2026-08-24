@@ -1394,6 +1394,16 @@ def successor_archway_call_edge_result(
                     "factored_admission_size_counts", {}
                 ).items()
             )),
+            "factored_topology_refresh_size_counts": dict(sorted(
+                aggregate_production.get(
+                    "factored_topology_refresh_size_counts", {}
+                ).items()
+            )),
+            "factored_topology_refresh_delta_counts": dict(sorted(
+                aggregate_production.get(
+                    "factored_topology_refresh_delta_counts", {}
+                ).items()
+            )),
             "factored_max_admitted_productions": (
                 aggregate_production.get(
                     "factored_max_admitted_productions", 0
@@ -1702,6 +1712,16 @@ def successor_archway_call_edge_result(
             "factored_admission_size_counts": dict(sorted(
                 production.get(
                     "factored_admission_size_counts", {}
+                ).items()
+            )),
+            "factored_topology_refresh_size_counts": dict(sorted(
+                production.get(
+                    "factored_topology_refresh_size_counts", {}
+                ).items()
+            )),
+            "factored_topology_refresh_delta_counts": dict(sorted(
+                production.get(
+                    "factored_topology_refresh_delta_counts", {}
                 ).items()
             )),
             "factored_max_admitted_productions": production.get(
