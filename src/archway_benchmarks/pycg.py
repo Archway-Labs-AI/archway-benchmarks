@@ -1303,6 +1303,11 @@ def successor_archway_call_edge_result(
                     "factored_phase_seconds", {}
                 ).items()
             )),
+            "factored_boundary_regressions": list(
+                aggregate_production.get(
+                    "factored_boundary_regressions", ()
+                )
+            ),
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
             )),
@@ -1571,6 +1576,9 @@ def successor_archway_call_edge_result(
             "factored_phase_seconds": dict(sorted(
                 production.get("factored_phase_seconds", {}).items()
             )),
+            "factored_boundary_regressions": list(
+                production.get("factored_boundary_regressions", ())
+            ),
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
             )),
