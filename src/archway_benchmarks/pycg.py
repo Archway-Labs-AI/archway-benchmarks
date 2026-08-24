@@ -1384,6 +1384,11 @@ def successor_archway_call_edge_result(
                     "factored_max_admitted_components", 0
                 )
             ),
+            "factored_max_admission_profile": dict(
+                aggregate_production.get(
+                    "factored_max_admission_profile", {}
+                )
+            ),
             "factored_boundary_regressions": list(
                 aggregate_production.get(
                     "factored_boundary_regressions", ()
@@ -1671,6 +1676,9 @@ def successor_archway_call_edge_result(
             ),
             "factored_max_admitted_components": production.get(
                 "factored_max_admitted_components", 0
+            ),
+            "factored_max_admission_profile": dict(
+                production.get("factored_max_admission_profile", {})
             ),
             "factored_boundary_regressions": list(
                 production.get("factored_boundary_regressions", ())
