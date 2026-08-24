@@ -1740,6 +1740,11 @@ def successor_archway_call_edge_result(
             "production_executions_by_provider": top_counts(
                 Counter(production["production_executions_by_provider"])
             ),
+            "production_replay_operation_hotspots": list(
+                production.get(
+                    "production_replay_operation_hotspots", ()
+                )
+            ),
             "hottest_callable_applications": hottest_callable_applications,
             "transfer_operation_counts": dict(sorted(
                 session.scheduler.transfer_operation_counts.items()
