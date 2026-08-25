@@ -1624,6 +1624,24 @@ def successor_archway_call_edge_result(
             "factored_boundary_regressions": list(
                 production.get("factored_boundary_regressions", ())
             ),
+            **{
+                key: value
+                for key, value in production.items()
+                if key.startswith("factored_")
+                and key not in {
+                    "factored_phase_counts",
+                    "factored_phase_seconds",
+                    "factored_rebase_outcome_counts",
+                    "factored_rebase_outcome_seconds",
+                    "factored_admission_size_counts",
+                    "factored_topology_refresh_size_counts",
+                    "factored_topology_refresh_delta_counts",
+                    "factored_max_admitted_productions",
+                    "factored_max_admitted_components",
+                    "factored_max_admission_profile",
+                    "factored_boundary_regressions",
+                }
+            },
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
             )),
