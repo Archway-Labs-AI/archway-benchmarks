@@ -20,10 +20,36 @@ if TYPE_CHECKING:
 
 CAUSAL_SCORE_SCHEMA = "archway.bugsinpy.agent-causal-score.v1"
 
+_CAUSAL_KIND = "failing-test cause"
+_ADDITIONAL_KIND = "additional unrelated bug"
+_UNCERTAIN_KIND = "uncertain relation"
+
 
 def _mean(values: Iterable[float]) -> float:
     values = tuple(values)
     return sum(values) / len(values) if values else 0.0
+
+
+def _designated_prediction(prediction):
+    """Score only findings explicitly claimed to explain test-directed failures."""
+    if prediction.protocol != "test-directed-static-v1":
+        return prediction
+    findings = tuple(
+        dataclasses.replace(finding, rank=rank)
+        for rank, finding in enumerate(
+            (item for item in prediction.findings if item.kind == _CAUSAL_KIND), 1
+        )
+    )
+    return dataclasses.replace(prediction, findings=findings)
+
+
+def _causal_roles(prediction) -> dict[str, int]:
+    counts = Counter(item.kind for item in prediction.findings)
+    return {
+        "claimed_failure_causes": counts[_CAUSAL_KIND],
+        "additional_unrelated_reported": counts[_ADDITIONAL_KIND],
+        "uncertain_relation_reported": counts[_UNCERTAIN_KIND],
+    }
 
 
 def score_causal_interactions(
@@ -39,11 +65,17 @@ def score_causal_interactions(
         raise ProtocolViolation("causal score requires unique bug and interaction identities")
     subset = set(keys)
     proposal_scores, proposal_outcomes = score_ranked_detection(
-        benchmark, {item.proposal.prediction.bug_key: item.proposal.prediction for item in interactions},
+        benchmark, {
+            item.proposal.prediction.bug_key: _designated_prediction(item.proposal.prediction)
+            for item in interactions
+        },
         subset=subset,
     )
     review_scores, review_outcomes = score_ranked_detection(
-        benchmark, {item.review.prediction.bug_key: item.review.prediction for item in interactions},
+        benchmark, {
+            item.review.prediction.bug_key: _designated_prediction(item.review.prediction)
+            for item in interactions
+        },
         subset=subset,
     )
     if {item.bug_key for item in proposal_outcomes} != subset or {
@@ -61,6 +93,10 @@ def score_causal_interactions(
             "bug_key": key,
             "proposal": dataclasses.asdict(left),
             "review": dataclasses.asdict(right),
+            "causal_roles": {
+                "proposal": _causal_roles(interaction.proposal.prediction),
+                "review": _causal_roles(interaction.review.prediction),
+            },
             "delta": {
                 "line_hit": int(right.first_line_hit_rank is not None)
                 - int(left.first_line_hit_rank is not None),

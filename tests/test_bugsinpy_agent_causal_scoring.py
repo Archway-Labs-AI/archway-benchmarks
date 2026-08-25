@@ -64,6 +64,57 @@ def test_causal_score_reports_accuracy_cost_and_evidence_quality() -> None:
     }
 
 
+def test_test_directed_score_separates_claimed_causes_from_additional_bugs() -> None:
+    benchmark = BugsInPyBenchmark(corpus_root="tests/fixtures/bugsinpy")
+    bug = next(item for item in benchmark.load() if item.key == "demoproj:1")
+
+    def prediction(causal_line: int) -> RankedPredictionBundle:
+        return RankedPredictionBundle(
+            "test-directed-static-v1", bug.key, bug.buggy_commit,
+                (
+                    RankedFinding(
+                        1, "demoproj/core.py", 10, 11, "additional unrelated bug"
+                    ),
+                RankedFinding(
+                    2, "demoproj/core.py", causal_line, causal_line,
+                    "failing-test cause",
+                ),
+                RankedFinding(
+                    3, "demoproj/core.py", 20, 20, "uncertain relation"
+                ),
+            ),
+            2, 100, 2, 100,
+        )
+
+    interaction = CausalEvidenceInteraction(
+        "interaction-directed", "model-v1", {}, "b" * 64,
+        CausalStage("proposal", prediction(1), "before", 1, AgentUsage(1, 1)),
+        CausalStage("review", prediction(11), "after", 1, AgentUsage(1, 1)),
+        EvidenceQueryRecord(
+            1, "possible-calls", {"module": "demoproj.core", "row": 11, "col": 4},
+            "answered", .1, "c" * 64,
+        ),
+        "before", "after", "reranked", True, "useful", "direct",
+    )
+
+    score = score_causal_interactions(benchmark, (interaction,))
+
+    assert score["conditions"]["proposal"]["localization"]["top_line_hits"][1] == 0
+    assert score["conditions"]["review"]["localization"]["top_line_hits"][1] == 1
+    assert score["interactions"][0]["causal_roles"] == {
+        "proposal": {
+            "claimed_failure_causes": 1,
+            "additional_unrelated_reported": 1,
+            "uncertain_relation_reported": 1,
+        },
+        "review": {
+            "claimed_failure_causes": 1,
+            "additional_unrelated_reported": 1,
+            "uncertain_relation_reported": 1,
+        },
+    }
+
+
 def test_causal_score_cli_roundtrips_public_record(tmp_path) -> None:
     benchmark = BugsInPyBenchmark(corpus_root="tests/fixtures/bugsinpy")
     bug = next(item for item in benchmark.load() if item.key == "demoproj:1")
