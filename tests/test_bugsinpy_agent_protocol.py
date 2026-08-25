@@ -8,8 +8,11 @@ from archway_benchmarks.bugsinpy_agent_protocol import (
     AgentUsage,
     CausalEvidenceInteraction,
     CausalStage,
+    CalibrationArtifactRef,
+    CohortScaleAuthorization,
     EvidenceQueryRecord,
     ForkedEvidenceComparison,
+    HumanScaleApproval,
 )
 from archway_benchmarks.bugsinpy_protocol import (
     ProtocolViolation,
@@ -164,3 +167,20 @@ def test_forked_comparison_requires_matched_query_and_true_control() -> None:
             "reranked", "confirmed", True, True, ("control", "evidence"),
             "useful", "reason",
         )
+
+
+def test_cohort_scale_authorization_is_human_and_content_bound() -> None:
+    authorization = CohortScaleAuthorization(
+        "cohort", "a" * 64, 12,
+        CalibrationArtifactRef("results/calibration.json", "b" * 64),
+        CalibrationArtifactRef("results/score.json", "c" * 64),
+        HumanScaleApproval("Ben", "2026-08-25T00:00:00Z"),
+        "One useful matched calibration supports a bounded cohort run.",
+    )
+    assert CohortScaleAuthorization.from_json(
+        authorization.to_json()
+    ) == authorization
+    with pytest.raises(ProtocolViolation, match="artifact reference"):
+        CalibrationArtifactRef("../oracle.json", "b" * 64)
+    with pytest.raises(ProtocolViolation, match="human"):
+        HumanScaleApproval("", "2026-08-25T00:00:00Z")

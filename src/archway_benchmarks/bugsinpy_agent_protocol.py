@@ -15,6 +15,7 @@ from .bugsinpy_protocol import (
 AGENT_PAIR_SCHEMA = "archway.bugsinpy.agent-pair.v1"
 CAUSAL_INTERACTION_SCHEMA = "archway.bugsinpy.agent-causal-interaction.v1"
 FORKED_COMPARISON_SCHEMA = "archway.bugsinpy.agent-forked-comparison.v1"
+SCALE_AUTHORIZATION_SCHEMA = "archway.bugsinpy.agent-cohort-scale-authorization.v1"
 AgentCondition = Literal["baseline", "archway-evidence"]
 EvidenceDisposition = Literal["useful", "irrelevant", "misleading", "unusable"]
 _CONDITIONS = frozenset({"baseline", "archway-evidence"})
@@ -292,6 +293,105 @@ class EvidenceAdjudication:
             "evidence adjudication",
         )
         return cls(**value)
+
+
+@dataclass(frozen=True, slots=True)
+class CalibrationArtifactRef:
+    """Repository-relative, content-bound calibration evidence."""
+
+    path: str
+    sha256: str
+
+    def __post_init__(self) -> None:
+        parts = self.path.replace("\\", "/").split("/")
+        if (
+            not self.path or self.path.startswith("/") or ".." in parts
+            or len(self.sha256) != 64
+        ):
+            raise ProtocolViolation("invalid calibration artifact reference")
+
+    def to_json(self) -> dict[str, Any]:
+        return {"path": self.path, "sha256": self.sha256}
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> "CalibrationArtifactRef":
+        _require_fields(value, {"path", "sha256"}, "calibration artifact reference")
+        return cls(**value)
+
+
+@dataclass(frozen=True, slots=True)
+class HumanScaleApproval:
+    """Explicit human decision required before an effect cohort can run."""
+
+    by: str
+    at: str
+    kind: str = "human"
+
+    def __post_init__(self) -> None:
+        if self.kind != "human" or not self.by.strip() or not self.at.strip():
+            raise ProtocolViolation("cohort scale approval must identify a human and time")
+
+    def to_json(self) -> dict[str, Any]:
+        return {"kind": self.kind, "by": self.by, "at": self.at}
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> "HumanScaleApproval":
+        _require_fields(value, {"kind", "by", "at"}, "human scale approval")
+        return cls(**value)
+
+
+@dataclass(frozen=True, slots=True)
+class CohortScaleAuthorization:
+    """Human-approved admission based on one useful matched calibration."""
+
+    cohort_id: str
+    cohort_sha256: str
+    authorized_case_count: int
+    calibration_comparison: CalibrationArtifactRef
+    calibration_score: CalibrationArtifactRef
+    approval: HumanScaleApproval
+    rationale: str
+    decision: str = "allow"
+    schema: str = SCALE_AUTHORIZATION_SCHEMA
+
+    def __post_init__(self) -> None:
+        if (
+            self.schema != SCALE_AUTHORIZATION_SCHEMA or self.decision != "allow"
+            or not self.cohort_id.strip() or len(self.cohort_sha256) != 64
+            or self.authorized_case_count < 1 or not self.rationale.strip()
+        ):
+            raise ProtocolViolation("invalid cohort scale authorization")
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "schema": self.schema, "decision": self.decision,
+            "cohort_id": self.cohort_id, "cohort_sha256": self.cohort_sha256,
+            "authorized_case_count": self.authorized_case_count,
+            "calibration_comparison": self.calibration_comparison.to_json(),
+            "calibration_score": self.calibration_score.to_json(),
+            "approval": self.approval.to_json(), "rationale": self.rationale,
+        }
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> "CohortScaleAuthorization":
+        _require_fields(value, {
+            "schema", "decision", "cohort_id", "cohort_sha256",
+            "authorized_case_count", "calibration_comparison", "calibration_score",
+            "approval", "rationale",
+        }, "cohort scale authorization")
+        return cls(
+            schema=value["schema"], decision=value["decision"],
+            cohort_id=value["cohort_id"], cohort_sha256=value["cohort_sha256"],
+            authorized_case_count=value["authorized_case_count"],
+            calibration_comparison=CalibrationArtifactRef.from_json(
+                value["calibration_comparison"]
+            ),
+            calibration_score=CalibrationArtifactRef.from_json(
+                value["calibration_score"]
+            ),
+            approval=HumanScaleApproval.from_json(value["approval"]),
+            rationale=value["rationale"],
+        )
 
 
 @dataclass(frozen=True, slots=True)
