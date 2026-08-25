@@ -1,0 +1,38 @@
+{
+  "schema": "archway.bugsinpy.agent-cohort.v1",
+  "cohort_id": "bugsinpy-agent-test-directed-v2",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "protocol": "test-directed-static-v1",
+  "precommitted_at": "2026-08-25",
+  "selection": {
+    "rule": "From cases recorded as buggy=fail and fixed=pass with a non-empty test_file at the pinned corpus revision, order projects by SHA-256(seed|project|project-name), take the first 12 projects, then take the SHA-256(seed|bug|project:bug-id)-minimum eligible bug within each selected project.",
+    "seed": "bugsinpy-agent-test-directed-v2|316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+    "eligible_population": {
+      "cases": 477,
+      "projects": 17,
+      "reproduction_requirement": "buggy=fail and fixed=pass in projects/bugsinpy-index.csv",
+      "entrypoint_requirement": "non-empty test_file in projects/<project>/bugs/<id>/bug.info"
+    },
+    "sampling_unit": "one deterministically selected bug from each of 12 deterministically selected projects",
+    "estimand": "macro-project average over the selected heterogeneous projects; not BugsInPy instance-weighted performance",
+    "ground_truth_used": false,
+    "patch_or_fix_contents_used": false,
+    "prior_agent_outcomes_used": false,
+    "calibration_cases_included": false,
+    "scope": "Twelve-project, 12-case test-directed comparison for agent-facing evidence effectiveness. Keras 37 and other interface-calibration attempts are excluded from this effect-estimation cohort."
+  },
+  "bug_keys": [
+    "matplotlib:24",
+    "scrapy:1",
+    "luigi:32",
+    "tornado:13",
+    "thefuck:27",
+    "spacy:2",
+    "black:19",
+    "sanic:2",
+    "ansible:15",
+    "cookiecutter:1",
+    "pandas:119",
+    "fastapi:8"
+  ]
+}
