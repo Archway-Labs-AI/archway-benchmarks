@@ -1,0 +1,238 @@
+{
+  "comparison_count": 1,
+  "comparisons": [
+    {
+      "bug_key": "keras:37",
+      "causal_roles": {
+        "control_review": {
+          "additional_unrelated_reported": 0,
+          "claimed_failure_causes": 1,
+          "uncertain_relation_reported": 0
+        },
+        "evidence_review": {
+          "additional_unrelated_reported": 0,
+          "claimed_failure_causes": 1,
+          "uncertain_relation_reported": 0
+        },
+        "proposal": {
+          "additional_unrelated_reported": 0,
+          "claimed_failure_causes": 1,
+          "uncertain_relation_reported": 0
+        }
+      },
+      "comparison_id": "bugsinpy-forked-keras-37-v1",
+      "control_review": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "bug_key": "keras:37",
+        "exact_finding_count": 1,
+        "exact_predicted_lines": 6,
+        "exam_score": 0.000270769622833843,
+        "false_positive_count": 0,
+        "false_positive_lines": 11,
+        "finding_count": 1,
+        "first_file_hit_rank": 1,
+        "first_line_hit_rank": 1,
+        "predicted_lines": 17,
+        "project": "keras",
+        "reciprocal_rank": 1.0,
+        "repository_files": 165,
+        "repository_loc": 62784
+      },
+      "evidence": {
+        "disposition": "unusable",
+        "duration_seconds": 1.555973791051656,
+        "kind": "possible-calls",
+        "response_status": "unsupported",
+        "review_order": [
+          "evidence",
+          "control"
+        ]
+      },
+      "evidence_review": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "bug_key": "keras:37",
+        "exact_finding_count": 1,
+        "exact_predicted_lines": 6,
+        "exam_score": 0.000270769622833843,
+        "false_positive_count": 0,
+        "false_positive_lines": 11,
+        "finding_count": 1,
+        "first_file_hit_rank": 1,
+        "first_line_hit_rank": 1,
+        "predicted_lines": 17,
+        "project": "keras",
+        "reciprocal_rank": 1.0,
+        "repository_files": 165,
+        "repository_loc": 62784
+      },
+      "primary_delta_evidence_vs_control": {
+        "exam_score": 0.0,
+        "line_hit": 0,
+        "reciprocal_rank": 0.0
+      },
+      "proposal": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "bug_key": "keras:37",
+        "exact_finding_count": 0,
+        "exact_predicted_lines": 0,
+        "exam_score": 1.0,
+        "false_positive_count": 1,
+        "false_positive_lines": 2,
+        "finding_count": 1,
+        "first_file_hit_rank": 1,
+        "first_line_hit_rank": null,
+        "predicted_lines": 2,
+        "project": "keras",
+        "reciprocal_rank": 0.0,
+        "repository_files": 165,
+        "repository_loc": 62784
+      },
+      "secondary_delta_control_vs_proposal": {
+        "exam_score": -0.9997292303771662,
+        "line_hit": 1,
+        "reciprocal_rank": 1.0
+      },
+      "secondary_delta_evidence_vs_proposal": {
+        "exam_score": -0.9997292303771662,
+        "line_hit": 1,
+        "reciprocal_rank": 1.0
+      }
+    }
+  ],
+  "conditions": {
+    "control_review": {
+      "localization": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "exact_findings": 1,
+        "exact_predicted_lines": 6,
+        "false_positive_findings": 0,
+        "false_positive_lines": 11,
+        "findings_per_kloc": 0.015927624872579,
+        "macro_line_hit_rate_by_project": {
+          "keras": 1.0
+        },
+        "mean_exam_score": 0.000270769622833843,
+        "mean_reciprocal_rank": 1.0,
+        "precision_at": {
+          "1": 0.35294117647058826,
+          "5": 0.35294117647058826,
+          "10": 0.35294117647058826
+        },
+        "predicted_lines": 17,
+        "repository_files": 165,
+        "repository_loc": 62784,
+        "top_file_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "top_line_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "total_bugs": 1,
+        "total_findings": 1
+      }
+    },
+    "evidence_review": {
+      "localization": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "exact_findings": 1,
+        "exact_predicted_lines": 6,
+        "false_positive_findings": 0,
+        "false_positive_lines": 11,
+        "findings_per_kloc": 0.015927624872579,
+        "macro_line_hit_rate_by_project": {
+          "keras": 1.0
+        },
+        "mean_exam_score": 0.000270769622833843,
+        "mean_reciprocal_rank": 1.0,
+        "precision_at": {
+          "1": 0.35294117647058826,
+          "5": 0.35294117647058826,
+          "10": 0.35294117647058826
+        },
+        "predicted_lines": 17,
+        "repository_files": 165,
+        "repository_loc": 62784,
+        "top_file_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "top_line_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "total_bugs": 1,
+        "total_findings": 1
+      }
+    },
+    "proposal": {
+      "localization": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "exact_findings": 0,
+        "exact_predicted_lines": 0,
+        "false_positive_findings": 1,
+        "false_positive_lines": 2,
+        "findings_per_kloc": 0.015927624872579,
+        "macro_line_hit_rate_by_project": {
+          "keras": 0.0
+        },
+        "mean_exam_score": 1.0,
+        "mean_reciprocal_rank": 0.0,
+        "precision_at": {
+          "1": 0.0,
+          "5": 0.0,
+          "10": 0.0
+        },
+        "predicted_lines": 2,
+        "repository_files": 165,
+        "repository_loc": 62784,
+        "top_file_hits": {
+          "1": 1,
+          "5": 1,
+          "10": 1
+        },
+        "top_line_hits": {
+          "1": 0,
+          "5": 0,
+          "10": 0
+        },
+        "total_bugs": 1,
+        "total_findings": 1
+      }
+    }
+  },
+  "efficiency": {
+    "control_query_count": 0.0,
+    "evidence_query_count": 1.0,
+    "mean_control_review_tokens": 162344.0,
+    "mean_control_total_seconds": 86.99417233327404,
+    "mean_evidence_minus_control_review_tokens": -44848.0,
+    "mean_evidence_review_tokens": 117496.0,
+    "mean_evidence_total_seconds": 95.42590695805848,
+    "mean_shared_proposal_tokens": 79281.0
+  },
+  "evidence_dispositions": {
+    "irrelevant": 0,
+    "misleading": 0,
+    "unusable": 1,
+    "useful": 0
+  },
+  "primary_estimand": "evidence_review_minus_matched_control_review",
+  "primary_mean_delta": {
+    "exam_score": 0.0,
+    "line_hit": 0.0,
+    "reciprocal_rank": 0.0
+  },
+  "schema": "archway.bugsinpy.agent-forked-score.v1"
+}

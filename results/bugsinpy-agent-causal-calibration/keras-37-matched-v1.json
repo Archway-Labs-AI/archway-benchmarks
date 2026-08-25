@@ -1,0 +1,165 @@
+{
+  "adjudication_rationale": "The agent chose a hypothesis-relevant call-target query, but Archway returned only a structured capability refusal. The evidence review remained correct and did not infer a negative semantic fact from the refusal, but it achieved no localization improvement over the matched second-pass control. The response is therefore unusable rather than misleading.",
+  "comparison_id": "bugsinpy-forked-keras-37-v1",
+  "control_hypothesis_after": "The failure is caused by Bidirectional not overriding __call__ to split and register symbolic initial states as additional wrapper inputs before call() dispatch, rather than by its direct invocation of the inner layers' call methods.",
+  "control_impact": "reranked",
+  "control_query": {
+    "duration_seconds": 0.0,
+    "kind": "possible-calls",
+    "request": {
+      "col": 16,
+      "hypothesis_before": "The state-reuse test fails because Bidirectional bypasses RNN.__call__ by invoking forward_layer.call and backward_layer.call directly, so symbolic states are not registered as graph dependencies.",
+      "kind": "possible-calls",
+      "module": "keras.layers.wrappers",
+      "row": 331
+    },
+    "response_sha256": "971dc41cd5fe62688d5370dc875537175f951379e5398c553610bb8b51f9be33",
+    "response_status": "not_collected",
+    "sequence": 1
+  },
+  "control_response_cited": true,
+  "control_review": {
+    "diagnosis": "Bidirectional lacks an RNN-style __call__ path that promotes symbolic initial_state tensors into the wrapper's recorded inputs. Layer.__call__ therefore records only the sequence tensor while retaining symbolic states merely as call arguments; model replay cannot remap those states, causing test_Bidirectional_state_reuse to fail. The direct forward_layer.call/backward_layer.call invocations are compatible with wrapper internals and are not, by themselves, the causal defect.",
+    "duration_seconds": 54.12665483308956,
+    "invocation_id": "inv-d11384f6c82c4c35aac239a7cfbd12c4",
+    "prediction": {
+      "bug_key": "keras:37",
+      "buggy_revision": "81f6b3aa5b2b6215a533180e848a3b4dff851d03",
+      "coverage": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "repository_files": 165,
+        "repository_loc": 62784
+      },
+      "findings": [
+        {
+          "confidence": 0.98,
+          "evidence": [],
+          "file": "keras/layers/wrappers.py",
+          "kind": "failing-test cause",
+          "rank": 1,
+          "reachability": {},
+          "span": {
+            "end_line": 332,
+            "start_line": 316
+          }
+        }
+      ],
+      "protocol": "test-directed-static-v1",
+      "schema": "archway.bugsinpy.ranked-prediction.v1"
+    },
+    "usage": {
+      "cached_input_tokens": 127488,
+      "input_tokens": 161060,
+      "output_tokens": 1284
+    }
+  },
+  "detector_input_sha256": "829e7e2cb11bbcfcf6821f427ba9b6dde431020b466244acf06a256021fe95f1",
+  "evidence_disposition": "unusable",
+  "evidence_hypothesis_after": "The failure is caused by Bidirectional lacking symbolic-initial-state input registration and bypassing RNN.__call__ at lines 331-332; it must expose symbolic states as graph inputs before dispatching to the forward and backward RNNs.",
+  "evidence_impact": "reranked",
+  "evidence_query": {
+    "duration_seconds": 1.555973791051656,
+    "kind": "possible-calls",
+    "request": {
+      "col": 16,
+      "hypothesis_before": "The state-reuse test fails because Bidirectional bypasses RNN.__call__ by invoking forward_layer.call and backward_layer.call directly, so symbolic states are not registered as graph dependencies.",
+      "kind": "possible-calls",
+      "module": "keras.layers.wrappers",
+      "row": 331
+    },
+    "response_sha256": "b58cbbeff2744a761ecc79cf1862513cf662384eb7b0b384fd79c33a35e029f3",
+    "response_status": "unsupported",
+    "sequence": 1
+  },
+  "evidence_response_cited": true,
+  "evidence_review": {
+    "diagnosis": "Bidirectional does not register symbolic initial states as layer inputs. Its call method receives them only as a keyword and directly invokes the inner RNN call methods, bypassing RNN.__call__, whose logic adds symbolic states to the Keras graph. Consequently reused states are absent from the Bidirectional node's declared dependencies, causing test_Bidirectional_state_reuse to fail.",
+    "duration_seconds": 61.002415666822344,
+    "invocation_id": "inv-ede95fff25b54ba2905751d476d8dc92",
+    "prediction": {
+      "bug_key": "keras:37",
+      "buggy_revision": "81f6b3aa5b2b6215a533180e848a3b4dff851d03",
+      "coverage": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "repository_files": 165,
+        "repository_loc": 62784
+      },
+      "findings": [
+        {
+          "confidence": 0.98,
+          "evidence": [],
+          "file": "keras/layers/wrappers.py",
+          "kind": "failing-test cause",
+          "rank": 1,
+          "reachability": {},
+          "span": {
+            "end_line": 332,
+            "start_line": 316
+          }
+        }
+      ],
+      "protocol": "test-directed-static-v1",
+      "schema": "archway.bugsinpy.ranked-prediction.v1"
+    },
+    "usage": {
+      "cached_input_tokens": 86784,
+      "input_tokens": 115534,
+      "output_tokens": 1962
+    }
+  },
+  "hypothesis_before": "The state-reuse test fails because Bidirectional bypasses RNN.__call__ by invoking forward_layer.call and backward_layer.call directly, so symbolic states are not registered as graph dependencies.",
+  "model_config": {
+    "codex_cli_version": "codex-cli 0.144.4",
+    "model_cache_client_version": "0.144.4",
+    "model_cache_etag": "W/\"88ec06819eef0168a374351aeec2bc6c\"",
+    "model_cache_fetched_at": "2026-08-25T02:25:22.281531Z",
+    "model_cache_sha256": "9d75714dea43d4d5a48ef1c41f2528c5267d9b6a11567d60d4eb8c5f0a954550",
+    "model_display_name": "GPT-5.6-Sol",
+    "model_id": "gpt-5.6-sol",
+    "model_priority": 1
+  },
+  "model_id": "gpt-5.6-sol",
+  "proposal": {
+    "diagnosis": "Bidirectional.call directly invokes the wrapped RNNs' call methods when initial_state is supplied. This bypasses RNN.__call__, which registers symbolic initial-state tensors as additional graph inputs and adjusts input specifications, causing state reuse through the Functional API to produce an invalid/disconnected graph.",
+    "duration_seconds": 32.867517500184476,
+    "invocation_id": "inv-d4e57a39698a44de9d09663276f35699",
+    "prediction": {
+      "bug_key": "keras:37",
+      "buggy_revision": "81f6b3aa5b2b6215a533180e848a3b4dff851d03",
+      "coverage": {
+        "analyzed_files": 165,
+        "analyzed_loc": 62784,
+        "repository_files": 165,
+        "repository_loc": 62784
+      },
+      "findings": [
+        {
+          "confidence": 0.98,
+          "evidence": [],
+          "file": "keras/layers/wrappers.py",
+          "kind": "failing-test cause",
+          "rank": 1,
+          "reachability": {},
+          "span": {
+            "end_line": 332,
+            "start_line": 331
+          }
+        }
+      ],
+      "protocol": "test-directed-static-v1",
+      "schema": "archway.bugsinpy.ranked-prediction.v1"
+    },
+    "usage": {
+      "cached_input_tokens": 46336,
+      "input_tokens": 78202,
+      "output_tokens": 1079
+    }
+  },
+  "review_order": [
+    "evidence",
+    "control"
+  ],
+  "schema": "archway.bugsinpy.agent-forked-comparison.v1"
+}
