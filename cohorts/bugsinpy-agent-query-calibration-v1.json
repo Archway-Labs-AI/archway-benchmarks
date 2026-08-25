@@ -1,0 +1,29 @@
+{
+  "schema": "archway.bugsinpy.agent-cohort.v1",
+  "cohort_id": "bugsinpy-agent-query-calibration-v1",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "protocol": "test-directed-static-v1-query-gate",
+  "precommitted_at": "2026-08-25",
+  "selection": {
+    "rule": "From cases recorded as buggy=fail and fixed=pass with a non-empty test_file at the pinned corpus revision, exclude every case named by an existing BugsInPy agent cohort, calibration record, or historical pilot. Order remaining projects by SHA-256(seed|project|project-name), take the first three projects, then take the SHA-256(seed|bug|project:bug-id)-minimum eligible bug within each selected project.",
+    "seed": "bugsinpy-agent-calibration-query-gate-v1|316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+    "eligible_population_after_exclusions": {
+      "cases": 411,
+      "projects": 14,
+      "reproduction_requirement": "buggy=fail and fixed=pass in projects/bugsinpy-index.csv",
+      "entrypoint_requirement": "non-empty test_file in projects/<project>/bugs/<id>/bug.info"
+    },
+    "sampling_unit": "one deterministically selected bug from each of three deterministically selected projects",
+    "purpose": "Interface calibration only. Results cannot enter the sealed 12-case effect estimate.",
+    "ground_truth_used": false,
+    "patch_or_fix_contents_used": false,
+    "prior_agent_outcomes_used_for_selection": false,
+    "prior_exposed_cases_excluded": true,
+    "review_gate": "Stop after the evidence proposal and one exact Archway query. Run matched reviews only if the query is usable and relevant under the precommitted adjudication rule."
+  },
+  "bug_keys": [
+    "thefuck:23",
+    "youtube-dl:4",
+    "ansible:8"
+  ]
+}
