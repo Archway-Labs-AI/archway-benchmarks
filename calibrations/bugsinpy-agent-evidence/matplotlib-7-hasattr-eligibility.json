@@ -1,0 +1,12 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-calibration-eligibility.v1",
+  "bug_key": "matplotlib:7",
+  "buggy_revision": "969513e2a5227331a2eb9e4bc4ba8448a0f9831d",
+  "corpus_revision": "316b95e2353ecda832bad9b42f86fa7c2fcec8ac",
+  "probe_sha256": "1125adb5034e14c5af2cef28b44d13f9d66e890520599b697d2d6e2a694f1e9a",
+  "oracle_patch_sha256": "0edce0f56a67266217c31992342843dd173e5568c6a337140df65790158cbc2b",
+  "evidence_relation": "direct",
+  "rationale": "The failing test exercises masked-array shading. The buggy predicate calls builtin hasattr to treat any object exposing a mask attribute as masked; the fix replaces that exact predicate callsite with numpy.ma.is_masked, so the stable singleton target directly identifies the benchmark-defining predicate under review.",
+  "calibration_only": true,
+  "detector_received_oracle": false
+}

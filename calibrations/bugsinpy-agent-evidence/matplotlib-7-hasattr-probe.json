@@ -1,0 +1,56 @@
+{
+  "schema": "archway.bugsinpy.agent-evidence-micro-probe.v1",
+  "phase": "pre-agent",
+  "bug_key": "matplotlib:7",
+  "question": {
+    "hypothesis": "The failing masked-array behavior passes through an attribute-existence predicate whose resolved callable is builtin hasattr.",
+    "alternatives": [
+      "the predicate resolves uniquely to builtin hasattr",
+      "the predicate resolves to another or ambiguous callable"
+    ],
+    "discriminating_answer": "A source-linked, stable singleton call target at matplotlib.colors:1939."
+  },
+  "query": {
+    "kind": "possible-calls",
+    "module": "matplotlib.colors",
+    "row": 1939,
+    "col": 11
+  },
+  "response": {
+    "status": "answered",
+    "evidence": [
+      {
+        "source": {
+          "module": "matplotlib.colors",
+          "row": 1939,
+          "col": 8,
+          "end_row": 1942,
+          "end_col": 55
+        },
+        "target": "<builtin>.hasattr",
+        "evidence_grade": "semantic",
+        "closure": "stable",
+        "precision": {
+          "kind": "finite-possibilities",
+          "cardinality": 1
+        }
+      }
+    ],
+    "precision": {
+      "kind": "engine-evidence-grades",
+      "values": ["semantic"]
+    },
+    "uncertainty": {
+      "kind": "unquantified-possible-targets",
+      "reason": "returned targets have engine evidence grades, but unobserved targets are not quantified"
+    },
+    "source_links_present": true,
+    "artifact_sha256": "3ba45172e7e57d1f5207b97bf6021d0e0f89ef3641d4664f9591df01bd7ac49a",
+    "run": "run://workbench-local/bugsinpy-matplotlib-7-capability-calibration/matplotlib-7-possible-calls-0eb3549c-v2"
+  },
+  "duration_seconds": 12.8,
+  "adjudication": {
+    "relevance": "discriminating",
+    "oracle_used": false
+  }
+}
