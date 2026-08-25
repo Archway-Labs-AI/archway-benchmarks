@@ -14,6 +14,7 @@ for the upstream `target_tools/archway/` translator (byte-identical copy).
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -28,27 +29,49 @@ from archway_benchmarks.types import Annotation, Location, Scores, Snippet
 # Resolved at import time so the package can be installed editable from
 # anywhere; we walk up from this module to the repo root.
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_DEFAULT_CORPUS = _REPO_ROOT / "extras" / "TypeEvalPy" / "micro-benchmark" / "python_features"
+_TYPEEVALPY_ROOT = Path(os.environ.get(
+    "ARCHWAY_TYPEEVALPY_ROOT",
+    _REPO_ROOT / "extras" / "TypeEvalPy",
+))
+_DEFAULT_CORPUS = _TYPEEVALPY_ROOT / "micro-benchmark" / "python_features"
 _DEFAULT_AUTOGEN_CORPUS = (
-    _REPO_ROOT
-    / "extras"
-    / "TypeEvalPy"
+    _TYPEEVALPY_ROOT
     / "autogen_typeevalpy_benchmark"
     / "python_features"
 )
 _DEFAULT_DEPENDENCY_ROOTS = (
-    _REPO_ROOT
-    / "extras"
-    / "TypeEvalPy"
+    _TYPEEVALPY_ROOT
     / "micro-benchmark-excluded"
     / "typeevalpy_external_module",
 )
 
 
+def _typeevalpy_dependency_roots(corpus_root: Path) -> tuple[Path, ...]:
+    """Locate TypeEvalPy's separately packaged external test dependency.
+
+    Callers use either ``micro-benchmark`` or its ``python_features`` child as
+    the corpus root.  Resolve by the corpus layout rather than by the harness
+    checkout so a benchmark worktree can score a corpus owned by another
+    checkout.
+    """
+
+    candidates = (
+        *(ancestor / "micro-benchmark-excluded" / "typeevalpy_external_module"
+          for ancestor in (corpus_root, *corpus_root.parents)),
+        *_DEFAULT_DEPENDENCY_ROOTS,
+    )
+    return tuple(dict.fromkeys(root for root in candidates if root.is_dir()))
+
+
 class TypeEvalPyBenchmark(Benchmark):
     name = "typeevalpy"
 
-    def __init__(self, corpus_root: Path | None = None) -> None:
+    def __init__(
+        self,
+        corpus_root: Path | None = None,
+        *,
+        dependency_roots: tuple[Path, ...] | None = None,
+    ) -> None:
         self.corpus_root = Path(corpus_root) if corpus_root else _DEFAULT_CORPUS
         if not self.corpus_root.exists():
             raise FileNotFoundError(
@@ -56,7 +79,12 @@ class TypeEvalPyBenchmark(Benchmark):
                 "Initialize the submodule: `git submodule update --init --recursive`."
             )
         self._snippets: list[Snippet] | None = None
-        self.dependency_roots = _DEFAULT_DEPENDENCY_ROOTS
+        if dependency_roots is not None:
+            self.dependency_roots = tuple(Path(root) for root in dependency_roots)
+        else:
+            self.dependency_roots = _typeevalpy_dependency_roots(
+                self.corpus_root
+            )
 
     # ----- Benchmark API -----
 

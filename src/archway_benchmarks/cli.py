@@ -105,6 +105,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_run = sub.add_parser("run", help="Run a benchmark end-to-end and persist a run")
     p_run.add_argument("--benchmark", default="typeevalpy", choices=list(BENCHMARKS))
+    p_run.add_argument(
+        "--corpus-root",
+        default=None,
+        help="Explicit benchmark corpus root; recorded workflows should not rely on checkout-relative discovery.",
+    )
     p_run.add_argument("--engine", default="stub", choices=list(ENGINES))
     p_run.add_argument("--stub-accuracy", type=float, default=0.67)
     p_run.add_argument("--seed", type=int, default=None)
@@ -213,7 +218,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _cmd_run(args) -> int:
-    bench = BENCHMARKS[args.benchmark]()
+    bench = BENCHMARKS[args.benchmark](
+        **(
+            {"corpus_root": Path(args.corpus_root)}
+            if args.corpus_root else {}
+        )
+    )
     metadata = None
     if args.engine == "archway":
         cfg = resolve_archway_server_config(
