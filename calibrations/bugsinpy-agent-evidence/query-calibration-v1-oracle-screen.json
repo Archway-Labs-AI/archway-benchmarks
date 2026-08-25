@@ -1,0 +1,32 @@
+{
+  "schema": "archway.bugsinpy.agent-query-calibration-screen.v1",
+  "cohort_id": "bugsinpy-agent-query-calibration-v1",
+  "cohort_revision": "cafa6e1a09c0d9d52ddd55dbfad437e035e7ae20",
+  "screened_at": "2026-08-25",
+  "oracle_used": true,
+  "detector_received_oracle": false,
+  "model_invocations": 0,
+  "archway_queries": 0,
+  "decision": "no_direct_query_candidate",
+  "cases": [
+    {
+      "bug_key": "thefuck:23",
+      "oracle_patch_sha256": "9761f99562fd464102de474690b27440f1fa2961235a4b8b0d50e700356a64b2",
+      "disposition": "exclude_before_proposal",
+      "rationale": "The patch restores Python 2 context-manager compatibility for shelve.open via contextlib.closing, while the detector input targets Python 3.7. A current type or call-target query would not directly establish the benchmark failure."
+    },
+    {
+      "bug_key": "youtube-dl:4",
+      "oracle_patch_sha256": "726a77ae2eb938f3755721a12ba52cea16b539b105e75c6b686323e596a5bc49",
+      "disposition": "exclude_before_proposal",
+      "rationale": "The parser regex requires one or more argument characters and rejects an empty JavaScript call. The fix changes regex and empty-list handling; the current Archway query surface does not expose this embedded-language behavior directly."
+    },
+    {
+      "bug_key": "ansible:8",
+      "oracle_patch_sha256": "d90d1a84bae5c3b5d6724305852a9bb50807b2e6f24bd18eb4f2feef49d913a4",
+      "disposition": "exclude_before_proposal",
+      "rationale": "The hand-written path join loses UNC semantics. The fix replaces it with ntpath normalization and joining; the current Archway query surface does not expose the required string/path behavior directly."
+    }
+  ],
+  "interpretation": "This is an interface-calibration result, not a benchmark score. It preserves the proposal/query budget and cannot be used to select cases within the sealed 12-case effect cohort."
+}
