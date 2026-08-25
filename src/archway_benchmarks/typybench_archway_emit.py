@@ -851,8 +851,6 @@ try:
             possible_entry_modules=frozenset(),
             body_observations_only=True,
             class_field_observations=True,
-            callable_input_exact_limit=callable_input_exact_limit,
-            contextual_summary_evaluation=contextual_summary_evaluation,
         )
     finally:
         if session_profiler is not None:

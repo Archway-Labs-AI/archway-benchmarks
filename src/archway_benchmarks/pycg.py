@@ -1555,6 +1555,11 @@ def successor_archway_call_edge_result(
             "worklist_schedule_counts": dict(sorted(
                 production["worklist_schedule_counts"].items()
             )),
+            **{
+                key: value
+                for key, value in production.items()
+                if key.startswith("factored_")
+            },
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
             )),
