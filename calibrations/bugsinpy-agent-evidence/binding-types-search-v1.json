@@ -24,18 +24,34 @@
   "maximum_probe_candidates": 3,
   "screening": {
     "method": "ordered patch inspection with type-sensitive-change search followed by exact buggy-module AST input-name counts",
-    "ranges_reached": ["keras:18-45", "luigi:1-33", "matplotlib:1-11"]
+    "ranges_reached": ["keras:18-45", "luigi:1-33", "matplotlib:1-11", "pandas:1-91"]
   },
   "candidates": [
     {"bug_key": "keras:25", "decision": "skip", "reason": "affected formal x identifies three function-input boundaries in keras.applications.imagenet_utils"},
     {"bug_key": "luigi:6", "decision": "skip", "reason": "affected formal value identifies eleven function-input boundaries in luigi.parameter"},
     {"bug_key": "luigi:21", "decision": "skip", "reason": "affected formal cmdline_args identifies four function-input boundaries in luigi.interface"},
     {"bug_key": "matplotlib:5", "decision": "skip", "reason": "affected formal linewidths identifies three function-input boundaries in matplotlib.axes._axes"},
-    {"bug_key": "matplotlib:11", "decision": "probe", "question": "What type possibilities reach the dpi input whose None handling is repaired by the patch?", "selector": {"kind": "binding-types", "module": "matplotlib.text", "binding": "dpi"}, "result": "no_evidence", "reason": "the exact formal is addressable but its TypeOf fact remains open with no possibilities", "run": "run://workbench-local/replay-matplotlib-11-ffaa7b09/binding-types-dpi"}
+    {"bug_key": "matplotlib:11", "decision": "probe", "question": "What type possibilities reach the dpi input whose None handling is repaired by the patch?", "selector": {"kind": "binding-types", "module": "matplotlib.text", "binding": "dpi"}, "result": "no_evidence", "reason": "the exact formal is addressable but its TypeOf fact remains open with no possibilities", "run": "run://workbench-local/replay-matplotlib-11-ffaa7b09/binding-types-dpi"},
+    {"bug_key": "pandas:3", "decision": "skip", "reason": "the changed isinstance checks apply to self.index rather than a named function input parameter"},
+    {"bug_key": "pandas:10", "decision": "skip", "reason": "affected formal new identifies two putmask function-input boundaries in pandas.core.internals.blocks"},
+    {"bug_key": "pandas:14", "decision": "skip", "reason": "the changed dtype predicates apply to derived ldtype and rdtype locals rather than directly to a named function input parameter"},
+    {"bug_key": "pandas:37", "decision": "skip", "reason": "affected formal dtype identifies three function-input boundaries in pandas.core.arrays.string_"},
+    {"bug_key": "pandas:42", "decision": "skip", "reason": "affected formals left and right each identify multiple function-input boundaries in pandas._testing"},
+    {"bug_key": "pandas:45", "decision": "skip", "reason": "affected formal data identifies four function-input boundaries in pandas.core.construction"},
+    {"bug_key": "pandas:54", "decision": "skip", "reason": "affected formal dtype identifies multiple function-input boundaries in pandas.core.dtypes.dtypes"},
+    {"bug_key": "pandas:58", "decision": "skip", "reason": "affected formal codes identifies three function-input boundaries in pandas.core.arrays.categorical"},
+    {"bug_key": "pandas:62", "decision": "skip", "reason": "affected formal indexer identifies five function-input boundaries in pandas.core.internals.blocks"},
+    {"bug_key": "pandas:71", "decision": "skip", "reason": "affected formal x identifies six function-input boundaries in pandas.core.reshape.tile"},
+    {"bug_key": "pandas:74", "decision": "probe", "question": "What type possibilities reach TimedeltaIndex.__new__.data where the patch adds a freq-sensitive TimedeltaArray guard?", "selector": {"kind": "binding-types", "module": "pandas.core.indexes.timedeltas", "binding": "data"}, "result": "no_evidence", "reason": "the unique exact formal is addressable with sound native evidence, but its TypeOf fact remains open with no possibilities", "buggy_revision": "9a211aae9f710db23c9113aea0251e2758904755", "engine_commit": "bddae9406c4383b9798bc80e43e4efe5eb7888e0", "artifact_sha256": "3cdc07ad8afee56dde837b931886494ccaea79e7d666e454ee3021609c307e1c", "run": "run://workbench-local/calibration-pandas-74-bddae940/binding-types-data"},
+    {"bug_key": "pandas:75", "decision": "skip", "reason": "affected formal method identifies both get_indexer and get_loc function-input boundaries in pandas.core.indexes.period"},
+    {"bug_key": "pandas:81", "decision": "skip", "reason": "affected formal dtype identifies six function-input boundaries in pandas.core.arrays.integer"},
+    {"bug_key": "pandas:86", "decision": "skip", "reason": "affected formal columns identifies three function-input boundaries in pandas.core.reshape.pivot"},
+    {"bug_key": "pandas:90", "decision": "skip", "reason": "the changed isinstance checks apply to derived fp_or_buf locals rather than directly to a named function input parameter"},
+    {"bug_key": "pandas:91", "decision": "probe", "question": "What type possibilities reach TimedeltaIndex.searchsorted.value where the patch replaces permissive coercion with type-sensitive validation?", "selector": {"kind": "binding-types", "module": "pandas.core.indexes.timedeltas", "binding": "value"}, "result": "no_evidence", "reason": "the unique exact formal is addressable with sound native evidence, but its TypeOf fact remains open with no possibilities", "buggy_revision": "5c12d4fd41ec3bb1fd4190413bd61b4b5f02047f", "engine_commit": "bddae9406c4383b9798bc80e43e4efe5eb7888e0", "artifact_sha256": "63cf4051e78bed97507f03ce2c51e580a2bdeea71a4ebe2edb7b3d5587c25d12", "run": "run://workbench-local/calibration-pandas-91-bddae940/binding-types-value"}
   ],
-  "qualifying_probes_attempted": 1,
-  "bounded_probe_results": 1,
+  "qualifying_probes_attempted": 3,
+  "bounded_probe_results": 3,
   "eligible_cases": 0,
-  "status": "search_in_progress",
-  "decision": "do_not_launch_agent; continue to the precommitted bounded probe limit"
+  "status": "stopped_at_precommitted_probe_limit",
+  "decision": "do_not_launch_agent; no answered binding-types calibration was found"
 }

@@ -84,7 +84,7 @@ def test_possible_calls_search_stops_at_first_answered_case() -> None:
     assert search["decision"].startswith("keras:37 is the sole calibration candidate")
 
 
-def test_binding_types_search_records_bounded_no_evidence_and_continues() -> None:
+def test_binding_types_search_stops_after_three_bounded_no_evidence_results() -> None:
     search = json.loads((
         ROOT / "calibrations/bugsinpy-agent-evidence/binding-types-search-v1.json"
     ).read_text())
@@ -92,16 +92,21 @@ def test_binding_types_search_records_bounded_no_evidence_and_continues() -> Non
     assert search["query_kind"] == "binding-types"
     assert search["calibration_only"] is True
     assert search["detector_received_oracle"] is False
-    probe = next(case for case in search["candidates"] if case["decision"] == "probe")
-    assert probe["bug_key"] == "matplotlib:11"
-    assert probe["selector"] == {
+    probes = [case for case in search["candidates"] if case["decision"] == "probe"]
+    assert [probe["bug_key"] for probe in probes] == [
+        "matplotlib:11", "pandas:74", "pandas:91",
+    ]
+    assert probes[0]["selector"] == {
         "kind": "binding-types", "module": "matplotlib.text", "binding": "dpi",
     }
-    assert probe["result"] == "no_evidence"
-    assert search["qualifying_probes_attempted"] == 1
-    assert search["bounded_probe_results"] == 1
+    assert probes[1]["selector"]["binding"] == "data"
+    assert probes[2]["selector"]["binding"] == "value"
+    assert {probe["result"] for probe in probes} == {"no_evidence"}
+    assert all(len(probe["artifact_sha256"]) == 64 for probe in probes[1:])
+    assert search["qualifying_probes_attempted"] == 3
+    assert search["bounded_probe_results"] == 3
     assert search["eligible_cases"] == 0
-    assert search["status"] == "search_in_progress"
+    assert search["status"] == "stopped_at_precommitted_probe_limit"
     assert search["decision"].startswith("do_not_launch_agent")
 
 
