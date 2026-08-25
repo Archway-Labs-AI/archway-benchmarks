@@ -441,20 +441,7 @@ def test_emit_predictions_preserves_cookiecutter_template_paths(
     tmp_path, monkeypatch
 ) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
-        """
-from pathlib import Path
-
-def analyze_source(source, module_name):
-    assert "{{cookiecutter.__root_folder}}" in source
-    assert Path(__import__("sys").argv[1]).is_file()
-    return {"functions": []}
-""",
-        encoding="utf-8",
-    )
+    engine.mkdir()
 
     source_root = tmp_path / "repo_without_types"
     template_dir = source_root / "taipy" / "templates" / "default" / "{{cookiecutter.__root_folder}}"
@@ -562,34 +549,7 @@ def test_emit_predictions_trace_jsonl_records_raw_rendered_and_insertion(
     tmp_path, monkeypatch
 ) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
-        """
-def analyze_source(source, module_name):
-    return {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "x": [{"element": {"kind": "pytype", "name": "builtins.int"}}],
-                            "y": [{"element": {"kind": "list"}}],
-                            "z": [{"element": {"kind": "pytype", "name": "builtins.str"}}],
-                        },
-                        "ret": {"element": {"kind": "top"}},
-                    }
-                ],
-            }
-        ]
-    }
-""",
-        encoding="utf-8",
-    )
+    engine.mkdir()
 
     source_root = tmp_path / "repo"
     source_root.mkdir()
@@ -642,23 +602,7 @@ def test_emit_trace_records_slots_omitted_by_engine_projection(
     tmp_path, monkeypatch
 ) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
-        """
-def analyze_source(source, module_name):
-    return {
-        "functions": [{
-            "fn_id": 1,
-            "name": "main",
-            "source_position": {"row": 1},
-            "instantiations": [{"params": {}, "ret": {}}],
-        }]
-    }
-""",
-        encoding="utf-8",
-    )
+    engine.mkdir()
     source_root = tmp_path / "repo"
     source_root.mkdir()
     (source_root / "demo.py").write_text(
@@ -702,107 +646,7 @@ def test_emit_predictions_profile_jsonl_records_per_file_timings(
     tmp_path, monkeypatch
 ) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    runners = sd_core / "runners"
-    runners.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (runners / "__init__.py").write_text("", encoding="utf-8")
-    (runners / "analysis_observability.py").write_text(
-        """
-class AnalysisObservationConfig:
-    def __init__(self, mode="summary"):
-        self.mode = mode
-
-    @classmethod
-    def summary(cls):
-        return cls("summary")
-
-    @classmethod
-    def diagnostic(cls):
-        return cls("diagnostic")
-
-    @classmethod
-    def off(cls):
-        return cls("off")
-""",
-        encoding="utf-8",
-    )
-    (runners / "file_results.py").write_text(
-        """
-class _Run:
-    finalized = object()
-
-class _Result:
-    status = "analyzed"
-    run = _Run()
-
-    def to_jsonable(self):
-        return {
-            "analysis_summary": {
-                "schema": "archway.analysis_run_summary.v1",
-                "phases": [
-                    {"name": "types.evaluate", "wall_seconds": 0.125, "status": "ok"}
-                ],
-                "type_functor": {
-                    "body_execution_hotspots": [
-                        {"body_name": "f", "execution_count": 1, "wall_seconds": 0.1}
-                    ]
-                },
-            }
-        }
-
-class FileAnalysisFailure(Exception):
-    pass
-
-def analyze_source_file_result(
-    source,
-    module,
-    repo_path=None,
-    observation_config=None,
-    body_summary_consumption="off",
-    analysis_product="standalone",
-):
-    if body_summary_consumption != "safe":
-        raise RuntimeError(f"policy was {body_summary_consumption}")
-    if analysis_product != "type_body_summary_product":
-        raise RuntimeError(f"product was {analysis_product}")
-    if getattr(observation_config, "mode", None) != "diagnostic":
-        raise RuntimeError(f"observation was {getattr(observation_config, 'mode', None)}")
-    if "boom" in source:
-        raise RuntimeError("synthetic")
-    return _Result()
-""",
-        encoding="utf-8",
-    )
-    (sd_core / "analysis_server.py").write_text(
-        """
-def _analysis():
-    return {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {"x": [{"element": {"kind": "pytype", "name": "builtins.int"}}]},
-                        "ret": {"element": {"kind": "pytype", "name": "builtins.int"}},
-                    }
-                ],
-            }
-        ]
-    }
-
-def _encode_finalized(finalized):
-    return _analysis()
-
-def analyze_source(source, module_name):
-    if "boom" in source:
-        raise RuntimeError("synthetic")
-    return _analysis()
-""",
-        encoding="utf-8",
-    )
+    engine.mkdir()
     source_root = tmp_path / "repo"
     source_root.mkdir()
     (source_root / "ok.py").write_text("def f(x):\n    return x\n", encoding="utf-8")
