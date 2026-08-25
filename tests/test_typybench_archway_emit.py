@@ -876,7 +876,7 @@ def test_emit_predictions_retains_repository_timeout_evidence(
         "body_profiles": [{"index": 3, "total": 8}],
     }
     monkeypatch.setattr(
-        typybench_emit,
+        emit_module,
         "_run_successor_repo_probe",
         lambda **_kwargs: {
             "ok": False,

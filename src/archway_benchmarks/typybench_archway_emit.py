@@ -294,23 +294,6 @@ def emit_archway_predictions(
                     profile_writer.write(profile)
                 continue
 
-            remaining = timeout - (time.monotonic() - started)
-            if remaining <= 0:
-                error = f"TimeoutExpired: repo analysis exceeded {timeout}s"
-                failures.append({"file": rel_s, "error": error})
-                profile = FileProfile(
-                    repo_name=repo_name,
-                    file=rel_s,
-                    status="repo_timeout",
-                    seconds_total=round(time.monotonic() - file_started, 6),
-                    seconds_engine_probe=0.0,
-                    error=error,
-                )
-                file_profiles.append(profile)
-                if profile_writer:
-                    profile_writer.write(profile)
-                continue
-
             translation_failures = (
                 record.get("analysis_summary", {})
                 .get("translation_failures", {})

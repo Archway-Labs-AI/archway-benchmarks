@@ -126,7 +126,6 @@ class SuccessorArchwayAnalysisEngine:
                 modules,
                 "main",
                 record_events=self.record_events,
-                enable_coarse_fallback=True,
             )
             forward = session.run_native_type_workload()
             return SuccessorArchwayResult(
