@@ -652,10 +652,13 @@ try:
             body_started = time.monotonic()
             executions_before = session.scheduler.production_execution_count
             topology_before = session.scheduler.graph.topology_generation
-            summary_registry = session.invocation_registry.callable_summaries
+            summary_admissions_before = (
+                session.native_callable_cell_summary_admissions()
+                if diagnostic_details else ()
+            )
             applications_before = frozenset(
-                summary_registry.applications
-            ) if diagnostic_details and summary_registry is not None else frozenset()
+                admission.result.id for admission in summary_admissions_before
+            )
             telemetry_before = (
                 session.scheduler.production_family_telemetry
                 if diagnostic_details else None
@@ -731,14 +734,14 @@ try:
                 "top_new_application_callers": (
                     Counter(
                         (
-                            spec.invocation.caller_context,
-                            spec.callable_value.body_morphism_id,
+                            admission.application.caller_context,
+                            admission.application.body_morphism_id,
                         )
-                        for application, spec
-                        in summary_registry.applications.items()
-                        if application not in applications_before
+                        for admission
+                        in session.native_callable_cell_summary_admissions()
+                        if admission.result.id not in applications_before
                     ).most_common(12)
-                    if diagnostic_details and summary_registry is not None
+                    if diagnostic_details
                     else []
                 ),
                 "root_id": root_address.id,
@@ -860,26 +863,23 @@ try:
             ),
         }
     )
-    summary_registry = (
-        session.invocation_registry.callable_summaries
-        if session.invocation_registry is not None else None
-    )
     unresolved_summary_bodies = Counter()
-    if collect_predictions and summary_registry is not None:
+    if collect_predictions:
         callable_labels = {
             body_id: f"{boundary.module_name}:{boundary.qualified_name}"
             for body_id, boundary
             in session.callable_boundaries_by_body.items()
         }
-        for application_address, spec in summary_registry.applications.items():
-            if session.store.resolved(application_address) is not None:
+        for admission in session.native_callable_cell_summary_admissions():
+            if session.store.resolved(admission.result) is not None:
                 continue
+            body_id = admission.application.body_morphism_id
             unresolved_summary_bodies[
                 body_labels.get(
-                    spec.callable_value.body_morphism_id,
+                    body_id,
                     callable_labels.get(
-                        spec.callable_value.body_morphism_id,
-                        spec.callable_value.body_morphism_id,
+                        body_id,
+                        body_id,
                     ),
                 )
             ] += 1
