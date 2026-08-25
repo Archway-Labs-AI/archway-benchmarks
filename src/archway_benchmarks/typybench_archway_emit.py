@@ -180,6 +180,9 @@ class EmitStats:
     failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
     file_profiles: tuple[FileProfile, ...] = field(default_factory=tuple)
     engine_sha: str | None = None
+    analysis_summary: dict[str, Any] | None = None
+    probe_error: str | None = None
+    probe_trace_tail: str | None = None
 
 
 def emit_archway_predictions(
@@ -244,7 +247,6 @@ def emit_archway_predictions(
     file_profiles: list[FileProfile] = []
 
     try:
-        started = time.monotonic()
         probe_started = time.monotonic()
         repo_record = _run_successor_repo_probe(
             engine_worktree=Path(engine_worktree),
@@ -422,6 +424,12 @@ def emit_archway_predictions(
         failures=tuple(failures),
         file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
+        analysis_summary=repo_record.get("analysis_summary"),
+        probe_error=(
+            str(repo_record.get("error", "no engine result"))[:300]
+            if not repo_record.get("ok") else None
+        ),
+        probe_trace_tail=repo_record.get("trace_tail"),
     )
 
 
@@ -964,7 +972,7 @@ try:
         signature_roots = tuple(
             root_address for root_address in signature_roots
             if body_labels.get(
-                getattr(root_address.subject, "body_morphism_id", "")
+                session.observation_workload_body_id(root_address) or ""
             ) in requested_body_labels
         )
     if requested_root_ids:
