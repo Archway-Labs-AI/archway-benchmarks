@@ -126,9 +126,8 @@ class SuccessorArchwayAnalysisEngine:
                 modules,
                 "main",
                 record_events=self.record_events,
-                enable_coarse_fallback=True,
             )
-            forward = session.run_forward()
+            forward = session.run_native_type_workload()
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
@@ -158,6 +157,7 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
         predictions: list[Annotation] = []
         observations = result.session.type_observations()
         mapped: list[tuple[Annotation, tuple[Any, ...]]] = []
+        pending_unmapped: list[Annotation] = []
         for requested in snippet.annotations:
             candidates = _map_observations(observations, requested.location)
             if not candidates:
@@ -165,13 +165,7 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
                     result.session, requested.location
                 )
             if not candidates:
-                result.gaps.append(SuccessorGap(
-                    requested.location,
-                    "provenance_unmapped",
-                    snippet.suite_path,
-                    requested.types,
-                    detail="no diagram type observation at benchmark location",
-                ))
+                pending_unmapped.append(requested)
                 continue
             mapped.append((requested, candidates))
 
@@ -209,9 +203,30 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
                 )
                 for requested, candidates in mapped
             ]
+            still_unmapped = []
+            for requested in pending_unmapped:
+                candidates = _map_observations(
+                    refined_observations, requested.location
+                ) or _map_container_path(
+                    result.session, requested.location
+                )
+                if candidates:
+                    mapped.append((requested, candidates))
+                else:
+                    still_unmapped.append(requested)
+            pending_unmapped = still_unmapped
             missing_addresses = _unresolved_query_addresses(
                 result.session, mapped
             )
+
+        for requested in pending_unmapped:
+            result.gaps.append(SuccessorGap(
+                requested.location,
+                "provenance_unmapped",
+                snippet.suite_path,
+                requested.types,
+                detail="no diagram type observation after demand convergence",
+            ))
 
         for requested, candidates in mapped:
             resolved = [
@@ -313,10 +328,11 @@ def _observation_kind_matches(item, location: Location) -> bool:
 
 
 def _observation_scope_matches(
-    item, location: Location
+    item, location: Location, *, requested_name: str | None = None
 ) -> bool:
     observed = item.function
     requested = location.function
+    name = location.name if requested_name is None else requested_name
     if observed == requested:
         return True
     if (
@@ -331,7 +347,7 @@ def _observation_scope_matches(
     return bool(
         owner
         and item.name.startswith("self.")
-        and location.name
+        and name
         == f"{owner}.{item.name.removeprefix('self.')}"
     )
 
@@ -384,6 +400,22 @@ def _map_container_path(session, location: Location):
         and item.position is not None
         and item.position.row == location.line
     )
+    roots = tuple(
+        item for item in session.type_observations()
+        if _observation_name_matches(item, base)
+        and item.kind == location.kind
+        and _observation_scope_matches(
+            item, location, requested_name=base
+        )
+        and item.position is not None
+        and item.position.row == location.line
+    )
+    native = tuple(
+        item for item in session.occurrence_path_observations(roots, slots)
+        if item.position is not None
+        and item.position.row == location.line
+    )
+    return tuple(dict.fromkeys((*indexed, *native)))
 
 
 def _typeeval_name(value: str) -> str:

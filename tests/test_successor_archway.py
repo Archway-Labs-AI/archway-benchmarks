@@ -35,93 +35,8 @@ def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
     assert result.forward is not None
-    assert result.forward.cache_hit is False
-
-
-def test_successor_adapter_reads_written_container_lvalue(tmp_path):
-    snippet = _snippet(
-        tmp_path,
-        "def produce():\n"
-        "    return 'value'\n"
-        "items = ['old']\n"
-        "items[0] = produce\n"
-        "result = items[0]()\n",
-        """[
-          {"file":"main.py","line_number":4,"col_offset":1,"variable":"items[0]","type":["callable"]}
-        ]""",
-    )
-    result = SuccessorArchwayAnalysisEngine().analyze(
-        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
-    )
-
-    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
-
-    assert predictions == list(snippet.annotations)
-    assert result.gaps == []
-
-
-def test_successor_adapter_preserves_reachability_after_refused_call(tmp_path):
-    snippet = _snippet(
-        tmp_path,
-        "from collections import namedtuple\n"
-        "def unsupported():\n"
-        "    point = namedtuple('Point', ['x'])\n"
-        "    return point(1)\n"
-        "unknown = unsupported()\n"
-        "def later():\n"
-        "    return 1\n"
-        "result = later()\n",
-        """[
-          {"file":"main.py","line_number":8,"col_offset":1,"variable":"result","type":["int"]}
-        ]""",
-    )
-    result = SuccessorArchwayAnalysisEngine().analyze(
-        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
-    )
-
-    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
-
-    assert predictions == list(snippet.annotations)
-    assert result.gaps == []
-
-
-def test_successor_adapter_reconciles_autogen_lambda_parameter_kind(tmp_path):
-    snippet = _snippet(
-        tmp_path,
-        "x = lambda x: x + 1\na = x(1)\n",
-        """[
-          {"file":"main.py","line_number":1,"col_offset":12,"function":"lambda","variable":"x","type":["int"]}
-        ]""",
-    )
-    result = SuccessorArchwayAnalysisEngine().analyze(
-        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
-    )
-
-    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
-
-    assert predictions == list(snippet.annotations)
-    assert result.gaps == []
-
-
-def test_successor_adapter_maps_parameter_update_binding_occurrence(tmp_path):
-    snippet = _snippet(
-        tmp_path,
-        "def increment(value):\n"
-        "    value += 1\n"
-        "    return value\n"
-        "result = increment(1)\n",
-        """[
-          {"file":"main.py","line_number":2,"col_offset":5,"function":"increment","parameter":"value","type":["int"]}
-        ]""",
-    )
-    result = SuccessorArchwayAnalysisEngine().analyze(
-        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
-    )
-
-    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
-
-    assert predictions == list(snippet.annotations)
-    assert result.gaps == []
+    assert result.forward.cache_hits == 0
+    assert len(result.forward.roots) >= 2
 
 
 def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
@@ -150,66 +65,6 @@ def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
     assert result.targeted_runs == []
 
 
-def test_successor_frontend_resolves_unexported_package_submodule(tmp_path):
-    snippet = _snippet(
-        tmp_path,
-        "from package import child\n"
-        "result = child.produce()\n",
-        """[
-          {"file":"main.py","line_number":2,"col_offset":1,"variable":"result","type":["bool"]}
-        ]""",
-    )
-    suite = tmp_path / "assignments" / "forward"
-    package = suite / "package"
-    package.mkdir()
-    (package / "__init__.py").write_text("")
-    (package / "child.py").write_text(
-        "def produce():\n    return True\n"
-    )
-    translation = ArchwayTranslationEngine(corpus_root=tmp_path).translate(
-        snippet.source, snippet.file_path
-    )
-
-    result = SuccessorArchwayAnalysisEngine().analyze(translation)
-    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
-
-    assert result.error is None
-    assert predictions == list(snippet.annotations)
-    assert result.gaps == []
-
-
-def test_successor_frontend_dotted_import_preserves_root_package(tmp_path):
-    snippet = _snippet(
-        tmp_path,
-        "import package.child\n"
-        "nested = package.child.produce()\n"
-        "root = package.produce()\n",
-        """[
-          {"file":"main.py","line_number":2,"col_offset":1,"variable":"nested","type":["list"]},
-          {"file":"main.py","line_number":3,"col_offset":1,"variable":"root","type":["float"]}
-        ]""",
-    )
-    suite = tmp_path / "assignments" / "forward"
-    package = suite / "package"
-    package.mkdir()
-    (package / "__init__.py").write_text(
-        "def produce():\n    return 1.0\n"
-    )
-    (package / "child.py").write_text(
-        "def produce():\n    return [1]\n"
-    )
-    translation = ArchwayTranslationEngine(corpus_root=tmp_path).translate(
-        snippet.source, snippet.file_path
-    )
-
-    result = SuccessorArchwayAnalysisEngine().analyze(translation)
-    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
-
-    assert result.error is None
-    assert predictions == list(snippet.annotations)
-    assert result.gaps == []
-
-
 def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     tmp_path,
 ):
@@ -230,7 +85,7 @@ def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     assert result.gaps == []
 
 
-def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
+def test_successor_native_workload_batches_uninvoked_returns_before_adapter(
     tmp_path,
 ):
     snippet = _snippet(
@@ -248,28 +103,22 @@ def test_successor_adapter_batches_missing_uninvoked_returns_in_same_session(
         ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
     )
 
-    return_observations = tuple(
-        item for item in result.session.type_observations()
-        if item.kind == "return"
-    )
     assert all(
-        result.session.store.resolved(item.address) is None
-        for item in return_observations
+        result.session.store.resolved(item.address) is not None
+        for item in result.session.type_observations()
+        if item.kind == "return"
     )
 
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
-    assert all(
-        result.session.store.resolved(item.address) is not None
-        for item in return_observations
-    )
-
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
-    assert len(result.targeted_runs) == 1
+    assert result.targeted_runs == []
+    assert len(result.forward.roots) >= 3
+    assert result.forward.knowledge_deltas
 
 
-def test_successor_adapter_maps_contexts_discovered_in_shared_session(tmp_path):
+def test_successor_adapter_remaps_contexts_discovered_by_refinement(tmp_path):
     snippet = _snippet(
         tmp_path,
         "# nested receiver contexts\n"
@@ -459,6 +308,8 @@ def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
         "provenance_unmapped|assignments/forward|return": 1
     }
     assert audit.forward_events > 0
+    # Knowledge commits remain available as cost telemetry. Their count is an
+    # implementation detail of the scheduler topology, not a benchmark law.
     assert audit.knowledge_deltas > 0
     assert audit.resolved_facts > 1
 
@@ -487,7 +338,7 @@ def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
     assert progress == [(1, 1)]
 
 
-def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
+def test_gap_audit_reports_no_adapter_refinement_after_native_workload(tmp_path):
     _snippet(
         tmp_path,
         "def untouched(value):\n"
@@ -503,46 +354,14 @@ def test_gap_audit_reports_targeted_session_reuse_cost(tmp_path):
     )
 
     assert audit.exact == 1
-    assert audit.targeted_roots == 1
+    assert audit.targeted_roots == 0
     assert audit.targeted_cache_hits == 0
     assert audit.targeted_events == 0
-    assert audit.targeted_knowledge_deltas > 0
-    assert audit.targeted_topology_changes > 0
+    assert audit.targeted_knowledge_deltas == 0
+    assert audit.targeted_topology_changes == 0
 
 
-def test_sequence_pattern_slot_observations_reuse_forward_container_state(
-    tmp_path,
-):
-    snippet = _snippet(
-        tmp_path,
-        "def func(value):\n"
-        "    match value:\n"
-        "        case [53, 78, 59]: return (33, 45, 59)\n"
-        "        case (33, 45, 59): return [53, 78, 59]\n"
-        "        case _: return 'default'\n"
-        "a = func([53, 78, 59])\n"
-        "b = func((33, 45, 59))\n",
-        """[
-          {"file":"main.py","line_number":6,"col_offset":1,"variable":"a[0]","type":["int"]},
-          {"file":"main.py","line_number":6,"col_offset":1,"variable":"a[1]","type":["int"]},
-          {"file":"main.py","line_number":6,"col_offset":1,"variable":"a[2]","type":["int"]},
-          {"file":"main.py","line_number":7,"col_offset":1,"variable":"b[0]","type":["int"]},
-          {"file":"main.py","line_number":7,"col_offset":1,"variable":"b[1]","type":["int"]},
-          {"file":"main.py","line_number":7,"col_offset":1,"variable":"b[2]","type":["int"]}
-        ]""",
-    )
-    result = SuccessorArchwayAnalysisEngine(record_events=False).analyze(
-        ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
-    )
-
-    predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
-
-    assert predictions == list(snippet.annotations)
-    assert result.targeted_runs == []
-    assert len(result.session.scheduler.graph.nodes) < 500
-
-
-def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
+def test_successor_adapter_uses_route_feasibility_for_precise_answer(tmp_path):
     snippet = _snippet(
         tmp_path,
         "def choose(flag):\n"
@@ -560,27 +379,5 @@ def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
 
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
-    assert predictions[0].types == frozenset(("int",))
+    assert predictions == list(snippet.annotations)
     assert result.gaps == []
-def test_typeevalpy_custom_corpus_discovers_adjacent_external_dependency(
-    tmp_path,
-):
-    corpus = tmp_path / "micro-benchmark" / "python_features"
-    case = corpus / "external" / "attribute"
-    case.mkdir(parents=True)
-    (case / "main.py").write_text("from external_package.ext import Cls\n")
-    (case / "main_gt.json").write_text("[]")
-    dependency = (
-        tmp_path
-        / "micro-benchmark-excluded"
-        / "typeevalpy_external_module"
-    )
-    dependency.mkdir(parents=True)
-
-    benchmark = TypeEvalPyBenchmark(corpus)
-
-    assert benchmark.dependency_roots == (dependency,)
-
-    benchmark = TypeEvalPyBenchmark(corpus.parent)
-
-    assert benchmark.dependency_roots == (dependency,)

@@ -180,6 +180,9 @@ class EmitStats:
     failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
     file_profiles: tuple[FileProfile, ...] = field(default_factory=tuple)
     engine_sha: str | None = None
+    analysis_summary: dict[str, Any] | None = None
+    probe_error: str | None = None
+    probe_trace_tail: str | None = None
 
 
 def emit_archway_predictions(
@@ -244,7 +247,6 @@ def emit_archway_predictions(
     file_profiles: list[FileProfile] = []
 
     try:
-        started = time.monotonic()
         probe_started = time.monotonic()
         repo_record = _run_successor_repo_probe(
             engine_worktree=Path(engine_worktree),
@@ -286,23 +288,6 @@ def emit_archway_predictions(
                     error=err,
                     trace_tail=record.get("trace_tail"),
                     analysis_summary=record.get("analysis_summary"),
-                )
-                file_profiles.append(profile)
-                if profile_writer:
-                    profile_writer.write(profile)
-                continue
-
-            remaining = timeout - (time.monotonic() - started)
-            if remaining <= 0:
-                error = f"TimeoutExpired: repo analysis exceeded {timeout}s"
-                failures.append({"file": rel_s, "error": error})
-                profile = FileProfile(
-                    repo_name=repo_name,
-                    file=rel_s,
-                    status="repo_timeout",
-                    seconds_total=round(time.monotonic() - file_started, 6),
-                    seconds_engine_probe=0.0,
-                    error=error,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -422,6 +407,12 @@ def emit_archway_predictions(
         failures=tuple(failures),
         file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
+        analysis_summary=repo_record.get("analysis_summary"),
+        probe_error=(
+            str(repo_record.get("error", "no engine result"))[:300]
+            if not repo_record.get("ok") else None
+        ),
+        probe_trace_tail=repo_record.get("trace_tail"),
     )
 
 
@@ -964,7 +955,7 @@ try:
         signature_roots = tuple(
             root_address for root_address in signature_roots
             if body_labels.get(
-                getattr(root_address.subject, "body_morphism_id", "")
+                session.observation_workload_body_id(root_address) or ""
             ) in requested_body_labels
         )
     if requested_root_ids:
@@ -1035,9 +1026,7 @@ try:
         # drain per body and the convergence explosion caused by admitting
         # sibling bodies simultaneously.
         def admission_group(root_address):
-            body_id = getattr(
-                root_address.subject, "body_morphism_id", ""
-            )
+            body_id = session.observation_workload_body_id(root_address) or ""
             for provider in session.targeted_body_providers:
                 if body_id not in provider.bodies_by_id:
                     continue
@@ -1120,11 +1109,16 @@ try:
                 if checkpoint_tail_start >= 0
                 else all_batches
             )
+        # Labels and ownership come from the diagram's canonical workload
+        # catalog rather than reinterpreting fact-subject implementation
+        # details in the benchmark adapter.
+        def root_label(root_address):
+            body_id = session.observation_workload_body_id(root_address)
+            return body_labels.get(body_id, "?")
+
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
-                body_labels.get(
-                    getattr(root.subject, "body_morphism_id", ""), "?"
-                )
+                root_label(root)
                 for root in root_batch
             ]
                 for root_batch in root_batches
@@ -1163,7 +1157,7 @@ try:
             family_seconds_before = (
                 telemetry_before["seconds"] if telemetry_before else {}
             )
-            body_id = getattr(root_address.subject, "body_morphism_id", "")
+            body_id = session.observation_workload_body_id(root_address) or ""
             body_label = body_labels.get(body_id, "?")
             print(
                 f"ARCHWAY_BODY_START {index}/{len(root_batches)} "
@@ -1323,9 +1317,7 @@ try:
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
                 "root_labels": [
-                    body_labels.get(
-                        getattr(item.subject, "body_morphism_id", ""), "?"
-                    )
+                    root_label(item)
                     for item in root_batch
                 ],
             }

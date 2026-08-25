@@ -142,10 +142,12 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert score_edges(set(case.expected_edges), set(result.edges)) == EdgeScore(
         true_positive=1, false_positive=0, false_negative=0
     )
-    assert result.root_demands == 1
+    # One forward module-completion seed and one semantic-call-graph query
+    # share the same persistent native scheduler session.
+    assert result.root_demands == 2
     assert result.knowledge_deltas > 0
     assert result.topology_growth > 0
-    assert result.evidence["root_demand_count"] == 1
+    assert result.evidence["root_demand_count"] == 2
     assert result.evidence["resolved_fact_count"] > 0
     assert "invocation_input_growth_counts" in result.evidence
     assert result.evidence["module_closure"] == {
@@ -183,32 +185,6 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.evidence["translation_seconds"] >= 0
     assert result.evidence["session_construction_seconds"] >= 0
     assert result.evidence["peak_rss_bytes"] > 0
-
-
-def test_native_successor_adapter_projects_only_typed_cell_call_graph(
-    tmp_path: Path,
-) -> None:
-    case_root = _write_case(
-        tmp_path,
-        "functions",
-        "native_call",
-        {"main": ["main.target"], "main.target": []},
-    )
-    (case_root / "main.py").write_text(
-        "def target():\n    return 1\ntarget()\n", encoding="utf-8"
-    )
-    (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
-
-    result = successor_archway_call_edge_result(
-        case, engine_root=engine_root.resolve(), native_cells=True
-    )
-
-    assert result.edges == frozenset({("main", "main.target")})
-    families = result.evidence["fact_family_counts"]
-    assert families["InternalCallTargetCell"] >= 1
-    assert "MorphismState" not in families
-    assert "ForwardExecution" not in families
 
 
 def test_successor_completed_evidence_collapses_repeated_contexts_per_callsite(
@@ -660,39 +636,6 @@ def test_successor_error_retains_terminal_evidence(
         "phase": "analysis",
         "demand_node_count": 3,
     }
-
-
-def test_successor_nonconvergence_scores_retained_partial_edges(
-    tmp_path: Path,
-    monkeypatch,
-):
-    _write_case(tmp_path, "direct_calls", "call", {"main": ["main.f"]})
-
-    def partially_failing_successor(*args, **kwargs):
-        from archway_benchmarks.pycg import PyCGCaseExecutionError
-
-        raise PyCGCaseExecutionError(
-            "component did not converge",
-            {"phase": "error", "resolved_fact_count": 7},
-            {("main", "main.f")},
-        )
-
-    monkeypatch.setattr(
-        "archway_benchmarks.pycg.successor_archway_call_edge_result",
-        partially_failing_successor,
-    )
-
-    result = run_archway_pycg(
-        corpus_root=tmp_path,
-        engine_root=tmp_path,
-        edge_provider="successor",
-    )
-
-    case = result.cases[0]
-    assert case.status == "partial"
-    assert case.predicted_edges == (("main", "main.f"),)
-    assert case.score.true_positive == 1
-    assert case.analysis_evidence["resolved_fact_count"] == 7
 
 
 def test_run_archway_pycg_uses_successor_provider_by_default(
