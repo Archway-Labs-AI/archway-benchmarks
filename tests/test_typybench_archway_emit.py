@@ -2,6 +2,7 @@ import ast
 import json
 import sys
 
+import archway_benchmarks.typybench_archway_emit as typybench_emit
 from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
     _element_type,
@@ -370,31 +371,27 @@ def test_renderer_keeps_container_elements_and_parseable_union_spelling() -> Non
     assert stats == {"functions": 1, "params": 3, "returns": 1}
 
 
-def test_emit_predictions_leaves_original_source_on_invalid_annotation_syntax(tmp_path) -> None:
+def test_emit_predictions_leaves_original_source_on_invalid_annotation_syntax(
+    tmp_path, monkeypatch
+) -> None:
     engine = tmp_path / "engine"
-    sd_core = engine / "sd_core"
-    sd_core.mkdir(parents=True)
-    (sd_core / "__init__.py").write_text("", encoding="utf-8")
-    (sd_core / "analysis_server.py").write_text(
-        """
-def analyze_source(source, module_name):
-    return {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {"x": [{"element": {"kind": "pytype", "name": "list["}}]},
-                        "ret": {"element": {"kind": "pytype", "name": "builtins.int"}},
-                    }
-                ],
-            }
-        ]
-    }
-""",
-        encoding="utf-8",
+    engine.mkdir()
+    monkeypatch.setattr(
+        typybench_emit,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {
+                "demo.py": [{
+                    "line": 1,
+                    "name": "x",
+                    "kind": "parameter",
+                    "function": "f",
+                    "types": ["list["],
+                }]
+            },
+            "analysis_summary": {},
+        },
     )
 
     source_root = tmp_path / "repo"
@@ -440,7 +437,9 @@ def test_emit_predictions_rejects_zero_source_repo_before_staging(tmp_path) -> N
     assert not (tmp_path / "predictions" / "pylint").exists()
 
 
-def test_emit_predictions_preserves_cookiecutter_template_paths(tmp_path) -> None:
+def test_emit_predictions_preserves_cookiecutter_template_paths(
+    tmp_path, monkeypatch
+) -> None:
     engine = tmp_path / "engine"
     sd_core = engine / "sd_core"
     sd_core.mkdir(parents=True)
@@ -462,6 +461,16 @@ def analyze_source(source, module_name):
     template_dir.mkdir(parents=True)
     source = template_dir / "{{cookiecutter.__main_file}}.py"
     source.write_text('MARKER = "{{cookiecutter.__root_folder}}"\n', encoding="utf-8")
+    rel = "taipy/templates/default/{{cookiecutter.__root_folder}}/{{cookiecutter.__main_file}}.py"
+    monkeypatch.setattr(
+        typybench_emit,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {rel: []},
+            "analysis_summary": {},
+        },
+    )
 
     stats = emit_archway_predictions(
         repo_name="taipy",
@@ -473,7 +482,6 @@ def analyze_source(source, module_name):
         per_file_timeout=5,
     )
 
-    rel = "taipy/templates/default/{{cookiecutter.__root_folder}}/{{cookiecutter.__main_file}}.py"
     assert stats.files_total == 1
     assert stats.files_failed == 0
     assert (tmp_path / "predictions" / "taipy" / rel).is_file()
@@ -550,7 +558,9 @@ def analyze_source(source, module_name):
     assert stats.files_failed == 2
 
 
-def test_emit_predictions_trace_jsonl_records_raw_rendered_and_insertion(tmp_path) -> None:
+def test_emit_predictions_trace_jsonl_records_raw_rendered_and_insertion(
+    tmp_path, monkeypatch
+) -> None:
     engine = tmp_path / "engine"
     sd_core = engine / "sd_core"
     sd_core.mkdir(parents=True)
@@ -585,6 +595,20 @@ def analyze_source(source, module_name):
     source_root.mkdir()
     (source_root / "demo.py").write_text("def f(x, y: str) -> bool:\n    return y\n", encoding="utf-8")
     trace_jsonl = tmp_path / "trace" / "typybench.jsonl"
+    monkeypatch.setattr(
+        typybench_emit,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {"demo.py": [
+                {"line": 1, "name": "x", "kind": "parameter", "function": "f", "types": ["builtins.int"]},
+                {"line": 1, "name": "y", "kind": "parameter", "function": "f", "types": ["list[Any]"]},
+                {"line": 1, "name": "z", "kind": "parameter", "function": "f", "types": ["builtins.str"]},
+                {"line": 1, "name": "f", "kind": "return", "function": None, "types": ["Any"]},
+            ]},
+            "analysis_summary": {},
+        },
+    )
 
     stats = emit_archway_predictions(
         repo_name="demo",
@@ -600,8 +624,8 @@ def analyze_source(source, module_name):
     assert stats.params_annotated == 1
     records = [json.loads(line) for line in trace_jsonl.read_text(encoding="utf-8").splitlines()]
     by_slot = {record["slot"]: record for record in records}
-    assert by_slot["param:x"]["raw_candidates"][0]["raw_elements"] == [
-        {"kind": "pytype", "name": "builtins.int"}
+    assert by_slot["param:x"]["raw_candidates"][0]["successor_types"] == [
+        "int"
     ]
     assert by_slot["param:x"]["rendered_annotation"] == "int"
     assert by_slot["param:x"]["insertion_happened"] is True
@@ -609,14 +633,14 @@ def analyze_source(source, module_name):
     assert by_slot["param:y"]["rendered_annotation"] == "list[Any]"
     assert by_slot["param:y"]["insertion_happened"] is False
     assert by_slot["param:y"]["insertion_reason"] == "existing annotation preserved"
-    assert by_slot["param:y"]["fallback_reason"] == "list.element: missing element"
     assert by_slot["param:z"]["insertion_reason"] == "parameter not present in AST"
     assert by_slot["return"]["rendered_annotation"] == "Any"
-    assert by_slot["return"]["fallback_reason"] == "top"
     assert by_slot["return"]["final_annotation"] == "bool"
 
 
-def test_emit_trace_records_slots_omitted_by_engine_projection(tmp_path) -> None:
+def test_emit_trace_records_slots_omitted_by_engine_projection(
+    tmp_path, monkeypatch
+) -> None:
     engine = tmp_path / "engine"
     sd_core = engine / "sd_core"
     sd_core.mkdir(parents=True)
@@ -642,6 +666,18 @@ def analyze_source(source, module_name):
         encoding="utf-8",
     )
     trace_jsonl = tmp_path / "trace.jsonl"
+    monkeypatch.setattr(
+        typybench_emit,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {"demo.py": [
+                {"line": 1, "name": "argv", "kind": "parameter", "function": "main", "types": []},
+                {"line": 1, "name": "main", "kind": "return", "function": None, "types": []},
+            ]},
+            "analysis_summary": {},
+        },
+    )
 
     emit_archway_predictions(
         repo_name="demo",
@@ -662,7 +698,9 @@ def analyze_source(source, module_name):
     assert by_slot["return"]["insertion_reason"] == "no inferred return candidate"
 
 
-def test_emit_predictions_profile_jsonl_records_per_file_timings(tmp_path) -> None:
+def test_emit_predictions_profile_jsonl_records_per_file_timings(
+    tmp_path, monkeypatch
+) -> None:
     engine = tmp_path / "engine"
     sd_core = engine / "sd_core"
     runners = sd_core / "runners"
@@ -770,6 +808,29 @@ def analyze_source(source, module_name):
     (source_root / "ok.py").write_text("def f(x):\n    return x\n", encoding="utf-8")
     (source_root / "bad.py").write_text("boom = True\n", encoding="utf-8")
     profile_jsonl = tmp_path / "profile" / "files.jsonl"
+    analysis_summary = {
+        "schema": "archway.analysis_run_summary.v1",
+        "type_functor": {
+            "body_execution_hotspots": [{
+                "body_name": "f",
+                "execution_count": 1,
+                "wall_seconds": 0.1,
+            }]
+        },
+        "translation_failures": {"bad.py": "RuntimeError: synthetic"},
+    }
+    monkeypatch.setattr(
+        typybench_emit,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": True,
+            "files": {"ok.py": [
+                {"line": 1, "name": "x", "kind": "parameter", "function": "f", "types": ["builtins.int"]},
+                {"line": 1, "name": "f", "kind": "return", "function": None, "types": ["builtins.int"]},
+            ], "bad.py": []},
+            "analysis_summary": analysis_summary,
+        },
+    )
 
     stats = emit_archway_predictions(
         repo_name="demo",
@@ -797,7 +858,7 @@ def analyze_source(source, module_name):
     assert by_file["ok.py"]["analysis_summary"]["type_functor"][
         "body_execution_hotspots"
     ][0]["body_name"] == "f"
-    assert by_file["bad.py"]["status"] == "engine_failed"
+    assert by_file["bad.py"]["status"] == "translation_failed"
     assert "RuntimeError: synthetic" in by_file["bad.py"]["error"]
 
 

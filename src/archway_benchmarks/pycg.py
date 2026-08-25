@@ -33,6 +33,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Mapping
 
+from archway_benchmarks.successor_runtime_evidence import (
+    callable_runtime_evidence,
+)
+
 Edge = tuple[str, str]
 EdgeProvider = Literal["successor", "coordinated", "legacy"]
 
@@ -924,7 +928,6 @@ def successor_archway_call_edge_result(
         entry_module,
         record_events=record_events,
         catalog_observations=False,
-        enable_coarse_fallback=False,
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
         ),
@@ -936,32 +939,27 @@ def successor_archway_call_edge_result(
     analysis_started = time.perf_counter()
     include_callable_bodies = case.suite == "macro"
     stop_sampling = threading.Event()
+    scalar_provider = session.native_scalar_provider
+    assumptions = session.plan.root.assumptions
+    module_root_addresses = {
+        name: scalar_provider.module_completion_address(
+            name, f"context:module:{name}", assumptions,
+        )
+        for name in sorted(modules)
+    }
     root_labels = {
         address.id: f"module:{name}"
-        for name, address in session.module_roots.items()
+        for name, address in module_root_addresses.items()
     }
-    root_labels.update({
-        address.id: "callable:" + (
-            session.callable_boundaries_by_body[body_id].display_name
-            if body_id in session.callable_boundaries_by_body
-            else name
-        )
-        for name, address in session.callable_roots.items()
-        if (body_id := getattr(address.subject, "body_morphism_id", None))
-    })
     body_labels = {
-        body_id: (
-            session.callable_boundaries_by_body[body_id].display_name
-            if body_id in session.callable_boundaries_by_body
-            else name
-        )
-        for name, address in session.callable_roots.items()
-        if (body_id := getattr(address.subject, "body_morphism_id", None))
+        body_id: boundary.display_name
+        for body_id, boundary in session.callable_boundaries_by_body.items()
     }
     sampling_profile = None
 
     def current_evidence(*, phase: str) -> dict[str, object]:
         snapshot = session.store.snapshot()
+        callable_evidence = callable_runtime_evidence(session)
         family_counts: dict[str, int] = {}
         for address in snapshot.resolved_facts:
             family_counts[address.family] = (
@@ -987,21 +985,13 @@ def successor_archway_call_edge_result(
         def growth_for(key) -> dict[str, int]:
             return dict(sorted(growth_by_production.get(key, {}).items()))
 
-        boundaries_by_definition = {
-            boundary.definition_morphism_id: boundary
-            for boundary in session.callable_boundaries_by_body.values()
+        summary_admissions_by_result = {
+            admission.result: admission
+            for admission in session.native_callable_cell_summary_admissions()
         }
 
         def callable_application_for(key):
-            registry = session.invocation_registry
-            summaries = (
-                registry.callable_summaries
-                if registry is not None else None
-            )
-            return (
-                summaries.applications.get(key.address)
-                if summaries is not None else None
-            )
+            return summary_admissions_by_result.get(key.address)
 
         def callable_for(key) -> str | None:
             owner = session.callable_owner_for(
@@ -1018,15 +1008,32 @@ def successor_archway_call_edge_result(
             application = callable_application_for(key)
             if application is None:
                 return None
-            boundary = boundaries_by_definition.get(
-                application.callable_value.definition_morphism_id
+            boundary = session.callable_boundaries_by_body.get(
+                application.application.body_morphism_id
             )
             return boundary.display_name if boundary is not None else None
 
         def callable_value_for(key) -> dict[str, object] | None:
             application = callable_application_for(key)
             return (
-                dict(application.callable_value.canonical_data())
+                {
+                    "kind": "callable_cell_application",
+                    "body_morphism_id": (
+                        application.application.body_morphism_id
+                    ),
+                    "callable_occurrence_id": (
+                        application.application.callable_occurrence_id
+                    ),
+                    "callsite_morphism_id": (
+                        application.application.callsite_morphism_id
+                    ),
+                    "caller_context": (
+                        application.application.caller_context
+                    ),
+                    "callee_context": (
+                        application.application.callee_context
+                    ),
+                }
                 if application is not None else None
             )
 
@@ -1192,7 +1199,7 @@ def successor_archway_call_edge_result(
             if count > 1
         )
         module_names = sorted(modules)
-        callable_root_names = sorted(session.callable_roots)
+        callable_root_names = sorted(body_labels.values())
         evidence = {
             "phase": phase,
             "source_module_count": len(sources),
@@ -1204,13 +1211,13 @@ def successor_archway_call_edge_result(
                 "modules": module_names,
             },
             "root_inventory": {
-                "module_count": len(session.module_roots),
-                "module_names": sorted(session.module_roots),
+                "module_count": len(module_root_addresses),
+                "module_names": sorted(module_root_addresses),
                 "callable_body_count": len(callable_root_names),
                 "callable_body_names": callable_root_names,
             },
             "callable_body_root_count": (
-                len(session.callable_roots) if include_callable_bodies else 0
+                len(body_labels) if include_callable_bodies else 0
             ),
             "root_policy": (
                 "all_modules_possible_entries_and_callable_bodies"
@@ -1248,19 +1255,7 @@ def successor_archway_call_edge_result(
                 for root_id, seconds
                 in query_progress["slowest_completed_roots"]
             ],
-            "invocation_context_counts": session.invocation_context_counts(),
-            "invocation_input_growth_counts": (
-                session.invocation_input_growth_counts()
-            ),
-            "invocation_admission_counts": (
-                session.invocation_admission_counts()
-            ),
-            "invocation_summary_telemetry": (
-                session.invocation_summary_telemetry()
-            ),
-            "deferred_materialization_counts": (
-                session.deferred_materialization_counts()
-            ),
+            **callable_evidence,
             "resolved_fact_count": len(snapshot.resolved_facts),
             "fact_family_counts": dict(sorted(family_counts.items())),
             "demand_node_count": session.scheduler.graph.node_count,
@@ -1342,9 +1337,6 @@ def successor_archway_call_edge_result(
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
-            "morphism_transfer_reuse_counts": (
-                session.morphism_transfer_reuse_counts()
-            ),
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
             ),
@@ -1361,7 +1353,7 @@ def successor_archway_call_edge_result(
                     "ModuleSemanticSummary", 0
                 ),
                 "registered_invocation_summary_count": (
-                    session.invocation_context_counts().get(
+                    callable_evidence["invocation_context_counts"].get(
                         "summary_registered", 0
                     )
                 ),
@@ -1433,6 +1425,9 @@ def successor_archway_call_edge_result(
         """Return a bounded live sample without traversing retained facts."""
 
         collection_started = time.perf_counter()
+        callable_evidence = callable_runtime_evidence(
+            session, include_lifecycle=False
+        )
         production = session.scheduler.aggregate_production_telemetry
         production_execution_count = int(
             production["production_execution_count"]
@@ -1444,13 +1439,13 @@ def successor_archway_call_edge_result(
         production_counts = session.scheduler.production_counts
         production_seconds = session.scheduler.production_seconds
 
-        summaries = (
-            session.invocation_registry.callable_summaries
-            if session.invocation_registry is not None else None
+        summary_admissions = (
+            session.native_callable_cell_summary_admissions()
         )
         hottest_callable_applications: list[dict[str, object]] = []
-        if summaries is not None:
-            for address, spec in summaries.applications.items():
+        if summary_admissions:
+            for admission in summary_admissions:
+                address = admission.result
                 providers = session.scheduler.graph.providers(address)
                 executions = sum(
                     production_counts.get(provider, 0)
@@ -1468,12 +1463,12 @@ def successor_archway_call_edge_result(
                 hottest_callable_applications.append({
                     "address_id": address.id,
                     "callable": body_labels.get(
-                        spec.callable_value.body_morphism_id
+                        admission.application.body_morphism_id
                     ),
                     "body_morphism_id": (
-                        spec.callable_value.body_morphism_id
+                        admission.application.body_morphism_id
                     ),
-                    "input_pattern_id": address.subject.input_pattern_id,
+                    "input_pattern_id": admission.partition.id,
                     "executions": executions,
                     "seconds": sum(
                         production_seconds.get(provider, 0.0)
@@ -1591,13 +1586,7 @@ def successor_archway_call_edge_result(
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
-            "morphism_transfer_reuse_counts": (
-                session.morphism_transfer_reuse_counts()
-            ),
-            "invocation_context_counts": session.invocation_context_counts(),
-            "deferred_materialization_counts": (
-                session.deferred_materialization_counts()
-            ),
+            **callable_evidence,
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 * (1024 if sys.platform.startswith("linux") else 1)

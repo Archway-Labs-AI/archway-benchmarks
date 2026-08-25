@@ -452,6 +452,7 @@ from pathlib import Path
 
 from sd_core.analysis.diagram_analysis import open_hybrid_program_session
 from sd_core.tooling.harness import TranslationResult
+from archway_benchmarks.successor_runtime_evidence import callable_runtime_evidence
 
 root = Path(sys.argv[1])
 demand_limit = int(sys.argv[2]) or None
@@ -884,6 +885,9 @@ try:
                 )
             ] += 1
     scheduler_telemetry.pop("production_executions_by_provider", None)
+    callable_evidence = (
+        callable_runtime_evidence(session) if diagnostic_details else {}
+    )
     out = {
         "ok": True,
         "files": files,
@@ -914,30 +918,21 @@ try:
                 session.scheduler.production_replay_hotspots()
                 if diagnostic_details else ()
             ),
-            "morphism_transfer_reuse": dict(
-                session.morphism_transfer_reuse_counts()
-            ) if diagnostic_details else {},
-            "morphism_transfer_reuse_by_operation": dict(
-                session.morphism_transfer_reuse_by_operation()
-            ) if diagnostic_details else {},
-            "atomic_effect_gaps": dict(
-                session.atomic_effect_gap_counts()
-            ) if diagnostic_details else {},
-            "morphism_fact_output_barriers": dict(
-                session.morphism_fact_output_barriers()
-            ) if diagnostic_details else {},
-            "morphism_read_intersections": dict(
-                session.morphism_read_intersections()
-            ) if diagnostic_details else {},
             "invocation_contexts": dict(
-                session.invocation_context_counts()
-            ) if diagnostic_details else {},
+                callable_evidence.get("invocation_context_counts", {})
+            ),
             "invocation_inputs": dict(
-                session.invocation_input_growth_counts()
-            ) if diagnostic_details else {},
+                callable_evidence.get("invocation_input_growth_counts", {})
+            ),
             "invocation_admissions": dict(
-                session.invocation_admission_counts()
-            ) if diagnostic_details else {},
+                callable_evidence.get("invocation_admission_counts", {})
+            ),
+            "invocation_summary_telemetry": callable_evidence.get(
+                "invocation_summary_telemetry", ()
+            ),
+            "semantic_call_admission_refusals": callable_evidence.get(
+                "semantic_call_admission_refusals", ()
+            ),
             "sampling_profile": sampling_profile,
             "unresolved_summary_bodies": dict(
                 unresolved_summary_bodies.most_common(32)
@@ -1214,7 +1209,10 @@ def _probe_env(
     else:
         env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
     existing = env.get("PYTHONPATH")
-    paths = [str(engine_worktree)]
+    paths = [
+        str(engine_worktree),
+        str(Path(__file__).resolve().parents[1]),
+    ]
     if existing:
         paths.append(existing)
     env["PYTHONPATH"] = os.pathsep.join(paths)
