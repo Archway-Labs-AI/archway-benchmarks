@@ -956,7 +956,7 @@ except Exception as exc:
     out = {
         "ok": False,
         "error": f"{type(exc).__name__}: {exc}",
-        "trace_tail": traceback.format_exc()[-2400:],
+        "trace_tail": traceback.format_exc()[-12000:],
     }
 print(json.dumps(out, sort_keys=True))
 '''
