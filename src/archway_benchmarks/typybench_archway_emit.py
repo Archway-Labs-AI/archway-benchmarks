@@ -1035,9 +1035,7 @@ try:
         # drain per body and the convergence explosion caused by admitting
         # sibling bodies simultaneously.
         def admission_group(root_address):
-            body_id = getattr(
-                root_address.subject, "body_morphism_id", ""
-            )
+            body_id = session.observation_workload_body_id(root_address) or ""
             for provider in session.targeted_body_providers:
                 if body_id not in provider.bodies_by_id:
                     continue
@@ -1120,11 +1118,16 @@ try:
                 if checkpoint_tail_start >= 0
                 else all_batches
             )
+        # Labels and ownership come from the diagram's canonical workload
+        # catalog rather than reinterpreting fact-subject implementation
+        # details in the benchmark adapter.
+        def root_label(root_address):
+            body_id = session.observation_workload_body_id(root_address)
+            return body_labels.get(body_id, "?")
+
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
-                body_labels.get(
-                    getattr(root.subject, "body_morphism_id", ""), "?"
-                )
+                root_label(root)
                 for root in root_batch
             ]
                 for root_batch in root_batches
@@ -1163,7 +1166,7 @@ try:
             family_seconds_before = (
                 telemetry_before["seconds"] if telemetry_before else {}
             )
-            body_id = getattr(root_address.subject, "body_morphism_id", "")
+            body_id = session.observation_workload_body_id(root_address) or ""
             body_label = body_labels.get(body_id, "?")
             print(
                 f"ARCHWAY_BODY_START {index}/{len(root_batches)} "
@@ -1323,9 +1326,7 @@ try:
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
                 "root_labels": [
-                    body_labels.get(
-                        getattr(item.subject, "body_morphism_id", ""), "?"
-                    )
+                    root_label(item)
                     for item in root_batch
                 ],
             }
