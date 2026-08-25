@@ -5,9 +5,12 @@ import json
 import pytest
 
 from archway_benchmarks.benchmarks.bugsinpy import BugsInPyBenchmark
-from archway_benchmarks.bugsinpy_agent_causal_scoring import main, score_causal_interactions
+from archway_benchmarks.bugsinpy_agent_causal_scoring import (
+    main, score_causal_interactions, score_forked_comparisons,
+)
 from archway_benchmarks.bugsinpy_agent_protocol import (
     AgentUsage, CausalEvidenceInteraction, CausalStage, EvidenceQueryRecord,
+    ForkedEvidenceComparison,
 )
 from archway_benchmarks.bugsinpy_protocol import RankedFinding, RankedPredictionBundle
 from archway_benchmarks.bugsinpy_protocol import ProtocolViolation
@@ -62,6 +65,65 @@ def test_causal_score_reports_accuracy_cost_and_evidence_quality() -> None:
     assert score["evidence_dispositions"] == {
         "useful": 1, "irrelevant": 0, "misleading": 0, "unusable": 0,
     }
+
+
+def test_forked_score_uses_matched_control_as_primary_estimand(tmp_path) -> None:
+    benchmark = BugsInPyBenchmark(corpus_root="tests/fixtures/bugsinpy")
+    bug = next(item for item in benchmark.load() if item.key == "demoproj:1")
+    request = {"module": "demoproj.core", "row": 11, "col": 4}
+    comparison = ForkedEvidenceComparison(
+        "comparison-1", "model-v1", {}, "b" * 64,
+        CausalStage(
+            "inv-proposal", _prediction(bug.buggy_commit, False), "before", 3.0,
+            AgentUsage(100, 20),
+        ),
+        CausalStage(
+            "inv-control", _prediction(bug.buggy_commit, False), "control", 2.0,
+            AgentUsage(40, 10),
+        ),
+        CausalStage(
+            "inv-evidence", _prediction(bug.buggy_commit, True), "evidence", 2.5,
+            AgentUsage(50, 10),
+        ),
+        EvidenceQueryRecord(
+            1, "call-arguments", request, "not_collected", 0.0, "c" * 64,
+        ),
+        EvidenceQueryRecord(
+            1, "call-arguments", request, "answered", 0.5, "d" * 64,
+        ),
+        "argument may be wrong", "still uncertain", "argument is wrong",
+        "reranked", "confirmed", True, True, ("control", "evidence"),
+        "useful", "Only the evidence review localized the changed line.",
+    )
+
+    roundtrip = ForkedEvidenceComparison.from_json(comparison.to_json())
+    score = score_forked_comparisons(benchmark, (roundtrip,))
+
+    assert score["primary_estimand"] == "evidence_review_minus_matched_control_review"
+    assert score["conditions"]["proposal"]["localization"]["top_line_hits"][1] == 0
+    assert score["conditions"]["control_review"]["localization"]["top_line_hits"][1] == 0
+    assert score["conditions"]["evidence_review"]["localization"]["top_line_hits"][1] == 1
+    assert score["primary_mean_delta"] == {
+        "line_hit": 1.0, "reciprocal_rank": 1.0, "exam_score": -0.99,
+    }
+    assert score["efficiency"] == {
+        "mean_shared_proposal_tokens": 120.0,
+        "mean_control_review_tokens": 50.0,
+        "mean_evidence_review_tokens": 60.0,
+        "mean_evidence_minus_control_review_tokens": 10.0,
+        "mean_control_total_seconds": 5.0,
+        "mean_evidence_total_seconds": 6.0,
+        "control_query_count": 0.0,
+        "evidence_query_count": 1.0,
+    }
+    source = tmp_path / "comparison.json"
+    source.write_text(json.dumps(comparison.to_json()))
+    output = tmp_path / "forked-score.json"
+    assert main([
+        "--corpus-root", "tests/fixtures/bugsinpy", "--comparison", str(source),
+        "--output", str(output),
+    ]) == 0
+    assert json.loads(output.read_text())["comparison_count"] == 1
 
 
 def test_test_directed_score_separates_claimed_causes_from_additional_bugs() -> None:

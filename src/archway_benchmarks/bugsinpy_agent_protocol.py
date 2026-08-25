@@ -14,6 +14,7 @@ from .bugsinpy_protocol import (
 
 AGENT_PAIR_SCHEMA = "archway.bugsinpy.agent-pair.v1"
 CAUSAL_INTERACTION_SCHEMA = "archway.bugsinpy.agent-causal-interaction.v1"
+FORKED_COMPARISON_SCHEMA = "archway.bugsinpy.agent-forked-comparison.v1"
 AgentCondition = Literal["baseline", "archway-evidence"]
 EvidenceDisposition = Literal["useful", "irrelevant", "misleading", "unusable"]
 _CONDITIONS = frozenset({"baseline", "archway-evidence"})
@@ -406,6 +407,140 @@ class CausalEvidenceInteraction:
             hypothesis_after=value["hypothesis_after"],
             evidence_impact=value["evidence_impact"],
             evidence_cited_in_diagnosis=value["evidence_cited_in_diagnosis"],
+            evidence_disposition=value["evidence_disposition"],
+            adjudication_rationale=value["adjudication_rationale"],
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class ForkedEvidenceComparison:
+    """One proposal reviewed with withheld control versus actual Archway evidence."""
+
+    comparison_id: str
+    model_id: str
+    model_config: Mapping[str, Any]
+    detector_input_sha256: str
+    proposal: CausalStage
+    control_review: CausalStage
+    evidence_review: CausalStage
+    control_query: EvidenceQueryRecord
+    evidence_query: EvidenceQueryRecord
+    hypothesis_before: str
+    control_hypothesis_after: str
+    evidence_hypothesis_after: str
+    control_impact: str
+    evidence_impact: str
+    control_response_cited: bool
+    evidence_response_cited: bool
+    review_order: tuple[str, str]
+    evidence_disposition: EvidenceDisposition
+    adjudication_rationale: str
+    schema: str = FORKED_COMPARISON_SCHEMA
+
+    def __post_init__(self) -> None:
+        if self.schema != FORKED_COMPARISON_SCHEMA or not self.comparison_id:
+            raise ProtocolViolation("invalid forked comparison identity")
+        if not self.model_id or len(self.detector_input_sha256) != 64:
+            raise ProtocolViolation("forked comparison lacks pinned model or input identity")
+        invocation_ids = {
+            self.proposal.invocation_id,
+            self.control_review.invocation_id,
+            self.evidence_review.invocation_id,
+        }
+        if len(invocation_ids) != 3:
+            raise ProtocolViolation("forked stages require distinct invocation identities")
+        for stage in (self.control_review, self.evidence_review):
+            for name in ("protocol", "bug_key", "buggy_revision"):
+                if getattr(self.proposal.prediction, name) != getattr(stage.prediction, name):
+                    raise ProtocolViolation(f"forked stage predictions differ in {name}")
+        if (
+            self.control_query.kind != self.evidence_query.kind
+            or dict(self.control_query.request) != dict(self.evidence_query.request)
+        ):
+            raise ProtocolViolation("forked reviews must receive the same query request")
+        if (
+            self.control_query.response_status != "not_collected"
+            or self.control_query.duration_seconds != 0
+        ):
+            raise ProtocolViolation("control query must be deliberately not collected")
+        if self.control_query.response_sha256 == self.evidence_query.response_sha256:
+            raise ProtocolViolation("control and evidence responses require distinct identities")
+        if tuple(self.review_order) not in {
+            ("control", "evidence"), ("evidence", "control")
+        }:
+            raise ProtocolViolation("forked review order must contain both conditions once")
+        if not self.hypothesis_before:
+            raise ProtocolViolation("forked comparison requires a pre-evidence hypothesis")
+        for value in (
+            self.control_hypothesis_after, self.evidence_hypothesis_after,
+        ):
+            if not value:
+                raise ProtocolViolation("forked reviews require post-response hypotheses")
+        for value in (self.control_impact, self.evidence_impact):
+            if value not in {"confirmed", "contradicted", "reranked"}:
+                raise ProtocolViolation("invalid forked review impact")
+        if self.control_response_cited is not True or self.evidence_response_cited is not True:
+            raise ProtocolViolation("both forked reviews must cite their response disposition")
+        if self.evidence_disposition not in {
+            "useful", "irrelevant", "misleading", "unusable"
+        } or not self.adjudication_rationale:
+            raise ProtocolViolation("forked comparison requires evidence adjudication")
+        _reject_forbidden_fields(self.model_config)
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "schema": self.schema,
+            "comparison_id": self.comparison_id,
+            "model_id": self.model_id,
+            "model_config": dict(self.model_config),
+            "detector_input_sha256": self.detector_input_sha256,
+            "proposal": self.proposal.to_json(),
+            "control_review": self.control_review.to_json(),
+            "evidence_review": self.evidence_review.to_json(),
+            "control_query": self.control_query.to_json(),
+            "evidence_query": self.evidence_query.to_json(),
+            "hypothesis_before": self.hypothesis_before,
+            "control_hypothesis_after": self.control_hypothesis_after,
+            "evidence_hypothesis_after": self.evidence_hypothesis_after,
+            "control_impact": self.control_impact,
+            "evidence_impact": self.evidence_impact,
+            "control_response_cited": self.control_response_cited,
+            "evidence_response_cited": self.evidence_response_cited,
+            "review_order": list(self.review_order),
+            "evidence_disposition": self.evidence_disposition,
+            "adjudication_rationale": self.adjudication_rationale,
+        }
+
+    @classmethod
+    def from_json(cls, value: Mapping[str, Any]) -> "ForkedEvidenceComparison":
+        _require_fields(value, {
+            "schema", "comparison_id", "model_id", "model_config",
+            "detector_input_sha256", "proposal", "control_review",
+            "evidence_review", "control_query", "evidence_query",
+            "hypothesis_before", "control_hypothesis_after",
+            "evidence_hypothesis_after", "control_impact", "evidence_impact",
+            "control_response_cited", "evidence_response_cited", "review_order",
+            "evidence_disposition", "adjudication_rationale",
+        }, "forked comparison")
+        if not isinstance(value["review_order"], list):
+            raise ProtocolViolation("forked review order must be a list")
+        return cls(
+            schema=value["schema"], comparison_id=value["comparison_id"],
+            model_id=value["model_id"], model_config=value["model_config"],
+            detector_input_sha256=value["detector_input_sha256"],
+            proposal=CausalStage.from_json(value["proposal"]),
+            control_review=CausalStage.from_json(value["control_review"]),
+            evidence_review=CausalStage.from_json(value["evidence_review"]),
+            control_query=EvidenceQueryRecord.from_json(value["control_query"]),
+            evidence_query=EvidenceQueryRecord.from_json(value["evidence_query"]),
+            hypothesis_before=value["hypothesis_before"],
+            control_hypothesis_after=value["control_hypothesis_after"],
+            evidence_hypothesis_after=value["evidence_hypothesis_after"],
+            control_impact=value["control_impact"],
+            evidence_impact=value["evidence_impact"],
+            control_response_cited=value["control_response_cited"],
+            evidence_response_cited=value["evidence_response_cited"],
+            review_order=tuple(value["review_order"]),
             evidence_disposition=value["evidence_disposition"],
             adjudication_rationale=value["adjudication_rationale"],
         )

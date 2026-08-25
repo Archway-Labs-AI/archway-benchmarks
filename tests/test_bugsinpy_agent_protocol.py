@@ -9,6 +9,7 @@ from archway_benchmarks.bugsinpy_agent_protocol import (
     CausalEvidenceInteraction,
     CausalStage,
     EvidenceQueryRecord,
+    ForkedEvidenceComparison,
 )
 from archway_benchmarks.bugsinpy_protocol import (
     ProtocolViolation,
@@ -118,4 +119,48 @@ def test_causal_interaction_roundtrip_requires_independent_stages() -> None:
             CausalStage("same", prediction(), "before", 1.0, AgentUsage(1, 1)),
             CausalStage("same", prediction(), "after", 1.0, AgentUsage(1, 1)),
             query(), "before", "after", "confirmed", True, "useful", "reason",
+        )
+
+
+def test_forked_comparison_requires_matched_query_and_true_control() -> None:
+    stage = lambda invocation: CausalStage(
+        invocation, prediction(), invocation, 1.0, AgentUsage(1, 1)
+    )
+    request = query().request
+    control = EvidenceQueryRecord(
+        1, "possible-calls", request, "not_collected", 0.0, "d" * 64
+    )
+    evidence = EvidenceQueryRecord(
+        1, "possible-calls", request, "answered", 0.4, "c" * 64
+    )
+    comparison = ForkedEvidenceComparison(
+        "comparison-1", "model", {}, "b" * 64,
+        stage("proposal"), stage("control"), stage("evidence"), control, evidence,
+        "before", "control after", "evidence after", "reranked", "confirmed",
+        True, True, ("evidence", "control"), "useful", "reason",
+    )
+    assert ForkedEvidenceComparison.from_json(comparison.to_json()) == comparison
+
+    mismatched = EvidenceQueryRecord(
+        1, "possible-calls", {**request, "row": 27}, "answered", 0.4, "c" * 64
+    )
+    with pytest.raises(ProtocolViolation, match="same query"):
+        ForkedEvidenceComparison(
+            "comparison-1", "model", {}, "b" * 64,
+            stage("proposal"), stage("control"), stage("evidence"),
+            control, mismatched, "before", "control after", "evidence after",
+            "reranked", "confirmed", True, True, ("control", "evidence"),
+            "useful", "reason",
+        )
+
+    executed_control = EvidenceQueryRecord(
+        1, "possible-calls", request, "not_collected", 0.1, "d" * 64
+    )
+    with pytest.raises(ProtocolViolation, match="deliberately not collected"):
+        ForkedEvidenceComparison(
+            "comparison-1", "model", {}, "b" * 64,
+            stage("proposal"), stage("control"), stage("evidence"),
+            executed_control, evidence, "before", "control after", "evidence after",
+            "reranked", "confirmed", True, True, ("control", "evidence"),
+            "useful", "reason",
         )
