@@ -611,36 +611,42 @@ try:
     if checkpoint_roots:
         targeted = None
         body_profiles = []
-        # Compact corpus runs admit a small batch at a time into the same
-        # persistent session.  This preserves shared knowledge and affected-
-        # region convergence while avoiding both one scheduler drain per body
-        # and the enormous topology wave produced by collective admission.
-        # Admit bounded cohorts into the same persistent scheduler. One root
-        # per drain repeats global stability checks and convergence work for
-        # every signature body; admitting the entire repository at once can
-        # create an unnecessarily large unstable topology wave. Eight roots
-        # preserves frequent durable progress while allowing related demands
-        # to share discovery and SCC convergence.
-        prefix_end = min(checkpoint_tail_start, len(signature_roots))
-        prefix = tuple(
-            signature_roots[index:index + checkpoint_size]
-            for index in range(0, prefix_end, checkpoint_size)
-        ) if checkpoint_tail_start >= 0 else ()
-        tail_start = prefix_end if checkpoint_tail_start >= 0 else 0
-        tail_size = 1 if checkpoint_tail_start >= 0 else checkpoint_size
-        tail_end = (
-            min(len(signature_roots), tail_start + checkpoint_tail_count)
-            if checkpoint_tail_count > 0 else len(signature_roots)
-        )
-        root_batches = prefix + tuple(
-            signature_roots[index:index + tail_size]
-            for index in range(tail_start, tail_end, tail_size)
-        )
+        # Bulk consumers retain every exact public observation address, but
+        # admit diagram-module cohorts into the persistent scheduler.  One
+        # drain per tiny numeric slice repeats global convergence thousands of
+        # times; one repository-wide drain creates an oversized topology wave.
+        # Module ownership is the stable semantic transaction boundary used by
+        # incremental analysis, and allows related callable carriers to share
+        # discovery without coupling unrelated modules.
+        if checkpoint_tail_start < 0:
+            root_batches = session.observation_workload_module_cohorts(
+                signature_roots
+            )
+        else:
+            # Retain exact numeric slicing only for explicit localized
+            # diagnostics. It is not the production workload policy.
+            prefix_end = min(checkpoint_tail_start, len(signature_roots))
+            prefix = tuple(
+                signature_roots[index:index + checkpoint_size]
+                for index in range(0, prefix_end, checkpoint_size)
+            )
+            tail_start = prefix_end
+            tail_end = (
+                min(len(signature_roots), tail_start + checkpoint_tail_count)
+                if checkpoint_tail_count > 0 else len(signature_roots)
+            )
+            root_batches = prefix + tuple(
+                (signature_roots[index],)
+                for index in range(tail_start, tail_end)
+            )
+
+        def root_label(root_address):
+            body_id = session.observation_workload_body_id(root_address)
+            return body_labels.get(body_id, "?")
+
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
-                body_labels.get(
-                    getattr(root.subject, "body_morphism_id", ""), "?"
-                )
+                root_label(root)
                 for root in root_batch
             ]
                 for root_batch in root_batches
@@ -670,7 +676,7 @@ try:
             family_seconds_before = (
                 telemetry_before["seconds"] if telemetry_before else {}
             )
-            body_id = getattr(root_address.subject, "body_morphism_id", "")
+            body_id = session.observation_workload_body_id(root_address) or ""
             body_label = body_labels.get(body_id, "?")
             sample_this_body = (
                 sample_rate_hz and body_label == sample_body_label
@@ -748,9 +754,7 @@ try:
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
                 "root_labels": [
-                    body_labels.get(
-                        getattr(item.subject, "body_morphism_id", ""), "?"
-                    )
+                    root_label(item)
                     for item in root_batch
                 ],
             }
