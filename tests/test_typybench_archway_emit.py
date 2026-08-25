@@ -545,6 +545,45 @@ def analyze_source(source, module_name):
     assert stats.files_failed == 2
 
 
+def test_emit_predictions_retains_repository_timeout_evidence(
+    tmp_path, monkeypatch
+) -> None:
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "demo.py").write_text("def f(x):\n    return x\n")
+    progress = {
+        "phase_progress": {"forward": 12.5, "body_roots": 40},
+        "body_profiles": [{"index": 3, "total": 8}],
+    }
+    monkeypatch.setattr(
+        typybench_emit,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
+            "ok": False,
+            "error": "TimeoutExpired: analysis exceeded 30s",
+            "trace_tail": "ARCHWAY_BODY 3/8",
+            "analysis_summary": progress,
+        },
+    )
+
+    stats = emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=tmp_path / "predictions",
+        engine_worktree=engine,
+        timeout=30,
+    )
+
+    assert stats.files_analyzed == 0
+    assert stats.probe_error == "TimeoutExpired: analysis exceeded 30s"
+    assert stats.probe_trace_tail == "ARCHWAY_BODY 3/8"
+    assert stats.analysis_summary == progress
+    assert stats.file_profiles[0].status == "engine_failed"
+    assert stats.file_profiles[0].analysis_summary == progress
+
+
 def test_emit_predictions_trace_jsonl_records_raw_rendered_and_insertion(
     tmp_path, monkeypatch
 ) -> None:
