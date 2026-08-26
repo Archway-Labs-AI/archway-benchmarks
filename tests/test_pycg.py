@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
 import signal
 import time
 from pathlib import Path
@@ -26,6 +27,15 @@ from archway_benchmarks.pycg import (
     score_edges,
     successor_archway_call_edge_result,
 )
+
+
+def _engine_root() -> Path:
+    configured = os.environ.get("ARCHWAY_ENGINE_ROOT")
+    if configured:
+        return Path(configured).resolve()
+    from sd_core.analysis import diagram_analysis
+
+    return Path(diagram_analysis.__file__).resolve().parents[3]
 
 
 def test_pycg_scoring_normalization_is_unique_and_auditable() -> None:
@@ -132,7 +142,7 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
         "x = lambda x: x + 1\nx(1)\n", encoding="utf-8"
     )
     (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
+    engine_root = _engine_root()
 
     result = successor_archway_call_edge_result(
         case, engine_root=engine_root.resolve()
@@ -202,7 +212,7 @@ def test_successor_adapter_scores_only_semantic_receiver_targets(
         encoding="utf-8",
     )
     (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
+    engine_root = _engine_root()
 
     result = successor_archway_call_edge_result(
         case, engine_root=engine_root.resolve()
@@ -227,7 +237,7 @@ def test_successor_adapter_projects_diagram_semantic_call_graph(
         "def target():\n    return 1\ntarget()\n", encoding="utf-8"
     )
     (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
+    engine_root = _engine_root()
 
     result = successor_archway_call_edge_result(
         case, engine_root=engine_root.resolve()
@@ -262,7 +272,7 @@ def test_successor_completed_evidence_collapses_repeated_contexts_per_callsite(
         encoding="utf-8",
     )
     (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
+    engine_root = _engine_root()
 
     result = successor_archway_call_edge_result(
         case, engine_root=engine_root.resolve()
