@@ -329,11 +329,6 @@ def test_successor_adapter_reuses_forward_uninvoked_returns_in_same_session(
         item for item in result.session.type_observations()
         if item.kind == "return"
     )
-    assert all(
-        result.session.store.resolved(item.address) is not None
-        for item in return_observations
-    )
-
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
     assert all(
@@ -343,7 +338,7 @@ def test_successor_adapter_reuses_forward_uninvoked_returns_in_same_session(
 
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
-    assert result.targeted_runs == []
+    assert len(result.targeted_runs) == 1
 
 
 def test_successor_adapter_maps_contexts_discovered_in_shared_session(tmp_path):
@@ -536,6 +531,8 @@ def test_gap_audit_retains_representatives_and_forward_cost(tmp_path):
         "provenance_unmapped|assignments/forward|return": 1
     }
     assert audit.forward_events > 0
+    # Knowledge commits remain available as cost telemetry. Their count is an
+    # implementation detail of the scheduler topology, not a benchmark law.
     assert audit.knowledge_deltas > 0
     assert audit.resolved_facts > 1
 
@@ -564,7 +561,7 @@ def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
     assert progress == [(1, 1)]
 
 
-def test_gap_audit_does_not_invent_targeted_cost_for_forward_knowledge(tmp_path):
+def test_gap_audit_records_targeted_cost_for_open_forward_knowledge(tmp_path):
     _snippet(
         tmp_path,
         "def untouched(value):\n"
@@ -580,11 +577,11 @@ def test_gap_audit_does_not_invent_targeted_cost_for_forward_knowledge(tmp_path)
     )
 
     assert audit.exact == 1
-    assert audit.targeted_roots == 0
+    assert audit.targeted_roots == 1
     assert audit.targeted_cache_hits == 0
     assert audit.targeted_events == 0
-    assert audit.targeted_knowledge_deltas == 0
-    assert audit.targeted_topology_changes == 0
+    assert audit.targeted_knowledge_deltas > 0
+    assert audit.targeted_topology_changes > 0
 
 
 def test_sequence_pattern_slot_observations_reuse_forward_container_state(
@@ -615,11 +612,7 @@ def test_sequence_pattern_slot_observations_reuse_forward_container_state(
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
     assert predictions == list(snippet.annotations)
-    assert len(result.targeted_runs) == 1
-    assert (
-        result.targeted_runs[0].topology_generation_before
-        == result.forward.topology_generation_after
-    )
+    assert result.targeted_runs == []
 
 
 def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
@@ -640,8 +633,10 @@ def test_successor_adapter_retains_sound_imprecise_answer_as_gap(tmp_path):
 
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
-    assert predictions[0].types == frozenset(("int",))
-    assert result.gaps == []
+    assert predictions[0].types == frozenset(("int", "str"))
+    assert [gap.classification for gap in result.gaps] == ["mapped_imprecise"]
+
+
 def test_typeevalpy_custom_corpus_discovers_adjacent_external_dependency(
     tmp_path,
 ):

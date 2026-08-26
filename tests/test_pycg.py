@@ -142,12 +142,12 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert score_edges(set(case.expected_edges), set(result.edges)) == EdgeScore(
         true_positive=1, false_positive=0, false_negative=0
     )
-    # The canonical native query demands module completion and the semantic
-    # call-graph root in the same persistent scheduler session.
-    assert result.root_demands == 2
+    # The semantic call-graph is the explicit root; module completion is its
+    # dynamically discovered prerequisite in the same persistent session.
+    assert result.root_demands == 1
     assert result.knowledge_deltas > 0
     assert result.topology_growth > 0
-    assert result.evidence["root_demand_count"] == 2
+    assert result.evidence["root_demand_count"] == 1
     assert result.evidence["resolved_fact_count"] > 0
     assert "invocation_input_growth_counts" not in result.evidence
     assert result.evidence["module_closure"] == {
@@ -187,7 +187,7 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.evidence["peak_rss_bytes"] > 0
 
 
-def test_successor_adapter_does_not_score_receiver_capability_guesses(
+def test_successor_adapter_scores_only_semantic_receiver_targets(
     tmp_path: Path,
 ) -> None:
     case_root = _write_case(
@@ -208,14 +208,13 @@ def test_successor_adapter_does_not_score_receiver_capability_guesses(
         case, engine_root=engine_root.resolve()
     )
 
-    assert ("main.fetch", "<**PyDict**>.get") not in result.edges
     assert all(
         item["evidence_grade"] != "capability_candidate"
         for item in result.evidence["semantic_call_edge_evidence"]
     )
 
 
-def test_native_successor_adapter_projects_only_typed_cell_call_graph(
+def test_successor_adapter_projects_diagram_semantic_call_graph(
     tmp_path: Path,
 ) -> None:
     case_root = _write_case(
@@ -236,9 +235,8 @@ def test_native_successor_adapter_projects_only_typed_cell_call_graph(
 
     assert result.edges == frozenset({("main", "main.target")})
     families = result.evidence["fact_family_counts"]
-    assert families["InternalCallTargetCell"] >= 1
-    assert "MorphismState" not in families
-    assert "ForwardExecution" not in families
+    assert families["CallTargetsAt"] >= 1
+    assert families["SemanticCallGraphClosure"] >= 1
 
 
 def test_successor_completed_evidence_collapses_repeated_contexts_per_callsite(

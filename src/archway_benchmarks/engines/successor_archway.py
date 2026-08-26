@@ -152,6 +152,7 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
         predictions: list[Annotation] = []
         observations = result.session.type_observations()
         mapped: list[tuple[Annotation, tuple[Any, ...]]] = []
+        pending_unmapped: list[Annotation] = []
         for requested in snippet.annotations:
             candidates = _map_observations(observations, requested.location)
             if not candidates:
@@ -159,13 +160,7 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
                     result.session, requested.location
                 )
             if not candidates:
-                result.gaps.append(SuccessorGap(
-                    requested.location,
-                    "provenance_unmapped",
-                    snippet.suite_path,
-                    requested.types,
-                    detail="no diagram type observation at benchmark location",
-                ))
+                pending_unmapped.append(requested)
                 continue
             mapped.append((requested, candidates))
 
@@ -203,9 +198,30 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
                 )
                 for requested, candidates in mapped
             ]
+            still_unmapped = []
+            for requested in pending_unmapped:
+                candidates = _map_observations(
+                    refined_observations, requested.location
+                ) or _map_container_path(
+                    result.session, requested.location
+                )
+                if candidates:
+                    mapped.append((requested, candidates))
+                else:
+                    still_unmapped.append(requested)
+            pending_unmapped = still_unmapped
             missing_addresses = _unresolved_query_addresses(
                 result.session, mapped
             )
+
+        for requested in pending_unmapped:
+            result.gaps.append(SuccessorGap(
+                requested.location,
+                "provenance_unmapped",
+                snippet.suite_path,
+                requested.types,
+                detail="no diagram type observation after demand convergence",
+            ))
 
         for requested, candidates in mapped:
             resolved = [
@@ -306,9 +322,7 @@ def _observation_kind_matches(item, location: Location) -> bool:
     )
 
 
-def _observation_scope_matches(
-    item, location: Location
-) -> bool:
+def _observation_scope_matches(item, location: Location) -> bool:
     observed = item.function
     requested = location.function
     if observed == requested:
@@ -378,8 +392,6 @@ def _map_container_path(session, location: Location):
         and item.position is not None
         and item.position.row == location.line
     )
-
-
 def _typeeval_name(value: str) -> str:
     if value == "builtins.callable":
         return "callable"

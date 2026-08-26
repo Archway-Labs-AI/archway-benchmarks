@@ -1145,6 +1145,11 @@ try:
     # do not restart analysis per annotation or route through the removed
     # coarse body-summary runtime.
     signature_roots = requested
+    if requested_root_ids:
+        signature_roots = tuple(
+            root_address for root_address in signature_roots
+            if root_address.id in requested_root_ids
+        )
     print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
     if diagnostic_details and len(signature_roots) <= 32:
         print(
@@ -1250,6 +1255,9 @@ try:
                 if checkpoint_tail_start >= 0
                 else all_batches
             )
+        # Labels and ownership come from the diagram's canonical workload
+        # catalog rather than reinterpreting fact-subject implementation
+        # details in the benchmark adapter.
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
                 body_labels.get(
