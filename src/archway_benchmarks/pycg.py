@@ -1450,9 +1450,10 @@ def successor_archway_call_edge_result(
         """Project a diagnostic graph without claiming scheduler convergence."""
 
         projection_started = time.perf_counter()
-        semantic_edges = session.semantic_call_edges(
-            include_capability_candidates=True
-        )
+        # Capability candidates are useful diagnostics for missing receiver
+        # flow, but they are abductive method-name guesses rather than
+        # semantic call edges.  Never score them as analysis results.
+        semantic_edges = session.semantic_call_edges()
         direct_edges = {
             (
                 edge.caller.display_name
@@ -1756,9 +1757,7 @@ def successor_archway_call_edge_result(
             sampler.join(timeout=1.0)
     analysis_seconds = time.perf_counter() - analysis_started
     semantic_projection_started = time.perf_counter()
-    semantic_edges = session.semantic_call_edges(
-        include_capability_candidates=True
-    )
+    semantic_edges = session.semantic_call_edges()
     edges = {
         (
             edge.caller.display_name

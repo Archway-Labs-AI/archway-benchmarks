@@ -187,6 +187,34 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert result.evidence["peak_rss_bytes"] > 0
 
 
+def test_successor_adapter_does_not_score_receiver_capability_guesses(
+    tmp_path: Path,
+) -> None:
+    case_root = _write_case(
+        tmp_path,
+        "methods",
+        "unknown_receiver",
+        {"main": [], "main.fetch": []},
+    )
+    (case_root / "main.py").write_text(
+        "def fetch(service):\n"
+        "    return service.get('item')\n",
+        encoding="utf-8",
+    )
+    (case,) = load_cases(tmp_path)
+    engine_root = Path(__file__).parents[2] / "engine"
+
+    result = successor_archway_call_edge_result(
+        case, engine_root=engine_root.resolve()
+    )
+
+    assert ("main.fetch", "<**PyDict**>.get") not in result.edges
+    assert all(
+        item["evidence_grade"] != "capability_candidate"
+        for item in result.evidence["semantic_call_edge_evidence"]
+    )
+
+
 def test_native_successor_adapter_projects_only_typed_cell_call_graph(
     tmp_path: Path,
 ) -> None:
