@@ -250,7 +250,7 @@ def emit_archway_predictions(
     session_open_timeout: int | None = None,
     forward_timeout: int | None = None,
     emit_variable_annotations: bool = False,
-    emit_class_field_annotations: bool = False,
+    emit_class_field_annotations: bool = True,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -318,7 +318,9 @@ def emit_archway_predictions(
             observation_kinds=frozenset((
                 "parameter",
                 "return",
-                *(("variable",) if emit_variable_annotations else ()),
+                *(("variable",) if (
+                    emit_variable_annotations or emit_class_field_annotations
+                ) else ()),
             )),
         )
         seconds_repo_probe = time.monotonic() - probe_started
@@ -583,7 +585,9 @@ def _successor_variable_types(
         if class_fields_only and (
             item.get("function") is not None
             or "." not in str(name)
-            or item.get("family") != "ClassFieldTypeOf"
+            or item.get("family") != "ClassAttributeTypeOf"
+            or "transformed constructor-field type"
+            not in item.get("evidence_rules", ())
         ):
             continue
         # Class-attribute observations retain their qualified semantic name
@@ -998,6 +1002,9 @@ try:
             # through the public restored runtime contract; class-field
             # templates are part of the ordinary diagram catalog.
             signature_observations_only=True,
+            class_field_observations=(
+                "variable" in requested_observation_kinds
+            ),
         )
     finally:
         signal.alarm(0)
@@ -1638,6 +1645,9 @@ try:
                 "name": item.name,
                 "kind": item.kind,
                 "family": item.address.family,
+                "evidence_rules": sorted(
+                    evidence.rule_id for evidence in fact.evidence
+                ) if fact is not None else [],
                 "function": item.function,
                 # Retain unresolved catalog entries as explicit missing
                 # evidence.  The source adapter inserts nothing for an empty

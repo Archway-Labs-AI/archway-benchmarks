@@ -369,7 +369,7 @@ def test_repository_emission_keeps_variable_annotations_opt_in(
     ).read_text()
     assert opted_in.variables_annotated == 1
     assert requested_kinds == [
-        frozenset(("parameter", "return")),
+        frozenset(("parameter", "return", "variable")),
         frozenset(("parameter", "return", "variable")),
     ]
 
@@ -393,7 +393,8 @@ def test_repository_emission_can_include_diagram_class_fields_explicitly(
                 "line": 2,
                 "name": "Model.value",
                 "kind": "variable",
-                "family": "ClassFieldTypeOf",
+                "family": "ClassAttributeTypeOf",
+                "evidence_rules": ["transformed constructor-field type"],
                 "function": None,
                 "types": ["builtins.int"],
             }]},
