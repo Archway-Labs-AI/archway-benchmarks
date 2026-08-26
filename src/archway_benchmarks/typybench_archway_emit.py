@@ -638,6 +638,7 @@ def _run_successor_repo_probe(
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
 import gc
+import inspect
 import json
 import os
 import signal
@@ -838,19 +839,40 @@ try:
         )
         session_profiler.__enter__()
     try:
-        session = open_hybrid_program_session(
-            modules, entry, record_events=False,
-            record_timings=record_timings,
-            record_telemetry=diagnostic_details,
+        session_parameters = inspect.signature(
+            open_hybrid_program_session
+        ).parameters
+        session_options = {
+            "record_events": False,
+            "record_timings": record_timings,
+            "record_telemetry": diagnostic_details,
             # TypyBench observes a repository as an importable library surface;
             # it does not identify an executable entry point.  Keep one root
             # for bulk import seeding, but bind every module's ``__name__`` to
             # its qualified import name.  Treating an arbitrary shallow module
             # as ``__main__`` executes CLI guards and admits an unrelated whole
             # application call graph into signature inference.
-            possible_entry_modules=frozenset(),
-            body_observations_only=True,
-            class_field_observations=True,
+            "possible_entry_modules": frozenset(),
+            "class_field_observations": True,
+        }
+        if "body_observations_only" in session_parameters:
+            session_options["body_observations_only"] = True
+            observation_policy = "body-observations-only"
+        elif "signature_observations_only" in session_parameters:
+            # The restored reduced-product runtime catalogs parameters,
+            # returns, and explicitly requested class fields through its
+            # signature scope. This is the narrowest supported TypyBench
+            # workload; do not silently fall back to the full variable
+            # catalog or select a different runtime implementation.
+            session_options["signature_observations_only"] = True
+            observation_policy = "signature-observations-only"
+        else:
+            raise RuntimeError(
+                "analysis runtime exposes no scoped TypyBench observation "
+                "policy"
+            )
+        session = open_hybrid_program_session(
+            modules, entry, **session_options
         )
     finally:
         if session_profiler is not None:
@@ -899,9 +921,21 @@ try:
         # observations as one shared reduced-product wave; backward relevance
         # admits concrete/control/call coordinates when type production needs
         # them, without eagerly evaluating the full executable product.
+        type_priority_forward = getattr(
+            session, "run_type_priority_forward", None
+        )
         forward = (
-            session.run_type_priority_forward()
-            if run_forward_seed else None
+            type_priority_forward()
+            if run_forward_seed and type_priority_forward is not None
+            else None
+        )
+        forward_policy = (
+            "type-priority-forward"
+            if forward is not None
+            else (
+                "unsupported-skipped"
+                if run_forward_seed else "disabled"
+            )
         )
     except TimeoutError:
         timed_out_forward = True
@@ -1539,6 +1573,10 @@ try:
         "ok": True,
         "files": files,
         "analysis_summary": {
+            "runtime_policy": {
+                "observation_scope": observation_policy,
+                "forward_seed": forward_policy,
+            },
             "modules": len(modules),
             "observations": len(observations),
             "targeted_addresses": len(missing),
