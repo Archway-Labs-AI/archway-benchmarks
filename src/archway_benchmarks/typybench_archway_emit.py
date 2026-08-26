@@ -1192,7 +1192,11 @@ try:
                 session.scheduler.graph.component_edge_update_telemetry
             )
             topology_counts_before = dict(
-                session.scheduler.graph.topology_change_counts
+                getattr(
+                    session.scheduler.graph,
+                    "topology_change_counts",
+                    {},
+                )
             )
             gc_before = gc_profile_snapshot()
             summary_registry = session.invocation_registry.callable_summaries
@@ -1281,23 +1285,40 @@ try:
                 for workload_root in root_batch:
                     workload_body_id = getattr(
                         workload_root.subject, "body_morphism_id", ""
-                    )
+                    ) or session.observation_workload_body_id(workload_root)
                     for provider in session.targeted_body_providers:
-                        templates = provider._root_observations.get(
-                            workload_root
-                        )
-                        if templates is None:
+                        if workload_body_id not in provider.bodies_by_id:
                             continue
+                        root_observations = getattr(
+                            provider, "_root_observations", None
+                        )
+                        templates = (
+                            root_observations.get(workload_root)
+                            if root_observations is not None
+                            else tuple(
+                                template for template in provider.plan.templates
+                                if template.body_morphism_id
+                                == workload_body_id
+                            )
+                        )
+                        active_counts = getattr(
+                            provider,
+                            "_workload_active_morphism_counts",
+                            {},
+                        )
+                        required_bindings = getattr(
+                            provider,
+                            "_required_definition_bindings",
+                            {},
+                        )
                         workload_relevance.append({
                             "root_id": workload_root.id,
                             "observation_count": len(templates),
                             "active_morphism_count": (
-                                provider._workload_active_morphism_counts.get(
-                                    workload_root
-                                )
+                                active_counts.get(workload_root)
                             ),
                             "required_definition_bindings": sorted(
-                                provider._required_definition_bindings.get((
+                                required_bindings.get((
                                     workload_body_id,
                                     workload_root.context,
                                 ), ())
@@ -1316,7 +1337,11 @@ try:
                 "topology_change_counts": {
                     name: value - topology_counts_before.get(name, 0)
                     for name, value in (
-                        session.scheduler.graph.topology_change_counts
+                        getattr(
+                            session.scheduler.graph,
+                            "topology_change_counts",
+                            {},
+                        )
                     ).items()
                 },
                 "component_edge_updates": {
