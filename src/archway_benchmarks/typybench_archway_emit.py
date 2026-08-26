@@ -874,6 +874,19 @@ try:
         session = open_hybrid_program_session(
             modules, entry, **session_options
         )
+        workload_root_projection = getattr(
+            session, "observation_workload_roots", None
+        )
+        if workload_root_projection is None:
+            # Exact observation addresses are already coalesced by the shared
+            # scheduler/store. The retired native helper returned precisely
+            # this stable-order deduplication; retaining exact query identity
+            # does not select or emulate another analysis implementation.
+            def workload_root_projection(addresses):
+                return tuple(dict.fromkeys(addresses))
+            workload_root_policy = "exact-address-deduplication"
+        else:
+            workload_root_policy = "runtime-projection"
     finally:
         if session_profiler is not None:
             session_profiler.__exit__(None, None, None)
@@ -967,14 +980,14 @@ try:
     missing = tuple(dict.fromkeys(
         item.address for item in missing_observations
     ))
-    all_signature_roots = session.observation_workload_roots(missing)
+    all_signature_roots = workload_root_projection(missing)
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
     requested = (
         missing
         if requested_body_labels
         else missing[:demand_limit] if demand_limit is not None else missing
     )
-    signature_roots = session.observation_workload_roots(requested)
+    signature_roots = workload_root_projection(requested)
     body_labels = {
         template.body_morphism_id: (
             f"{template.module.dotted if template.module else '?'}:"
@@ -1576,6 +1589,7 @@ try:
             "runtime_policy": {
                 "observation_scope": observation_policy,
                 "forward_seed": forward_policy,
+                "workload_roots": workload_root_policy,
             },
             "modules": len(modules),
             "observations": len(observations),
