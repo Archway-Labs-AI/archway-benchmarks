@@ -1075,9 +1075,21 @@ try:
             for provider in session.targeted_body_providers:
                 if body_id not in provider.bodies_by_id:
                     continue
+                binding_names = getattr(
+                    provider, "body_binding_names", None
+                )
+                boundary = session.callable_boundaries_by_body.get(body_id)
+                shared_definition = (
+                    binding_names.get(body_id, body_id)
+                    if binding_names is not None
+                    else (
+                        boundary.definition_morphism_id
+                        if boundary is not None else body_id
+                    )
+                )
                 return (
                     id(provider),
-                    provider.body_binding_names.get(body_id, body_id),
+                    shared_definition,
                 )
             return ("unowned", body_id)
 
