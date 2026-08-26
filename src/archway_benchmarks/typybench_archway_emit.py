@@ -902,6 +902,11 @@ try:
             )
     session_open_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
+
+    def optional_session_diagnostic(name, default):
+        method = getattr(session, name, None)
+        return method() if method is not None else default
+
     if disable_cyclic_gc:
         # Translation/session construction creates temporary cyclic objects
         # that are not part of the persistent semantic graph.  Collect those
@@ -1665,40 +1670,44 @@ try:
                 if diagnostic_details else ()
             ),
             "morphism_transfer_reuse": dict(
-                session.morphism_transfer_reuse_counts()
+                optional_session_diagnostic("morphism_transfer_reuse_counts", {})
             ) if diagnostic_details else {},
             "morphism_transfer_reuse_by_operation": dict(
-                session.morphism_transfer_reuse_by_operation()
+                optional_session_diagnostic("morphism_transfer_reuse_by_operation", {})
             ) if diagnostic_details else {},
             "atomic_effect_gaps": dict(
-                session.atomic_effect_gap_counts()
+                optional_session_diagnostic("atomic_effect_gap_counts", {})
             ) if diagnostic_details else {},
             "morphism_fact_output_barriers": dict(
-                session.morphism_fact_output_barriers()
+                optional_session_diagnostic("morphism_fact_output_barriers", {})
             ) if diagnostic_details else {},
             "morphism_read_intersections": dict(
-                session.morphism_read_intersections()
+                optional_session_diagnostic("morphism_read_intersections", {})
             ) if diagnostic_details else {},
             "invocation_contexts": dict(
-                session.invocation_context_counts()
+                optional_session_diagnostic("invocation_context_counts", {})
             ),
             "invocation_inputs": dict(
-                session.invocation_input_growth_counts()
+                optional_session_diagnostic("invocation_input_growth_counts", {})
             ),
             "invocation_admissions": dict(
-                session.invocation_admission_counts()
+                optional_session_diagnostic("invocation_admission_counts", {})
             ),
             "invocation_application_hotspots": list(
-                session.invocation_application_hotspots()
+                optional_session_diagnostic("invocation_application_hotspots", ())
             ),
             "invocation_product_demand_hotspots": list(
-                session.invocation_product_demand_hotspots()
+                optional_session_diagnostic("invocation_product_demand_hotspots", ())
             ),
             "invocation_application_runtime_hotspots": list(
-                session.invocation_application_runtime_hotspots()
+                optional_session_diagnostic(
+                    "invocation_application_runtime_hotspots", ()
+                )
             ) if diagnostic_details else [],
             "invocation_application_invalidation_hotspots": list(
-                session.invocation_application_invalidation_hotspots()
+                optional_session_diagnostic(
+                    "invocation_application_invalidation_hotspots", ()
+                )
             ) if diagnostic_details else [],
             "sampling_profile": sampling_profile,
             "unresolved_summary_bodies": dict(
