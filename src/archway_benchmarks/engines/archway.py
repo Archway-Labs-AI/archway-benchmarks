@@ -1,36 +1,16 @@
-"""Archway engine pair — HTTP client for the local analysis dev server.
+"""Shared Archway translation and result contracts.
 
-Calls Archway's ``sd_core.analysis_server`` (default ``http://localhost:8788``),
-which runs ``load_package -> analyze_program -> finalize`` and returns the
-``FinalizedAnalysis`` JSON for the snippet's ``main`` module.
-
-The translation/analysis split here is mostly passthrough: the Archway server
-does translation + analysis in one call, so ``ArchwayTranslationEngine`` just
-bundles ``(source, path)`` and the heavy lifting happens in
-``ArchwayAnalysisEngine.analyze`` (one HTTP GET per snippet). This matches the
-harness Protocol shape (separate ``translate`` and ``analyze`` steps) while
-letting the Archway server keep its single-call API.
-
-Per the multi-module protocol (see ``docs/multi_module_server_protocol.md``),
-we send ``GET /types?module=main.py&root=<snippet_dir>`` for every snippet —
-single-file and multi-file alike. The server's ``load_package(root)`` walks
-the directory, brings every sibling/submodule into scope, and analyses the
-whole program so the ``main`` module's bindings reflect cross-module flow.
-
-The opaque ``ArchwayAnalysisResult`` is consumed only by
-``archway_benchmarks.benchmarks.archway_adapter.ArchwayAnalysisResultAdapter``.
+The canonical benchmark analyzer is the in-process diagram successor.  This
+module retains only the source-graph translation carrier and the stable result
+shape consumed by public scoring adapters; the former HTTP/monolith analyzer
+has been removed.
 """
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.parse
-import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from archway_benchmarks.archway_config import DEFAULT_SERVER_URL
 
 
 @dataclass(frozen=True)
@@ -131,75 +111,3 @@ def _module_name(relative: Path) -> str:
     if parts[-1] == "__init__":
         parts.pop()
     return ".".join(parts) if parts else relative.parent.name
-
-
-class ArchwayAnalysisEngine:
-    """GETs the snippet's main module from the analysis dev server.
-
-    ``corpus_root`` is the benchmark's on-disk root. Snippets carry suite-
-    relative ``file_path`` (e.g. ``args/call/main.py``) so they can be used
-    as join keys across the harness; here we resolve them against
-    ``corpus_root`` to get the absolute path the server's ``root`` query
-    param needs. If a snippet's path is already absolute it's used as-is.
-
-    Failures (network, timeout, server-side 422 from translation/analysis
-    errors, 404 for unresolvable module/root) are captured as
-    ``ArchwayAnalysisResult.error`` rather than raised, so a single snippet
-    that fails to translate doesn't abort the whole corpus run.
-    """
-
-    name = "archway-analysis"
-
-    def __init__(
-        self,
-        server_url: str = DEFAULT_SERVER_URL,
-        timeout: float = 30.0,
-        corpus_root: Path | str | None = None,
-        body_summary_consumption: str = "off",
-    ) -> None:
-        if body_summary_consumption not in {"off", "safe"}:
-            raise ValueError(
-                "body_summary_consumption must be 'off' or 'safe'; got "
-                f"{body_summary_consumption!r}"
-            )
-        self.server_url = server_url.rstrip("/")
-        self.timeout = timeout
-        self.corpus_root: Path | None = Path(corpus_root) if corpus_root else None
-        self.body_summary_consumption = body_summary_consumption
-
-    def analyze(self, translation: Any) -> ArchwayAnalysisResult:
-        if not isinstance(translation, ArchwayTranslation):
-            raise TypeError(
-                "ArchwayAnalysisEngine only consumes ArchwayTranslation; got "
-                f"{type(translation).__name__}"
-            )
-        main_path = Path(translation.path)
-        if not main_path.is_absolute() and self.corpus_root is not None:
-            main_path = self.corpus_root / main_path
-        snippet_dir = str(main_path.parent.resolve())
-        query = {"module": main_path.name, "root": snippet_dir}
-        if self.body_summary_consumption != "off":
-            query["body_summary_consumption"] = self.body_summary_consumption
-        params = urllib.parse.urlencode(query)
-        url = f"{self.server_url}/types?{params}"
-        req = urllib.request.Request(url, method="GET")
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                payload = json.loads(resp.read())
-            module = payload.get("module") or {}
-            return ArchwayAnalysisResult(
-                snippet_path=translation.path,
-                module_bindings=module.get("bindings", {}) or {},
-                functions=tuple(payload.get("functions", []) or []),
-                module_name=payload.get("module_name"),
-            )
-        except urllib.error.HTTPError as e:
-            try:
-                msg = json.loads(e.read()).get("error", str(e))
-            except Exception:
-                msg = str(e)
-            return ArchwayAnalysisResult(snippet_path=translation.path, error=msg)
-        except (urllib.error.URLError, TimeoutError, OSError) as e:
-            return ArchwayAnalysisResult(
-                snippet_path=translation.path, error=f"{type(e).__name__}: {e}"
-            )

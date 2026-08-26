@@ -98,6 +98,41 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                     active_body = None
             except ValueError:
                 continue
+        elif line.startswith("ARCHWAY_BODY_DETAIL "):
+            try:
+                detail = json.loads(
+                    line.removeprefix("ARCHWAY_BODY_DETAIL ")
+                )
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(detail, dict):
+                continue
+            index = detail.get("index")
+            profile = next(
+                (
+                    item for item in reversed(body_profiles)
+                    if item["index"] == index
+                ),
+                None,
+            )
+            if profile is not None:
+                profile["performance_detail"] = {
+                    key: detail[key]
+                    for key in (
+                        "top_execution_families",
+                        "top_family_seconds",
+                        "top_production_operations",
+                        "top_production_seconds",
+                        "top_production_phases",
+                        "top_production_phase_seconds",
+                        "top_transfer_operations",
+                        "top_transfer_seconds",
+                        "topology_change_counts",
+                        "component_edge_updates",
+                        "gc",
+                    )
+                    if key in detail
+                }
         elif line.startswith("ARCHWAY_TRANSLATION_START "):
             active_translation_file = line.removeprefix(
                 "ARCHWAY_TRANSLATION_START "
@@ -177,6 +212,7 @@ class EmitStats:
     params_annotated: int
     returns_annotated: int
     variables_annotated: int = 0
+    seconds_engine_probe: float = 0.0
     failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
     file_profiles: tuple[FileProfile, ...] = field(default_factory=tuple)
     engine_sha: str | None = None
@@ -199,15 +235,22 @@ def emit_archway_predictions(
     trace_jsonl: Path | None = None,
     profile_jsonl: Path | None = None,
     progress_log: Path | None = None,
-    body_summary_consumption: str = "off",
-    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
-    type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
     body_timeout: int | None = None,
+    body_labels: tuple[str, ...] | None = None,
+    checkpoint_batch_start: int | None = None,
+    checkpoint_batch_count: int | None = None,
+    checkpoint_replay_prefix: bool = True,
+    run_forward_seed: bool = True,
     progress_timeout: int | None = None,
+    sample_session_open: bool = False,
+    sample_forward: bool = False,
+    sample_rate_hz: float | None = None,
+    session_open_timeout: int | None = None,
+    forward_timeout: int | None = None,
     emit_variable_annotations: bool = False,
-    emit_class_field_annotations: bool = False,
+    emit_class_field_annotations: bool = True,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -247,6 +290,7 @@ def emit_archway_predictions(
     file_profiles: list[FileProfile] = []
 
     try:
+        started = time.monotonic()
         probe_started = time.monotonic()
         repo_record = _run_successor_repo_probe(
             engine_worktree=Path(engine_worktree),
@@ -256,12 +300,27 @@ def emit_archway_predictions(
             progress_log=progress_log,
             checkpoint_roots=checkpoint_roots,
             body_timeout=body_timeout,
+            body_labels=body_labels,
+            checkpoint_batch_start=checkpoint_batch_start,
+            checkpoint_batch_count=checkpoint_batch_count,
+            checkpoint_replay_prefix=checkpoint_replay_prefix,
+            run_forward_seed=run_forward_seed,
             progress_timeout=progress_timeout,
-            diagnostic_details=False,
+            sample_session_open=sample_session_open,
+            sample_forward=sample_forward,
+            sample_rate_hz=sample_rate_hz,
+            session_open_timeout=session_open_timeout,
+            forward_timeout=forward_timeout,
+            diagnostic_details=(
+                analysis_observation_mode == "diagnostic"
+            ),
+            record_timings=(analysis_observation_mode == "diagnostic"),
             observation_kinds=frozenset((
                 "parameter",
                 "return",
-                *(("variable",) if emit_variable_annotations else ()),
+                *(("variable",) if (
+                    emit_variable_annotations or emit_class_field_annotations
+                ) else ()),
             )),
         )
         seconds_repo_probe = time.monotonic() - probe_started
@@ -271,7 +330,9 @@ def emit_archway_predictions(
             rel_s = str(rel)
             dest = dest_root / rel
             record = repo_record
-            seconds_probe = seconds_repo_probe
+            # The engine probe is one repository-wide persistent session.
+            # Per-file rows must not each claim its complete wall time.
+            seconds_probe = 0.0
             # Preserve the probe's compact phase/cohort evidence when the
             # repository-wide subprocess itself consumed the timeout.  The
             # elapsed-budget check below used to replace this richer failure
@@ -288,6 +349,23 @@ def emit_archway_predictions(
                     error=err,
                     trace_tail=record.get("trace_tail"),
                     analysis_summary=record.get("analysis_summary"),
+                )
+                file_profiles.append(profile)
+                if profile_writer:
+                    profile_writer.write(profile)
+                continue
+
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0:
+                error = f"TimeoutExpired: repo analysis exceeded {timeout}s"
+                failures.append({"file": rel_s, "error": error})
+                profile = FileProfile(
+                    repo_name=repo_name,
+                    file=rel_s,
+                    status="repo_timeout",
+                    seconds_total=round(time.monotonic() - file_started, 6),
+                    seconds_engine_probe=0.0,
+                    error=error,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -404,6 +482,7 @@ def emit_archway_predictions(
         params_annotated=params_annotated,
         returns_annotated=returns_annotated,
         variables_annotated=variables_annotated,
+        seconds_engine_probe=round(seconds_repo_probe, 6),
         failures=tuple(failures),
         file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
@@ -506,7 +585,9 @@ def _successor_variable_types(
         if class_fields_only and (
             item.get("function") is not None
             or "." not in str(name)
-            or item.get("family") != "ClassFieldTypeOf"
+            or item.get("family") != "ClassAttributeTypeOf"
+            or "transformed constructor-field type"
+            not in item.get("evidence_rules", ())
         ):
             continue
         # Class-attribute observations retain their qualified semantic name
@@ -552,6 +633,15 @@ def _successor_annotation(value: str) -> str:
     return value.removeprefix("builtins.")
 
 
+def _observation_admission_group(session, root_address) -> tuple[object, str]:
+    """Group exact observations only by their owning callable boundary."""
+
+    body_id = session.observation_workload_body_id(root_address)
+    if body_id is None:
+        return ("unowned", root_address.id)
+    return ("callable", body_id)
+
+
 def _run_successor_repo_probe(
     *,
     engine_worktree: Path,
@@ -561,7 +651,7 @@ def _run_successor_repo_probe(
     progress_log: Path | None = None,
     demand_limit: int | None = None,
     checkpoint_roots: bool = False,
-    checkpoint_size: int = 8,
+    checkpoint_size: int = 1,
     checkpoint_tail_start: int | None = None,
     checkpoint_tail_count: int | None = None,
     checkpoint_batch_start: int | None = None,
@@ -572,16 +662,15 @@ def _run_successor_repo_probe(
     root_ids: tuple[str, ...] | None = None,
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
-    callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
     sample_body_label: str | None = None,
     sample_forward: bool = False,
     sample_session_open: bool = False,
+    session_open_timeout: int | None = None,
     run_forward_seed: bool = True,
     forward_timeout: int | None = None,
     record_timings: bool = False,
     diagnostic_details: bool = True,
-    contextual_summary_evaluation: bool = False,
     collect_predictions: bool = True,
     observation_kinds: frozenset[str] = frozenset((
         "parameter", "return",
@@ -600,8 +689,6 @@ def _run_successor_repo_probe(
         raise ValueError(
             "body_timeout requires a selected body or checkpointed roots"
         )
-    if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
-        raise ValueError("callable_input_exact_limit must be non-negative")
     if progress_timeout is not None and progress_timeout <= 0:
         raise ValueError("progress_timeout must be positive")
     if checkpoint_size <= 0:
@@ -624,6 +711,8 @@ def _run_successor_repo_probe(
         raise ValueError("sample_body_label requires sample_rate_hz")
     if sample_forward and sample_rate_hz is None:
         raise ValueError("sample_forward requires sample_rate_hz")
+    if session_open_timeout is not None and session_open_timeout <= 0:
+        raise ValueError("session_open_timeout must be positive")
     if forward_timeout is not None and forward_timeout <= 0:
         raise ValueError("forward_timeout must be positive")
     unsupported_observation_kinds = observation_kinds - {
@@ -657,30 +746,28 @@ checkpoint_roots = sys.argv[3] == "checkpoint"
 requested_body_label = sys.argv[4] or None
 requested_body_labels = frozenset(json.loads(requested_body_label)) if requested_body_label else frozenset()
 requested_body_timeout = int(sys.argv[5]) or None
-exact_limit_arg = int(sys.argv[6])
-callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
-sample_rate_hz = float(sys.argv[7]) or None
-sample_body_label = sys.argv[8] or None
-record_timings = sys.argv[9] == "timings"
-diagnostic_details = sys.argv[10] == "diagnostics"
-collect_predictions = sys.argv[11] == "predictions"
-checkpoint_size = int(sys.argv[12])
-checkpoint_tail_start = int(sys.argv[13])
-checkpoint_tail_count = int(sys.argv[14])
+sample_rate_hz = float(sys.argv[6]) or None
+sample_body_label = sys.argv[7] or None
+record_timings = sys.argv[8] == "timings"
+diagnostic_details = sys.argv[9] == "diagnostics"
+collect_predictions = sys.argv[10] == "predictions"
+checkpoint_size = int(sys.argv[11])
+checkpoint_tail_start = int(sys.argv[12])
+checkpoint_tail_count = int(sys.argv[13])
 requested_observation_kinds = frozenset(
-    item for item in sys.argv[15].split(",") if item
+    item for item in sys.argv[14].split(",") if item
 )
-sample_forward = sys.argv[16] == "sample-forward"
-requested_forward_timeout = int(sys.argv[17]) or None
-disable_cyclic_gc = sys.argv[18] == "disable-cyclic-gc"
-checkpoint_replay_prefix = sys.argv[19] == "replay-prefix"
-run_forward_seed = sys.argv[20] == "run-forward-seed"
-sample_session_open = sys.argv[21] == "sample-session-open"
-checkpoint_batch_start = int(sys.argv[22])
-checkpoint_batch_count = int(sys.argv[23])
-contextual_summary_evaluation = sys.argv[24] == "contextual-summaries"
-requested_progress_timeout = int(sys.argv[25]) or None
-requested_root_ids = frozenset(json.loads(sys.argv[26]))
+sample_forward = sys.argv[15] == "sample-forward"
+requested_forward_timeout = int(sys.argv[16]) or None
+disable_cyclic_gc = sys.argv[17] == "disable-cyclic-gc"
+checkpoint_replay_prefix = sys.argv[18] == "replay-prefix"
+run_forward_seed = sys.argv[19] == "run-forward-seed"
+sample_session_open = sys.argv[20] == "sample-session-open"
+checkpoint_batch_start = int(sys.argv[21])
+checkpoint_batch_count = int(sys.argv[22])
+requested_progress_timeout = int(sys.argv[23]) or None
+requested_root_ids = frozenset(json.loads(sys.argv[24]))
+requested_session_open_timeout = int(sys.argv[25]) or None
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -778,15 +865,61 @@ def bounded_scheduler_snapshot(session):
     """Retain monotone progress counters even when a diagnostic cutoff fires."""
     scheduler = session.scheduler
     graph = scheduler.graph
+    factored_telemetry = getattr(scheduler, "_factored_telemetry", None)
+    factored = (
+        factored_telemetry.summary()
+        if factored_telemetry is not None
+        else {}
+    )
+    aggregate = scheduler.aggregate_production_telemetry
+    def largest(mapping, limit=30):
+        return dict(sorted(
+            mapping.items(), key=lambda item: (-item[1], item[0])
+        )[:limit])
     return {
+        "topology_generation": graph.topology_generation,
         "unique_production_count": scheduler.unique_production_count,
         "production_execution_count": scheduler.production_execution_count,
         "repeated_production_count": scheduler.repeated_production_count,
-        "component_recompute_count": graph.component_recompute_count,
-        "component_node_visits": graph.component_node_visits,
-        "component_edge_visits": graph.component_edge_visits,
+        "production_executions_by_family": largest(
+            aggregate.get("production_executions_by_family", {})
+        ),
+        "production_repeats_by_family": largest(
+            aggregate.get("production_repeats_by_family", {})
+        ),
+        "production_seconds_by_family": largest(
+            aggregate.get("production_seconds_by_family", {})
+        ),
+        "worklist_schedule_counts": largest(
+            aggregate.get("worklist_schedule_counts", {})
+        ),
+        "knowledge_commit_counts": largest(
+            scheduler.store.commit_counts
+        ),
+        "factored_phases": {
+            key: factored.get(key, {} if key.endswith("counts") else 0)
+            for key in (
+                "factored_phase_counts",
+                "factored_phase_seconds",
+                "factored_rebase_outcome_counts",
+                "factored_rebase_outcome_seconds",
+                "factored_admission_size_counts",
+                "factored_topology_refresh_size_counts",
+                "factored_topology_refresh_delta_counts",
+                "factored_max_admitted_productions",
+                "factored_max_admitted_components",
+            )
+        },
+        "topology_change_counts": largest(
+            getattr(graph, "topology_change_counts", {})
+        ),
+        "component_recompute_count": getattr(
+            graph, "component_recompute_count", 0
+        ),
+        "component_node_visits": getattr(graph, "component_node_visits", 0),
+        "component_edge_visits": getattr(graph, "component_edge_visits", 0),
         "component_incremental_refresh_count": (
-            graph.component_incremental_refresh_count
+            getattr(graph, "component_incremental_refresh_count", 0)
         ),
     }
 
@@ -837,11 +970,26 @@ try:
             project_marker="/sd_core/",
         )
         session_profiler.__enter__()
+    if requested_session_open_timeout:
+        def timeout_session_open(_signum, _frame):
+            raise TimeoutError("diagnostic session-open cutoff")
+        signal.signal(signal.SIGALRM, timeout_session_open)
+        signal.alarm(requested_session_open_timeout)
+    session_sampling_profile = None
     try:
         session = open_hybrid_program_session(
             modules, entry, record_events=False,
             record_timings=record_timings,
             record_telemetry=diagnostic_details,
+            # Retain an explicit benchmark-only equivalence oracle while the
+            # hierarchical region worklist is being validated. Production
+            # analysis defaults to the new ordering; setting this variable to
+            # ``0`` asks the same engine revision to use its flat deque.
+            hierarchical_region_worklist=(
+                os.environ.get(
+                    "ARCHWAY_HIERARCHICAL_REGION_WORKLIST", "1"
+                ) != "0"
+            ),
             # TypyBench observes a repository as an importable library surface;
             # it does not identify an executable entry point.  Keep one root
             # for bulk import seeding, but bind every module's ``__name__`` to
@@ -849,19 +997,25 @@ try:
             # as ``__main__`` executes CLI guards and admits an unrelated whole
             # application call graph into signature inference.
             possible_entry_modules=frozenset(),
-            body_observations_only=True,
-            class_field_observations=True,
-            callable_input_exact_limit=callable_input_exact_limit,
-            contextual_summary_evaluation=contextual_summary_evaluation,
+            # TypyBench requests callable signatures and class fields rather
+            # than an executable-entry trace.  Select that observation policy
+            # through the public restored runtime contract; class-field
+            # templates are part of the ordinary diagram catalog.
+            signature_observations_only=True,
+            class_field_observations=(
+                "variable" in requested_observation_kinds
+            ),
         )
     finally:
+        signal.alarm(0)
         if session_profiler is not None:
             session_profiler.__exit__(None, None, None)
+            session_sampling_profile = session_profiler.jsonable(
+                top=40, include_stacks=diagnostic_details
+            )
             print(
                 "ARCHWAY_SESSION_PROFILE " + json.dumps(
-                    session_profiler.jsonable(
-                        top=40, include_stacks=diagnostic_details
-                    ),
+                    session_sampling_profile,
                     separators=(",", ":"),
                 ),
                 file=sys.stderr,
@@ -902,7 +1056,7 @@ try:
         # admits concrete/control/call coordinates when type production needs
         # them, without eagerly evaluating the full executable product.
         forward = (
-            session.run_type_priority_forward()
+            session.run_analysis_roots(include_callable_bodies=True)
             if run_forward_seed else None
         )
     except TimeoutError:
@@ -935,14 +1089,16 @@ try:
     missing = tuple(dict.fromkeys(
         item.address for item in missing_observations
     ))
-    all_signature_roots = session.observation_workload_roots(missing)
+    all_signature_root_count = len({
+        (
+            "callable",
+            session.observation_workload_body_id(address),
+        )
+        if session.observation_workload_body_id(address) is not None
+        else ("fact", address.id)
+        for address in missing
+    })
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
-    requested = (
-        missing
-        if requested_body_labels
-        else missing[:demand_limit] if demand_limit is not None else missing
-    )
-    signature_roots = session.observation_workload_roots(requested)
     body_labels = {
         template.body_morphism_id: (
             f"{template.module.dotted if template.module else '?'}:"
@@ -952,12 +1108,43 @@ try:
         for template in plan.templates
     }
     if requested_body_labels:
-        signature_roots = tuple(
-            root_address for root_address in signature_roots
-            if body_labels.get(
-                session.observation_workload_body_id(root_address) or ""
-            ) in requested_body_labels
+        available_body_labels = {
+            body_labels.get(session.observation_workload_body_id(address), "?")
+            for address in missing
+            if session.observation_workload_body_id(address) is not None
+        }
+        unmatched_body_labels = requested_body_labels - available_body_labels
+        if unmatched_body_labels:
+            related_labels = sorted(
+                label for label in available_body_labels
+                if any(
+                    requested.rsplit(":", 1)[-1].rsplit(".", 1)[-1]
+                    in label
+                    for requested in unmatched_body_labels
+                )
+            )[:20]
+            raise ValueError(
+                "requested callable body labels were not present in the "
+                "observation workload: "
+                + ", ".join(sorted(unmatched_body_labels))
+                + (
+                    "; related labels: " + ", ".join(related_labels)
+                    if related_labels else ""
+                )
+            )
+        requested = tuple(
+            address for address in missing
+            if body_labels.get(session.observation_workload_body_id(address))
+            in requested_body_labels
         )
+    else:
+        requested = missing[:demand_limit] if demand_limit is not None else missing
+    # The forward seed establishes shared repository knowledge, but a missing
+    # public observation is still a legitimate native demand.  Extend the same
+    # persistent scheduler with the unresolved observation roots collectively;
+    # do not restart analysis per annotation or route through the removed
+    # coarse body-summary runtime.
+    signature_roots = requested
     if requested_root_ids:
         signature_roots = tuple(
             root_address for root_address in signature_roots
@@ -968,7 +1155,7 @@ try:
         print(
             "ARCHWAY_ROOTS " + json.dumps([
                 body_labels.get(
-                    getattr(item.subject, "body_morphism_id", ""), "?"
+                    session.observation_workload_body_id(item), "?"
                 )
                 for item in signature_roots
             ]),
@@ -1017,64 +1204,23 @@ try:
     if checkpoint_roots:
         targeted = None
         body_profiles = []
-        # Every root already coalesces all observations produced by one
-        # callable body, while the session retains facts, summaries, and
-        # topology across roots. Admit independent roots together, but never
-        # place two bodies backed by the same definition binding in one wave:
-        # their shared class/function prerequisite must stabilize before its
-        # next consumer is admitted. This avoids both one global scheduler
-        # drain per body and the convergence explosion caused by admitting
-        # sibling bodies simultaneously.
+        # Public roots retain exact observation identity.  Group observations
+        # by the diagram callable that owns their shared workload, then admit
+        # one callable group per convergence wave.  The session creates the
+        # internal shared carrier; the adapter must not infer it from a public
+        # root subject or mix unrelated callable groups by an arbitrary size.
         def admission_group(root_address):
-            body_id = session.observation_workload_body_id(root_address) or ""
-            for provider in session.targeted_body_providers:
-                if body_id not in provider.bodies_by_id:
-                    continue
-                return (
-                    id(provider),
-                    provider.body_binding_names.get(body_id, body_id),
-                )
-            return ("unowned", body_id)
+            body_id = session.observation_workload_body_id(root_address)
+            if body_id is None:
+                return ("unowned", root_address.id)
+            return ("callable", body_id)
 
         def admission_batches(roots):
             grouped = {}
-            group_order = {}
-            for ordinal, root_address in enumerate(roots):
+            for root_address in roots:
                 group = admission_group(root_address)
                 grouped.setdefault(group, []).append(root_address)
-                group_order.setdefault(group, ordinal)
-            minimum_batch_count = max(
-                (len(roots) + checkpoint_size - 1) // checkpoint_size,
-                max((len(items) for items in grouped.values()), default=0),
-            )
-            batches = [[] for _ in range(minimum_batch_count)]
-            batch_groups = [set() for _ in range(minimum_batch_count)]
-            # Pack the most constrained bindings first, then place every root
-            # in the least-filled legal wave. The lower bound is the larger
-            # of capacity and maximum binding multiplicity; add a wave only
-            # if the greedy packing cannot realize that bound. A wave still
-            # contains at most one consumer of any shared definition.
-            ordered_groups = sorted(
-                grouped,
-                key=lambda group: (-len(grouped[group]), group_order[group]),
-            )
-            for group in ordered_groups:
-                for root_address in grouped[group]:
-                    candidates = [
-                        index for index, current in enumerate(batches)
-                        if len(current) < checkpoint_size
-                        and group not in batch_groups[index]
-                    ]
-                    if not candidates:
-                        batches.append([])
-                        batch_groups.append(set())
-                        candidates = [len(batches) - 1]
-                    index = min(candidates, key=lambda item: (
-                        len(batches[item]), item,
-                    ))
-                    batches[index].append(root_address)
-                    batch_groups[index].add(group)
-            return tuple(tuple(batch) for batch in batches)
+            return tuple(tuple(items) for items in grouped.values())
         all_batches = admission_batches(signature_roots)
         requested_tail_start = (
             min(checkpoint_tail_start, len(signature_roots))
@@ -1112,13 +1258,11 @@ try:
         # Labels and ownership come from the diagram's canonical workload
         # catalog rather than reinterpreting fact-subject implementation
         # details in the benchmark adapter.
-        def root_label(root_address):
-            body_id = session.observation_workload_body_id(root_address)
-            return body_labels.get(body_id, "?")
-
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
-                root_label(root)
+                body_labels.get(
+                    session.observation_workload_body_id(root), "?"
+                )
                 for root in root_batch
             ]
                 for root_batch in root_batches
@@ -1135,18 +1279,13 @@ try:
                 session.scheduler.graph.component_edge_update_telemetry
             )
             topology_counts_before = dict(
-                session.scheduler.graph.topology_change_counts
+                getattr(
+                    session.scheduler.graph,
+                    "topology_change_counts",
+                    {},
+                )
             )
             gc_before = gc_profile_snapshot()
-            summary_registry = session.invocation_registry.callable_summaries
-            applications_before = frozenset(
-                summary_registry.applications
-            ) if diagnostic_details and summary_registry is not None else frozenset()
-            initialized_modules_before = frozenset(
-                module_name
-                for module_name, module_root in session.module_roots.items()
-                if session.store.resolved(module_root) is not None
-            ) if diagnostic_details else frozenset()
             telemetry_before = (
                 session.scheduler.production_family_telemetry
                 if diagnostic_details else None
@@ -1157,7 +1296,23 @@ try:
             family_seconds_before = (
                 telemetry_before["seconds"] if telemetry_before else {}
             )
-            body_id = session.observation_workload_body_id(root_address) or ""
+            transfer_counts_before = (
+                dict(session.scheduler.transfer_operation_counts)
+                if diagnostic_details else {}
+            )
+            transfer_seconds_before = (
+                dict(session.scheduler.transfer_operation_seconds)
+                if diagnostic_details else {}
+            )
+            production_operation_before = (
+                session.scheduler.production_operation_telemetry
+                if diagnostic_details else {"executions": {}, "seconds": {}}
+            )
+            production_phase_before = (
+                session.scheduler.production_phase_telemetry
+                if diagnostic_details else {"counts": {}, "seconds": {}}
+            )
+            body_id = session.observation_workload_body_id(root_address)
             body_label = body_labels.get(body_id, "?")
             print(
                 f"ARCHWAY_BODY_START {index}/{len(root_batches)} "
@@ -1219,34 +1374,80 @@ try:
                 for family, seconds in telemetry_after["seconds"].items()
                 if seconds - family_seconds_before.get(family, 0.0) > 0
             }
-            workload_relevance = []
-            if diagnostic_details:
-                for workload_root in root_batch:
-                    workload_body_id = getattr(
-                        workload_root.subject, "body_morphism_id", ""
-                    )
-                    for provider in session.targeted_body_providers:
-                        templates = provider._root_observations.get(
-                            workload_root
-                        )
-                        if templates is None:
-                            continue
-                        workload_relevance.append({
-                            "root_id": workload_root.id,
-                            "observation_count": len(templates),
-                            "active_morphism_count": (
-                                provider._workload_active_morphism_counts.get(
-                                    workload_root
-                                )
-                            ),
-                            "required_definition_bindings": sorted(
-                                provider._required_definition_bindings.get((
-                                    workload_body_id,
-                                    workload_root.context,
-                                ), ())
-                            ),
-                        })
-                        break
+            transfer_count_deltas = {
+                operation: count - transfer_counts_before.get(operation, 0)
+                for operation, count in (
+                    session.scheduler.transfer_operation_counts.items()
+                )
+                if count - transfer_counts_before.get(operation, 0) > 0
+            } if diagnostic_details else {}
+            transfer_second_deltas = {
+                operation: seconds - transfer_seconds_before.get(
+                    operation, 0.0
+                )
+                for operation, seconds in (
+                    session.scheduler.transfer_operation_seconds.items()
+                )
+                if seconds - transfer_seconds_before.get(operation, 0.0) > 0
+            } if diagnostic_details else {}
+            production_operation_after = (
+                session.scheduler.production_operation_telemetry
+                if diagnostic_details else {"executions": {}, "seconds": {}}
+            )
+            production_operation_deltas = {
+                operation: count - production_operation_before[
+                    "executions"
+                ].get(operation, 0)
+                for operation, count in production_operation_after[
+                    "executions"
+                ].items()
+                if count - production_operation_before["executions"].get(
+                    operation, 0
+                ) > 0
+            }
+            production_operation_second_deltas = {
+                operation: seconds - production_operation_before[
+                    "seconds"
+                ].get(operation, 0.0)
+                for operation, seconds in production_operation_after[
+                    "seconds"
+                ].items()
+                if seconds - production_operation_before["seconds"].get(
+                    operation, 0.0
+                ) > 0
+            }
+            production_phase_after = (
+                session.scheduler.production_phase_telemetry
+                if diagnostic_details else {"counts": {}, "seconds": {}}
+            )
+            production_phase_count_deltas = {
+                label: count - production_phase_before["counts"].get(label, 0)
+                for label, count in production_phase_after["counts"].items()
+                if count - production_phase_before["counts"].get(label, 0) > 0
+            }
+            production_phase_second_deltas = {
+                label: seconds - production_phase_before["seconds"].get(
+                    label, 0.0
+                )
+                for label, seconds in production_phase_after["seconds"].items()
+                if seconds - production_phase_before["seconds"].get(
+                    label, 0.0
+                ) > 0
+            }
+            describe_workload = getattr(
+                session, "observation_workload_description", None
+            )
+            workload_relevance = (
+                describe_workload(root_batch)
+                if describe_workload is not None
+                else {
+                    "kind": "native-observation-cohort",
+                    "body_morphism_id": (
+                        session.observation_workload_body_id(root_address)
+                    ),
+                    "observation_count": len(root_batch),
+                }
+            )
             body_profile = {
                 "index": index,
                 "label": body_label,
@@ -1259,7 +1460,11 @@ try:
                 "topology_change_counts": {
                     name: value - topology_counts_before.get(name, 0)
                     for name, value in (
-                        session.scheduler.graph.topology_change_counts
+                        getattr(
+                            session.scheduler.graph,
+                            "topology_change_counts",
+                            {},
+                        )
                     ).items()
                 },
                 "component_edge_updates": {
@@ -1277,47 +1482,37 @@ try:
                     family_second_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
                 )[:8],
-                "top_new_application_callers": (
-                    Counter(
-                        (
-                            spec.invocation.caller_context,
-                            spec.callable_value.body_morphism_id,
-                        )
-                        for application, spec
-                        in summary_registry.applications.items()
-                        if application not in applications_before
-                    ).most_common(12)
-                    if diagnostic_details and summary_registry is not None
-                    else []
-                ),
-                "top_new_application_bodies": (
-                    Counter(
-                        body_labels.get(
-                            spec.callable_value.body_morphism_id,
-                            spec.callable_value.body_morphism_id,
-                        )
-                        for application, spec
-                        in summary_registry.applications.items()
-                        if application not in applications_before
-                    ).most_common(24)
-                    if diagnostic_details and summary_registry is not None
-                    else []
-                ),
-                "new_initialized_modules": (
-                    sorted(
-                        module_name
-                        for module_name, module_root
-                        in session.module_roots.items()
-                        if module_name not in initialized_modules_before
-                        and session.store.resolved(module_root) is not None
-                    )
-                    if diagnostic_details else []
-                ),
+                "top_transfer_operations": sorted(
+                    transfer_count_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:12],
+                "top_production_operations": sorted(
+                    production_operation_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:12],
+                "top_production_seconds": sorted(
+                    production_operation_second_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:12],
+                "top_production_phases": sorted(
+                    production_phase_count_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:20],
+                "top_production_phase_seconds": sorted(
+                    production_phase_second_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:20],
+                "top_transfer_seconds": sorted(
+                    transfer_second_deltas.items(),
+                    key=lambda item: (-item[1], item[0]),
+                )[:12],
                 "workload_relevance": workload_relevance,
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
                 "root_labels": [
-                    root_label(item)
+                    body_labels.get(
+                        session.observation_workload_body_id(item), "?"
+                    )
                     for item in root_batch
                 ],
             }
@@ -1352,6 +1547,45 @@ try:
                 + (f" {root_address.id}" if diagnostic_details else ""),
                 file=sys.stderr, flush=True,
             )
+            if diagnostic_details:
+                print(
+                    "ARCHWAY_BODY_DETAIL " + json.dumps({
+                        "index": index,
+                        "top_execution_families": body_profile[
+                            "top_execution_families"
+                        ],
+                        "top_family_seconds": body_profile[
+                            "top_family_seconds"
+                        ],
+                        "top_production_operations": body_profile[
+                            "top_production_operations"
+                        ],
+                        "top_production_seconds": body_profile[
+                            "top_production_seconds"
+                        ],
+                        "top_production_phases": body_profile[
+                            "top_production_phases"
+                        ],
+                        "top_production_phase_seconds": body_profile[
+                            "top_production_phase_seconds"
+                        ],
+                        "top_transfer_operations": body_profile[
+                            "top_transfer_operations"
+                        ],
+                        "top_transfer_seconds": body_profile[
+                            "top_transfer_seconds"
+                        ],
+                        "topology_change_counts": body_profile[
+                            "topology_change_counts"
+                        ],
+                        "component_edge_updates": body_profile[
+                            "component_edge_updates"
+                        ],
+                        "gc": body_profile["gc"],
+                    }, separators=(",", ":")),
+                    file=sys.stderr,
+                    flush=True,
+                )
             if timed_out_body:
                 break
     else:
@@ -1419,6 +1653,9 @@ try:
                 "name": item.name,
                 "kind": item.kind,
                 "family": item.address.family,
+                "evidence_rules": sorted(
+                    evidence.rule_id for evidence in fact.evidence
+                ) if fact is not None else [],
                 "function": item.function,
                 # Retain unresolved catalog entries as explicit missing
                 # evidence.  The source adapter inserts nothing for an empty
@@ -1457,85 +1694,43 @@ try:
     observation_projection_seconds = time.monotonic() - projection_started
     scheduler_telemetry = (
         dict(session.scheduler.aggregate_production_telemetry)
-        if diagnostic_details else {
-            "unique_production_count": (
-                session.scheduler.unique_production_count
-            ),
-            "production_execution_count": (
-                session.scheduler.production_execution_count
-            ),
-            "repeated_production_count": (
-                session.scheduler.repeated_production_count
-            ),
-            "component_recompute_count": (
-                session.scheduler.graph.component_recompute_count
-            ),
-            "component_recompute_seconds": (
-                session.scheduler.graph.component_recompute_seconds
-            ),
-            "component_node_visits": (
-                session.scheduler.graph.component_node_visits
-            ),
-            "component_edge_visits": (
-                session.scheduler.graph.component_edge_visits
-            ),
-            "component_incremental_refresh_count": (
-                session.scheduler.graph.component_incremental_refresh_count
-            ),
-            "component_edge_update_telemetry": dict(
-                session.scheduler.graph.component_edge_update_telemetry
-            ),
-        }
-    )
-    summary_registry = (
-        session.invocation_registry.callable_summaries
-        if session.invocation_registry is not None else None
+        if diagnostic_details else bounded_scheduler_snapshot(session)
     )
     component_hotspots = (
         session.scheduler.component_hotspots()
         if diagnostic_details else ()
     )
-    if component_hotspots and summary_registry is not None:
+    region_quotient_summary = (
+        session.scheduler.region_quotient_summary()
+        if diagnostic_details else {}
+    )
+    if component_hotspots:
         callable_labels = {
             body_id: f"{boundary.module_name}:{boundary.qualified_name}"
             for body_id, boundary
             in session.callable_boundaries_by_body.items()
         }
-        application_labels = {
-            address.context: callable_labels.get(
-                spec.callable_value.body_morphism_id,
-                spec.callable_value.body_morphism_id,
+        native_context_labels = {
+            admission.application.callee_context: callable_labels.get(
+                admission.application.body_morphism_id,
+                admission.application.body_morphism_id,
             )
-            for address, spec in summary_registry.applications.items()
+            for admission in getattr(
+                session, "native_callable_cell_admissions", lambda: ()
+            )()
         }
+        native_context_labels.update({
+            f"context:uninvoked-body:{body_id}": label
+            for body_id, label in callable_labels.items()
+        })
         component_hotspots = tuple({
             **item,
-            "callable_application_bodies": tuple(sorted({
-                application_labels.get(context, context)
-                for context in item.get(
-                    "callable_application_contexts", ()
-                )
-            })),
+            "semantic_contexts": tuple({
+                "context": context,
+                "label": native_context_labels.get(context, context),
+                "members": members,
+            } for context, members in item.get("contexts", {}).items()),
         } for item in component_hotspots)
-    unresolved_summary_bodies = Counter()
-    if diagnostic_details and collect_predictions and summary_registry is not None:
-        callable_labels = {
-            body_id: f"{boundary.module_name}:{boundary.qualified_name}"
-            for body_id, boundary
-            in session.callable_boundaries_by_body.items()
-        }
-        for application_address, spec in summary_registry.applications.items():
-            if session.store.resolved(application_address) is not None:
-                continue
-            unresolved_summary_bodies[
-                body_labels.get(
-                    spec.callable_value.body_morphism_id,
-                    callable_labels.get(
-                        spec.callable_value.body_morphism_id,
-                        spec.callable_value.body_morphism_id,
-                    ),
-                )
-            ] += 1
     scheduler_telemetry.pop("production_executions_by_provider", None)
     out = {
         "ok": True,
@@ -1546,7 +1741,7 @@ try:
             "targeted_addresses": len(missing),
             "requested_addresses": len(requested),
             "requested_body_roots": len(signature_roots),
-            "signature_body_roots": len(all_signature_roots),
+            "signature_body_roots": all_signature_root_count,
             "body_profiles": body_profiles,
             "timed_out_body": timed_out_body,
             "timed_out_execution": timed_out_execution,
@@ -1568,6 +1763,7 @@ try:
             "component_hotspots": (
                 component_hotspots
             ),
+            "region_quotient_summary": region_quotient_summary,
             "gc": gc_profile_snapshot(),
             "production_replay_hotspots": (
                 session.scheduler.production_replay_hotspots()
@@ -1577,46 +1773,7 @@ try:
                 session.scheduler.production_replay_operation_hotspots()
                 if diagnostic_details else ()
             ),
-            "morphism_transfer_reuse": dict(
-                session.morphism_transfer_reuse_counts()
-            ) if diagnostic_details else {},
-            "morphism_transfer_reuse_by_operation": dict(
-                session.morphism_transfer_reuse_by_operation()
-            ) if diagnostic_details else {},
-            "atomic_effect_gaps": dict(
-                session.atomic_effect_gap_counts()
-            ) if diagnostic_details else {},
-            "morphism_fact_output_barriers": dict(
-                session.morphism_fact_output_barriers()
-            ) if diagnostic_details else {},
-            "morphism_read_intersections": dict(
-                session.morphism_read_intersections()
-            ) if diagnostic_details else {},
-            "invocation_contexts": dict(
-                session.invocation_context_counts()
-            ),
-            "invocation_inputs": dict(
-                session.invocation_input_growth_counts()
-            ),
-            "invocation_admissions": dict(
-                session.invocation_admission_counts()
-            ),
-            "invocation_application_hotspots": list(
-                session.invocation_application_hotspots()
-            ),
-            "invocation_product_demand_hotspots": list(
-                session.invocation_product_demand_hotspots()
-            ),
-            "invocation_application_runtime_hotspots": list(
-                session.invocation_application_runtime_hotspots()
-            ) if diagnostic_details else [],
-            "invocation_application_invalidation_hotspots": list(
-                session.invocation_application_invalidation_hotspots()
-            ) if diagnostic_details else [],
             "sampling_profile": sampling_profile,
-            "unresolved_summary_bodies": dict(
-                unresolved_summary_bodies.most_common(32)
-            ),
             "observation_modules": sorted({
                 item.module.dotted for item in observations
                 if item.module is not None
@@ -1640,6 +1797,13 @@ except Exception as exc:
     partial_summary = {}
     if "sampling_profile" in locals() and sampling_profile is not None:
         partial_summary["sampling_profile"] = sampling_profile
+    if (
+        "session_sampling_profile" in locals()
+        and session_sampling_profile is not None
+    ):
+        partial_summary["session_sampling_profile"] = (
+            session_sampling_profile
+        )
     if "timed_out_forward" in locals():
         partial_summary["timed_out_forward"] = timed_out_forward
     if "translation_seconds" in locals():
@@ -1688,10 +1852,6 @@ os._exit(0)
                 *(body_labels or ()),
             )))),
             str(body_timeout or 0),
-            str(
-                callable_input_exact_limit
-                if callable_input_exact_limit is not None else -1
-            ),
             str(sample_rate_hz or 0),
             sample_body_label or "",
             "timings" if record_timings else "no-timings",
@@ -1715,12 +1875,9 @@ os._exit(0)
                 if checkpoint_batch_start is not None else -1
             ),
             str(checkpoint_batch_count or 0),
-            (
-                "contextual-summaries"
-                if contextual_summary_evaluation else "composed-summaries"
-            ),
             str(progress_timeout or 0),
             json.dumps(tuple(dict.fromkeys(root_ids or ()))),
+            str(session_open_timeout or 0),
         ]
         progress_stream = None
         if progress_log is not None:
@@ -1802,10 +1959,7 @@ def _run_engine_probe(
     runner: tuple[str, ...],
     timeout: int,
     per_file_timeout: int = 60,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"files": {}}
     started = time.monotonic()
@@ -1825,10 +1979,7 @@ def _run_engine_probe(
             module_name=path.stem,
             runner=runner,
             timeout=max(1, min(per_file_timeout, int(remaining))),
-            body_summary_consumption=body_summary_consumption,
-            analysis_product=analysis_product,
             analysis_observation_mode=analysis_observation_mode,
-            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -1840,10 +1991,7 @@ def _run_engine_probe_file(
     module_name: str,
     runner: tuple[str, ...],
     timeout: int,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -1852,65 +2000,19 @@ import sys
 import traceback
 from pathlib import Path
 
-try:
-    from sd_core.analysis_server import _encode_finalized, analyze_source
-    from sd_core.runners.analysis_observability import AnalysisObservationConfig
-    from sd_core.runners.file_results import FileAnalysisFailure, analyze_source_file_result
-except Exception:  # pragma: no cover - compatibility with older engine pins
-    AnalysisObservationConfig = None
-    FileAnalysisFailure = None
-    _encode_finalized = None
-    analyze_source_file_result = None
-    from sd_core.analysis_server import analyze_source
+from sd_core.analysis_server import analyze_source
 
 path = Path(sys.argv[1])
 module_name = sys.argv[2]
 try:
     source = path.read_text(encoding="utf-8")
-    analysis_summary = None
-    if (
-        analyze_source_file_result is not None
-        and AnalysisObservationConfig is not None
-        and _encode_finalized is not None
-    ):
-        observation_mode = os.environ.get("ARCHWAY_ANALYSIS_OBSERVATION", "summary")
-        if observation_mode == "diagnostic":
-            observation_config = AnalysisObservationConfig.diagnostic()
-        elif observation_mode == "off":
-            observation_config = AnalysisObservationConfig.off()
-        else:
-            observation_config = AnalysisObservationConfig.summary()
-        kwargs = {
-            "module": module_name,
-            "repo_path": str(path),
-            "observation_config": observation_config,
-        }
-        body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
-        if body_summary_consumption != "off":
-            kwargs["body_summary_consumption"] = body_summary_consumption
-        analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
-        if analysis_product != "standalone":
-            kwargs["analysis_product"] = analysis_product
-        if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
-            "1", "true", "yes", "on",
-        }:
-            kwargs["type_requirements_assume_closed"] = True
-        file_result = analyze_source_file_result(source, **kwargs)
-        analysis_summary = file_result.to_jsonable().get("analysis_summary")
-        if file_result.status != "analyzed" or file_result.run is None:
-            if FileAnalysisFailure is not None:
-                raise FileAnalysisFailure(file_result)
-            raise RuntimeError(f"file analysis failed: {file_result.status}")
-        analysis = _encode_finalized(file_result.run.finalized)
-        analysis["module_name"] = module_name
-        analysis["status"] = file_result.status
-        analysis["file_result"] = file_result.to_jsonable()
-    else:
-        analysis = analyze_source(source, module_name)
+    analysis = analyze_source(source, module_name)
     out = {
         "ok": True,
         "analysis": analysis,
-        "analysis_summary": analysis_summary,
+        "analysis_summary": analysis.get("file_result", {}).get(
+            "analysis_summary"
+        ),
     }
 except Exception as exc:
     out = {
@@ -1940,10 +2042,7 @@ print(json.dumps(out, sort_keys=True))
                 text=True,
                 env=_probe_env(
                     engine_worktree,
-                    body_summary_consumption=body_summary_consumption,
-                    analysis_product=analysis_product,
                     analysis_observation_mode=analysis_observation_mode,
-                    type_requirements_assume_closed=type_requirements_assume_closed,
                 ),
                 start_new_session=True,
             )
@@ -1979,20 +2078,13 @@ print(json.dumps(out, sort_keys=True))
 def _probe_env(
     engine_worktree: Path,
     *,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, str]:
     env = os.environ.copy()
-    if body_summary_consumption:
-        env["ARCHWAY_BODY_SUMMARY_CONSUMPTION"] = body_summary_consumption
-    env["ARCHWAY_ANALYSIS_PRODUCT"] = analysis_product
     env["ARCHWAY_ANALYSIS_OBSERVATION"] = analysis_observation_mode
-    if type_requirements_assume_closed:
-        env["ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED"] = "1"
-    else:
-        env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
+    env.pop("ARCHWAY_BODY_SUMMARY_CONSUMPTION", None)
+    env.pop("ARCHWAY_ANALYSIS_PRODUCT", None)
+    env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
     existing = env.get("PYTHONPATH")
     paths = [str(engine_worktree)]
     if existing:
@@ -2085,9 +2177,6 @@ def capture_runtime_phase_profile_file(
     module_name: str,
     runner: tuple[str, ...] = ("hatch", "run", "python"),
     timeout: int = 90,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     """Measure import, translation, traced translation, and analysis separately.
 
@@ -2110,9 +2199,6 @@ def capture_runtime_phase_profile_file(
             runner=runner,
             timeout=timeout,
             phase=phase,
-            body_summary_consumption=body_summary_consumption,
-            analysis_product=analysis_product,
-            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -2125,9 +2211,6 @@ def _run_runtime_phase_probe_file(
     runner: tuple[str, ...],
     timeout: int,
     phase: str,
-    body_summary_consumption: str | None = None,
-    analysis_product: str = "standalone",
-    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -2166,18 +2249,7 @@ try:
                 "span_count": len(getattr(trace, "spans", [])) if trace is not None else 0,
             }
         elif phase == "analyze_source":
-            kwargs = {}
-            body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
-            if body_summary_consumption != "off":
-                kwargs["body_summary_consumption"] = body_summary_consumption
-            analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
-            if analysis_product != "standalone":
-                kwargs["analysis_product"] = analysis_product
-            if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
-                "1", "true", "yes", "on",
-            }:
-                kwargs["type_requirements_assume_closed"] = True
-            result = analyze_source(source, module_name, **kwargs)
+            result = analyze_source(source, module_name)
             out = {
                 "ok": True,
                 "phase": phase,
@@ -2207,12 +2279,7 @@ print(json.dumps(out, sort_keys=True))
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=_probe_env(
-                    engine_worktree,
-                    body_summary_consumption=body_summary_consumption,
-                    analysis_product=analysis_product,
-                    type_requirements_assume_closed=type_requirements_assume_closed,
-                ),
+                env=_probe_env(engine_worktree),
                 start_new_session=True,
             )
             stdout, stderr = proc.communicate(timeout=timeout)

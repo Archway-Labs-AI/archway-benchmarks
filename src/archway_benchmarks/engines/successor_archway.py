@@ -117,17 +117,12 @@ class SuccessorArchwayAnalysisEngine:
                 name: item.morphism
                 for name, item in program.modules.items()
             }
-            # The sparse lifted product is the authoritative local carrier
-            # for a type-priority workload. Native scalar cells remain the
-            # targeted projection mechanism for observations not emitted at
-            # a forward or summary boundary; they are not a replacement for
-            # coordinated local interpretation of each diagram morphism.
             session = open_hybrid_program_session(
                 modules,
                 "main",
                 record_events=self.record_events,
             )
-            forward = session.run_native_type_workload()
+            forward = session.run_analysis_roots(include_callable_bodies=True)
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
@@ -327,12 +322,9 @@ def _observation_kind_matches(item, location: Location) -> bool:
     )
 
 
-def _observation_scope_matches(
-    item, location: Location, *, requested_name: str | None = None
-) -> bool:
+def _observation_scope_matches(item, location: Location) -> bool:
     observed = item.function
     requested = location.function
-    name = location.name if requested_name is None else requested_name
     if observed == requested:
         return True
     if (
@@ -347,7 +339,7 @@ def _observation_scope_matches(
     return bool(
         owner
         and item.name.startswith("self.")
-        and name
+        and location.name
         == f"{owner}.{item.name.removeprefix('self.')}"
     )
 
@@ -400,24 +392,6 @@ def _map_container_path(session, location: Location):
         and item.position is not None
         and item.position.row == location.line
     )
-    roots = tuple(
-        item for item in session.type_observations()
-        if _observation_name_matches(item, base)
-        and item.kind == location.kind
-        and _observation_scope_matches(
-            item, location, requested_name=base
-        )
-        and item.position is not None
-        and item.position.row == location.line
-    )
-    native = tuple(
-        item for item in session.occurrence_path_observations(roots, slots)
-        if item.position is not None
-        and item.position.row == location.line
-    )
-    return tuple(dict.fromkeys((*indexed, *native)))
-
-
 def _typeeval_name(value: str) -> str:
     if value == "builtins.callable":
         return "callable"

@@ -1,12 +1,15 @@
 import ast
 import json
 import sys
+from pathlib import Path
 
 import archway_benchmarks.typybench_archway_emit as emit_module
+import pytest
 from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
     _element_type,
     _function_types,
+    _observation_admission_group,
     _probe_progress,
     _run_engine_probe,
     _successor_function_types,
@@ -15,6 +18,43 @@ from archway_benchmarks.typybench_archway_emit import (
     capture_translation_trace_file,
     emit_archway_predictions,
 )
+
+
+def test_successor_probe_demands_unresolved_observations_in_persistent_session() -> None:
+    """Guard the native targeted tail against being silently disabled again."""
+
+    source = Path(emit_module.__file__).read_text(encoding="utf-8")
+
+    assert "signature_roots = requested" in source
+    assert "targeted = session.observe(signature_roots)" in source
+    assert "signature_roots = ()" not in source
+
+
+def test_observation_admission_never_merges_distinct_callable_bodies() -> None:
+    class Provider:
+        bodies_by_id = {"body:first": object(), "body:second": object()}
+        body_binding_names = {
+            "body:first": "shared_name",
+            "body:second": "shared_name",
+        }
+
+    class Session:
+        targeted_body_providers = (Provider(),)
+
+        @staticmethod
+        def observation_workload_body_id(root):
+            return root.body_id
+
+    class Root:
+        def __init__(self, body_id):
+            self.body_id = body_id
+            self.id = body_id
+
+    session = Session()
+    first = _observation_admission_group(session, Root("body:first"))
+    second = _observation_admission_group(session, Root("body:second"))
+
+    assert first != second
 
 
 def test_probe_progress_retains_compact_timeout_evidence() -> None:
@@ -30,6 +70,15 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
         "fact-address:v1:active\n"
         "ARCHWAY_BODY 2/139 16.250000 exec=618 topology=5940 "
         "appworld.api_docs:generate_example\n"
+        'ARCHWAY_BODY_DETAIL {"index":2,'
+        '"top_execution_families":[["MorphismState",600]],'
+        '"top_family_seconds":[["MorphismState",12.5]],'
+        '"top_production_phases":[["identity\\u0000cache-validation",4]],'
+        '"top_production_phase_seconds":'
+        '[["identity\\u0000cache-validation",2.75]],'
+        '"topology_change_counts":{"dependency_added":5940},'
+        '"component_edge_updates":{"incremental":5000},'
+        '"gc":{"seconds":0.25}}\n'
         "ARCHWAY_BODY_START 3/139 appworld.api_docs:next "
         "fact-address:v1:next\n"
     )
@@ -48,6 +97,19 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
             "executions": 618,
             "topology_changes": 5940,
             "label": "appworld.api_docs:generate_example",
+            "performance_detail": {
+                "top_execution_families": [["MorphismState", 600]],
+                "top_family_seconds": [["MorphismState", 12.5]],
+                "top_production_phases": [
+                    ["identity\0cache-validation", 4]
+                ],
+                "top_production_phase_seconds": [
+                    ["identity\0cache-validation", 2.75]
+                ],
+                "topology_change_counts": {"dependency_added": 5940},
+                "component_edge_updates": {"incremental": 5000},
+                "gc": {"seconds": 0.25},
+            },
         }],
         "active_body": {
             "index": 3,
@@ -82,16 +144,18 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
             "label": "module:slow",
         }],
     }
-    monkeypatch.setattr(
-        emit_module,
-        "_run_successor_repo_probe",
-        lambda **_kwargs: {
+    probe_options = []
+
+    def probe(**kwargs):
+        probe_options.append(kwargs)
+        return {
             "ok": False,
             "error": "TimeoutExpired: analysis exceeded 1s",
             "trace_tail": "ARCHWAY_BODY 1/12",
             "analysis_summary": progress,
-        },
-    )
+        }
+
+    monkeypatch.setattr(emit_module, "_run_successor_repo_probe", probe)
 
     stats = emit_module.emit_archway_predictions(
         repo_name="demo",
@@ -99,6 +163,13 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
         predictions_root=tmp_path / "predictions",
         engine_worktree=engine,
         timeout=1,
+        analysis_observation_mode="diagnostic",
+        body_labels=("module:slow",),
+        body_timeout=7,
+        checkpoint_batch_start=4,
+        checkpoint_batch_count=2,
+        checkpoint_replay_prefix=False,
+        run_forward_seed=False,
     )
 
     assert stats.files_failed == 1
@@ -106,6 +177,14 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert profile.status == "engine_failed"
     assert profile.analysis_summary == progress
     assert profile.trace_tail == "ARCHWAY_BODY 1/12"
+    assert probe_options[0]["diagnostic_details"] is True
+    assert probe_options[0]["record_timings"] is True
+    assert probe_options[0]["body_labels"] == ("module:slow",)
+    assert probe_options[0]["body_timeout"] == 7
+    assert probe_options[0]["checkpoint_batch_start"] == 4
+    assert probe_options[0]["checkpoint_batch_count"] == 2
+    assert probe_options[0]["checkpoint_replay_prefix"] is False
+    assert probe_options[0]["run_forward_seed"] is False
 
 
 def test_successor_observations_render_function_signatures() -> None:
@@ -290,7 +369,7 @@ def test_repository_emission_keeps_variable_annotations_opt_in(
     ).read_text()
     assert opted_in.variables_annotated == 1
     assert requested_kinds == [
-        frozenset(("parameter", "return")),
+        frozenset(("parameter", "return", "variable")),
         frozenset(("parameter", "return", "variable")),
     ]
 
@@ -314,7 +393,8 @@ def test_repository_emission_can_include_diagram_class_fields_explicitly(
                 "line": 2,
                 "name": "Model.value",
                 "kind": "variable",
-                "family": "ClassFieldTypeOf",
+                "family": "ClassAttributeTypeOf",
+                "evidence_rules": ["transformed constructor-field type"],
                 "function": None,
                 "types": ["builtins.int"],
             }]},
@@ -1067,8 +1147,6 @@ def test_emit_predictions_profile_jsonl_records_per_file_timings(
         timeout=30,
         per_file_timeout=5,
         profile_jsonl=profile_jsonl,
-        body_summary_consumption="safe",
-        analysis_product="type_body_summary_product",
         analysis_observation_mode="diagnostic",
     )
 
@@ -1076,7 +1154,12 @@ def test_emit_predictions_profile_jsonl_records_per_file_timings(
     by_file = {row["file"]: row for row in rows}
     assert stats.file_profiles
     assert by_file["ok.py"]["status"] == "ok"
-    assert by_file["ok.py"]["seconds_engine_probe"] >= 0
+    assert by_file["ok.py"]["seconds_engine_probe"] == 0
+    assert by_file["bad.py"]["seconds_engine_probe"] == 0
+    assert stats.seconds_engine_probe >= 0
+    assert stats.analysis_summary == analysis_summary
+    assert stats.probe_error is None
+    assert stats.probe_trace_tail is None
     assert by_file["ok.py"]["functions_seen"] == 1
     assert by_file["ok.py"]["analysis_summary"]["schema"] == (
         "archway.analysis_run_summary.v1"

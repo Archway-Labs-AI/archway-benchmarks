@@ -16,7 +16,7 @@ def main() -> None:
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--demand-limit", type=int)
     parser.add_argument("--checkpoint-roots", action="store_true")
-    parser.add_argument("--checkpoint-size", type=int, default=8)
+    parser.add_argument("--checkpoint-size", type=int, default=1)
     parser.add_argument("--checkpoint-tail-start", type=int)
     parser.add_argument("--checkpoint-tail-count", type=int)
     parser.add_argument(
@@ -36,7 +36,6 @@ def main() -> None:
     parser.add_argument("--root-id", action="append", dest="root_ids")
     parser.add_argument("--body-timeout", type=int)
     parser.add_argument("--progress-timeout", type=int)
-    parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
     parser.add_argument("--sample-body-label")
     parser.add_argument(
@@ -93,14 +92,6 @@ def main() -> None:
         action="store_true",
         help="exercise the prediction projection used by the corpus emitter",
     )
-    parser.add_argument(
-        "--contextual-summary-evaluation",
-        action="store_true",
-        help=(
-            "expand callable applications into the diagnostic contextual "
-            "production graph instead of using composed summaries"
-        ),
-    )
     args = parser.parse_args()
     if (
         args.body_timeout is not None
@@ -135,7 +126,6 @@ def main() -> None:
         root_ids=tuple(args.root_ids or ()),
         body_timeout=args.body_timeout,
         progress_timeout=args.progress_timeout,
-        callable_input_exact_limit=args.callable_input_exact_limit,
         sample_rate_hz=args.sample_rate_hz,
         sample_body_label=args.sample_body_label,
         sample_forward=args.sample_forward,
@@ -143,7 +133,6 @@ def main() -> None:
         record_timings=args.record_timings,
         diagnostic_details=not args.production_light,
         collect_predictions=args.collect_predictions,
-        contextual_summary_evaluation=args.contextual_summary_evaluation,
         disable_cyclic_gc=args.disable_cyclic_gc,
         observation_kinds=frozenset((
             "parameter",
@@ -237,6 +226,7 @@ def main() -> None:
         "requested_body_roots": summary.get("requested_body_roots"),
         "signature_body_roots": summary.get("signature_body_roots"),
         "component_hotspots": summary.get("component_hotspots"),
+        "region_quotient_summary": summary.get("region_quotient_summary"),
         "morphism_transfer_reuse": (
             summary.get("morphism_transfer_reuse")
         ),

@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Callable
 
 from archway_benchmarks import bugsinpy_cli
-from archway_benchmarks.archway_config import resolve_archway_server_config
 from archway_benchmarks.benchmarks import TypeEvalPyAutogenBenchmark, TypeEvalPyBenchmark
 from archway_benchmarks.benchmarks.base import Benchmark
 from archway_benchmarks.engines.base import AnalysisEngine, TranslationEngine
@@ -32,36 +31,6 @@ def _build_stub_engines(benchmark: Benchmark, accuracy: float, seed: int | None)
     snippets = benchmark.load()
     translator, analyzer, adapter = make_stub_pair(snippets, accuracy=accuracy, seed=seed)
     return translator, analyzer, adapter
-
-
-def _build_archway_engines(
-    benchmark: Benchmark,
-    accuracy: float,
-    seed: int | None,
-    *,
-    server_url: str | None = None,
-    timeout: float = 30.0,
-    body_summary_consumption: str = "off",
-):
-    """Construct the Archway engine triple. ``accuracy``/``seed`` are unused
-    (kept for signature parity with the stub factory)."""
-    from archway_benchmarks.benchmarks.archway_adapter import ArchwayAnalysisResultAdapter
-    from archway_benchmarks.engines.archway import ArchwayAnalysisEngine, ArchwayTranslationEngine
-
-    # The analysis engine sends GET /types?module=main.py&root=<abs_snippet_dir>
-    # — it resolves Snippet.file_path (suite-relative) against this corpus root.
-    corpus_root = getattr(benchmark, "corpus_root", None)
-    resolved_server_url = server_url or resolve_archway_server_config().server_url
-    return (
-        ArchwayTranslationEngine(),
-        ArchwayAnalysisEngine(
-            server_url=resolved_server_url,
-            timeout=timeout,
-            corpus_root=corpus_root,
-            body_summary_consumption=body_summary_consumption,
-        ),
-        ArchwayAnalysisResultAdapter(),
-    )
 
 
 def _build_successor_engines(
@@ -94,7 +63,6 @@ ENGINES: dict[
     Callable[[Benchmark, float, int | None], tuple[TranslationEngine, AnalysisEngine, object]],
 ] = {
     "stub": _build_stub_engines,
-    "archway": _build_archway_engines,
     "successor": _build_successor_engines,
 }
 
@@ -115,20 +83,6 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--seed", type=int, default=None)
     p_run.add_argument("--db", default="runs.db", help="Path to SQLite store")
     p_run.add_argument("--notes", default=None)
-    p_run.add_argument("--archway-server-url", default=None, help="Archway analysis server URL.")
-    p_run.add_argument("--archway-config", default=None, help="Path to archway.toml.")
-    p_run.add_argument(
-        "--archway-timeout",
-        type=float,
-        default=30.0,
-        help="Per-snippet Archway request timeout.",
-    )
-    p_run.add_argument(
-        "--archway-body-summary-consumption",
-        choices=["off", "safe"],
-        default="off",
-        help="Archway body-summary consumption mode passed to the analysis server.",
-    )
 
     p_score = sub.add_parser("score", help="Print stored scores for a run")
     p_score.add_argument("run_id", type=int)
@@ -225,36 +179,15 @@ def _cmd_run(args) -> int:
         )
     )
     metadata = None
-    if args.engine == "archway":
-        cfg = resolve_archway_server_config(
-            cli_server_url=args.archway_server_url,
-            config_path=args.archway_config,
-        )
-        translator, analyzer, adapter = _build_archway_engines(
-            bench,
-            args.stub_accuracy,
-            args.seed,
-            server_url=cfg.server_url,
-            timeout=args.archway_timeout,
-            body_summary_consumption=args.archway_body_summary_consumption,
-        )
+    translator, analyzer, adapter = ENGINES[args.engine](
+        bench, args.stub_accuracy, args.seed
+    )
+    if args.engine == "successor":
         metadata = {
-            "archway_server_url": cfg.server_url,
-            "archway_server_url_source": cfg.source,
-            "archway_body_summary_consumption": args.archway_body_summary_consumption,
+            "analysis_surface": "diagram-only",
+            "record_events": False,
+            "session_policy": "persistent-forward-then-targeted",
         }
-        if cfg.config_path:
-            metadata["archway_config_path"] = cfg.config_path
-    else:
-        translator, analyzer, adapter = ENGINES[args.engine](
-            bench, args.stub_accuracy, args.seed
-        )
-        if args.engine == "successor":
-            metadata = {
-                "analysis_surface": "diagram-only",
-                "record_events": False,
-                "session_policy": "persistent-forward-then-targeted",
-            }
     result = run_pipeline(
         benchmark=bench,
         translator=translator,
