@@ -861,7 +861,12 @@ def bounded_scheduler_snapshot(session):
     """Retain monotone progress counters even when a diagnostic cutoff fires."""
     scheduler = session.scheduler
     graph = scheduler.graph
-    factored = scheduler._factored_telemetry.summary()
+    factored_telemetry = getattr(scheduler, "_factored_telemetry", None)
+    factored = (
+        factored_telemetry.summary()
+        if factored_telemetry is not None
+        else {}
+    )
     def largest(mapping, limit=30):
         return dict(sorted(
             mapping.items(), key=lambda item: (-item[1], item[0])
