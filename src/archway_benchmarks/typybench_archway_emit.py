@@ -983,8 +983,11 @@ try:
             # as ``__main__`` executes CLI guards and admits an unrelated whole
             # application call graph into signature inference.
             possible_entry_modules=frozenset(),
-            body_observations_only=True,
-            class_field_observations=True,
+            # TypyBench requests callable signatures and class fields rather
+            # than an executable-entry trace.  Select that observation policy
+            # through the public restored runtime contract; class-field
+            # templates are part of the ordinary diagram catalog.
+            signature_observations_only=True,
         )
     finally:
         signal.alarm(0)
