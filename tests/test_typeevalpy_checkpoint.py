@@ -85,6 +85,31 @@ def test_checkpoint_refuses_empty_corpus(tmp_path):
         module._require_nonempty_corpus([], tmp_path)
 
 
+def test_checkpoint_selects_union_of_exact_and_prefix_cohorts():
+    module = _checkpoint_module()
+    snippets = tuple(
+        type("Snippet", (), {"suite_path": path})()
+        for path in (
+            "python_features/returns/one",
+            "python_features/returns/two",
+            "python_features/classes/one",
+            "python_features/dicts/one",
+        )
+    )
+
+    selected = module._select_snippets(
+        snippets,
+        ("python_features/classes/one",),
+        ("python_features/returns/",),
+    )
+
+    assert tuple(item.suite_path for item in selected) == (
+        "python_features/returns/one",
+        "python_features/returns/two",
+        "python_features/classes/one",
+    )
+
+
 def test_checkpoint_resume_retries_failed_snippet(tmp_path):
     module = _checkpoint_module()
     checkpoint = tmp_path / "checkpoint.jsonl"

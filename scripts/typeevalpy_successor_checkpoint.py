@@ -193,6 +193,26 @@ def _require_nonempty_corpus(snippets, corpus_root: Path):
     return snippets
 
 
+def _select_snippets(snippets, paths, prefixes):
+    """Select a deterministic union of exact and prefix semantic cohorts."""
+
+    requested_paths = frozenset(paths)
+    requested_prefixes = tuple(prefixes)
+    if not requested_paths and not requested_prefixes:
+        return tuple(snippets)
+    return tuple(
+        snippet
+        for snippet in snippets
+        if (
+            snippet.suite_path in requested_paths
+            or any(
+                snippet.suite_path.startswith(prefix)
+                for prefix in requested_prefixes
+            )
+        )
+    )
+
+
 def _persist_run(
     *,
     benchmark,
@@ -266,6 +286,18 @@ def main() -> None:
     parser.add_argument("--slow-snippet-seconds", type=float, default=30.0)
     parser.add_argument("--progress-every", type=int, default=25)
     parser.add_argument("--max-snippets", type=int)
+    parser.add_argument(
+        "--suite-path",
+        action="append",
+        default=[],
+        help="Run one exact suite path; repeat to select a cohort.",
+    )
+    parser.add_argument(
+        "--suite-path-prefix",
+        action="append",
+        default=[],
+        help="Run suite paths under this prefix; repeat to union cohorts.",
+    )
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument("--db", type=Path)
     parser.add_argument("--notes")
@@ -293,6 +325,14 @@ def main() -> None:
     snippets = _require_nonempty_corpus(
         benchmark.load(), args.corpus_root.resolve()
     )
+    requested_paths = frozenset(args.suite_path)
+    requested_prefixes = tuple(args.suite_path_prefix)
+    if requested_paths or requested_prefixes:
+        snippets = _select_snippets(
+            snippets, requested_paths, requested_prefixes
+        )
+        if not snippets:
+            parser.error("suite-path selectors matched no snippets")
     if args.max_snippets is not None:
         snippets = snippets[:args.max_snippets]
     harness_root = Path(__file__).resolve().parents[1]
@@ -304,6 +344,8 @@ def main() -> None:
         "harness_revision": _revision(harness_root),
         "corpus_revision": _revision(args.corpus_root.resolve()),
         "snippet_count": len(snippets),
+        "suite_paths": sorted(requested_paths),
+        "suite_path_prefixes": list(requested_prefixes),
         "slow_snippet_seconds": args.slow_snippet_seconds,
         "hard_snippet_timeout_seconds": args.per_snippet_timeout,
     }
