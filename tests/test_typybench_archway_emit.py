@@ -1106,6 +1106,9 @@ def test_emit_predictions_profile_jsonl_records_per_file_timings(
     assert by_file["ok.py"]["seconds_engine_probe"] == 0
     assert by_file["bad.py"]["seconds_engine_probe"] == 0
     assert stats.seconds_engine_probe >= 0
+    assert stats.analysis_summary == analysis_summary
+    assert stats.probe_error is None
+    assert stats.probe_trace_tail is None
     assert by_file["ok.py"]["functions_seen"] == 1
     assert by_file["ok.py"]["analysis_summary"]["schema"] == (
         "archway.analysis_run_summary.v1"

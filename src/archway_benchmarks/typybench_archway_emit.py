@@ -216,6 +216,9 @@ class EmitStats:
     failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
     file_profiles: tuple[FileProfile, ...] = field(default_factory=tuple)
     engine_sha: str | None = None
+    analysis_summary: dict[str, Any] | None = None
+    probe_error: str | None = None
+    probe_trace_tail: str | None = None
 
 
 def emit_archway_predictions(
@@ -481,6 +484,12 @@ def emit_archway_predictions(
         failures=tuple(failures),
         file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
+        analysis_summary=repo_record.get("analysis_summary"),
+        probe_error=(
+            str(repo_record.get("error", "no engine result"))[:300]
+            if not repo_record.get("ok") else None
+        ),
+        probe_trace_tail=repo_record.get("trace_tail"),
     )
 
 
@@ -852,6 +861,7 @@ def bounded_scheduler_snapshot(session):
     """Retain monotone progress counters even when a diagnostic cutoff fires."""
     scheduler = session.scheduler
     graph = scheduler.graph
+    factored = scheduler._factored_telemetry.summary()
     def largest(mapping, limit=30):
         return dict(sorted(
             mapping.items(), key=lambda item: (-item[1], item[0])
@@ -867,10 +877,29 @@ def bounded_scheduler_snapshot(session):
         "production_repeats_by_family": largest(
             scheduler._production_repeats_by_family
         ),
+        "production_seconds_by_family": largest(
+            scheduler._production_seconds_by_family
+        ),
         "worklist_schedule_counts": largest(
             scheduler._worklist_schedule_counts
         ),
-        "factored_phases": scheduler._factored_telemetry.summary(),
+        "knowledge_commit_counts": largest(
+            scheduler.store.commit_counts
+        ),
+        "factored_phases": {
+            key: factored[key]
+            for key in (
+                "factored_phase_counts",
+                "factored_phase_seconds",
+                "factored_rebase_outcome_counts",
+                "factored_rebase_outcome_seconds",
+                "factored_admission_size_counts",
+                "factored_topology_refresh_size_counts",
+                "factored_topology_refresh_delta_counts",
+                "factored_max_admitted_productions",
+                "factored_max_admitted_components",
+            )
+        },
         "topology_change_counts": largest(graph.topology_change_counts),
         "component_recompute_count": graph.component_recompute_count,
         "component_node_visits": graph.component_node_visits,
@@ -1616,35 +1645,7 @@ try:
     observation_projection_seconds = time.monotonic() - projection_started
     scheduler_telemetry = (
         dict(session.scheduler.aggregate_production_telemetry)
-        if diagnostic_details else {
-            "unique_production_count": (
-                session.scheduler.unique_production_count
-            ),
-            "production_execution_count": (
-                session.scheduler.production_execution_count
-            ),
-            "repeated_production_count": (
-                session.scheduler.repeated_production_count
-            ),
-            "component_recompute_count": (
-                session.scheduler.graph.component_recompute_count
-            ),
-            "component_recompute_seconds": (
-                session.scheduler.graph.component_recompute_seconds
-            ),
-            "component_node_visits": (
-                session.scheduler.graph.component_node_visits
-            ),
-            "component_edge_visits": (
-                session.scheduler.graph.component_edge_visits
-            ),
-            "component_incremental_refresh_count": (
-                session.scheduler.graph.component_incremental_refresh_count
-            ),
-            "component_edge_update_telemetry": dict(
-                session.scheduler.graph.component_edge_update_telemetry
-            ),
-        }
+        if diagnostic_details else bounded_scheduler_snapshot(session)
     )
     component_hotspots = (
         session.scheduler.component_hotspots()
