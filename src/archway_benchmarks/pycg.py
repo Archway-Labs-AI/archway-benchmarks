@@ -1450,7 +1450,9 @@ def successor_archway_call_edge_result(
         """Project a diagnostic graph without claiming scheduler convergence."""
 
         projection_started = time.perf_counter()
-        semantic_edges = session.semantic_call_edges()
+        semantic_edges = session.semantic_call_edges(
+            include_capability_candidates=True
+        )
         direct_edges = {
             (
                 edge.caller.display_name
@@ -1746,7 +1748,9 @@ def successor_archway_call_edge_result(
             sampler.join(timeout=1.0)
     analysis_seconds = time.perf_counter() - analysis_started
     semantic_projection_started = time.perf_counter()
-    semantic_edges = session.semantic_call_edges()
+    semantic_edges = session.semantic_call_edges(
+        include_capability_candidates=True
+    )
     edges = {
         (
             edge.caller.display_name
