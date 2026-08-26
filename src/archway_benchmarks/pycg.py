@@ -920,20 +920,23 @@ def successor_archway_call_edge_result(
     session_construction_seconds = (
         time.perf_counter() - session_construction_started
     )
+
+    def optional_session_diagnostic(name: str) -> list[object]:
+        """Read additive telemetry without making it score-critical."""
+
+        diagnostic = getattr(session, name, None)
+        return list(diagnostic()) if callable(diagnostic) else []
     topology_before = session.scheduler.graph.topology_generation
     analysis_started = time.perf_counter()
     include_callable_bodies = case.suite == "macro"
     stop_sampling = threading.Event()
-    # Native roots are typed cells materialized on demand, not entries in the
-    # retired whole-body root registries.  Address descriptions below derive
-    # labels from the diagram-owned body catalog and address subjects.
+    # Address descriptions derive labels from the provider-neutral,
+    # diagram-owned callable boundary catalog.
     root_labels: dict[str, str] = {}
     body_labels: dict[str, str] = {}
-    native_provider = session.native_scalar_provider
-    if native_provider is not None and hasattr(
-        native_provider, "callable_body_labels"
-    ):
-        body_labels.update(native_provider.callable_body_labels())
+    callable_body_labels = getattr(session, "callable_body_labels", None)
+    if callable(callable_body_labels):
+        body_labels.update(callable_body_labels())
     source_anchors = source_anchor_catalog(modules)
     callsite_operations = callsite_operation_catalog(modules)
 
@@ -942,15 +945,10 @@ def successor_archway_call_edge_result(
     ) -> dict[str, object]:
         """Attach diagram-owned source and callable context to root evidence."""
 
-        # Native body planners are materialized lazily.  The initial catalog
-        # above names eager callable roots, but open-body fallback can create
-        # additional planners while analysis is running.  Refresh their
-        # diagram-owned labels at diagnostic read time so a live root does not
-        # degrade to an opaque body identity merely because it was lazy.
-        if native_provider is not None and hasattr(
-            native_provider, "callable_body_labels"
-        ):
-            body_labels.update(native_provider.callable_body_labels())
+        # Callable boundaries may be materialized lazily. Refresh the public
+        # catalog so a live root does not degrade to an opaque body identity.
+        if callable(callable_body_labels):
+            body_labels.update(callable_body_labels())
 
         described: dict[str, object] = {}
         for root_id, raw_detail in dict(
@@ -1267,10 +1265,12 @@ def successor_archway_call_edge_result(
                 in query_progress["slowest_completed_roots"]
             ],
             "native_call_graph_refusals": (
-                list(session.native_call_graph_refusals())
+                optional_session_diagnostic("native_call_graph_refusals")
             ),
             "native_call_graph_cohort_fallbacks": (
-                list(session.native_call_graph_cohort_fallbacks())
+                optional_session_diagnostic(
+                    "native_call_graph_cohort_fallbacks"
+                )
             ),
             "resolved_fact_count": len(snapshot.resolved_facts),
             "fact_family_counts": dict(sorted(family_counts.items())),
@@ -1545,10 +1545,12 @@ def successor_archway_call_edge_result(
             ),
             "root_details": described_root_details(query_progress),
             "native_call_graph_refusals": (
-                list(session.native_call_graph_refusals())
+                optional_session_diagnostic("native_call_graph_refusals")
             ),
             "native_call_graph_cohort_fallbacks": (
-                list(session.native_call_graph_cohort_fallbacks())
+                optional_session_diagnostic(
+                    "native_call_graph_cohort_fallbacks"
+                )
             ),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
@@ -1725,7 +1727,13 @@ def successor_archway_call_edge_result(
     )
     try:
         with profile_context as sampling_profile:
-            forward = session.run_native_semantic_call_graph()
+            run_call_graph = getattr(session, "run_semantic_call_graph", None)
+            if not callable(run_call_graph):
+                # Historical engine revisions remain independently scoreable;
+                # this adapter fallback does not create a second authority in
+                # any one engine session.
+                run_call_graph = session.run_native_semantic_call_graph
+            forward = run_call_graph()
     except Exception as exc:
         evidence = current_evidence(phase="error")
         evidence["exception_traceback"] = traceback.format_exc()

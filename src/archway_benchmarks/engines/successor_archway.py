@@ -122,7 +122,7 @@ class SuccessorArchwayAnalysisEngine:
                 "main",
                 record_events=self.record_events,
             )
-            forward = session.run_native_type_workload()
+            forward = session.run_analysis_roots(include_callable_bodies=True)
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
