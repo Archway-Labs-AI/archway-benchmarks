@@ -892,7 +892,7 @@ def bounded_scheduler_snapshot(session):
             scheduler.store.commit_counts
         ),
         "factored_phases": {
-            key: factored[key]
+            key: factored.get(key, {} if key.endswith("counts") else 0)
             for key in (
                 "factored_phase_counts",
                 "factored_phase_seconds",
@@ -1674,7 +1674,9 @@ try:
                 admission.application.body_morphism_id,
                 admission.application.body_morphism_id,
             )
-            for admission in session.native_callable_cell_admissions()
+            for admission in getattr(
+                session, "native_callable_cell_admissions", lambda: ()
+            )()
         }
         native_context_labels.update({
             f"context:uninvoked-body:{body_id}": label
