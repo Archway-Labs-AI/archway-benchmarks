@@ -867,6 +867,7 @@ def bounded_scheduler_snapshot(session):
         if factored_telemetry is not None
         else {}
     )
+    aggregate = scheduler.aggregate_production_telemetry
     def largest(mapping, limit=30):
         return dict(sorted(
             mapping.items(), key=lambda item: (-item[1], item[0])
@@ -877,16 +878,16 @@ def bounded_scheduler_snapshot(session):
         "production_execution_count": scheduler.production_execution_count,
         "repeated_production_count": scheduler.repeated_production_count,
         "production_executions_by_family": largest(
-            scheduler._production_executions_by_family
+            aggregate.get("production_executions_by_family", {})
         ),
         "production_repeats_by_family": largest(
-            scheduler._production_repeats_by_family
+            aggregate.get("production_repeats_by_family", {})
         ),
         "production_seconds_by_family": largest(
-            scheduler._production_seconds_by_family
+            aggregate.get("production_seconds_by_family", {})
         ),
         "worklist_schedule_counts": largest(
-            scheduler._worklist_schedule_counts
+            aggregate.get("worklist_schedule_counts", {})
         ),
         "knowledge_commit_counts": largest(
             scheduler.store.commit_counts
@@ -905,12 +906,16 @@ def bounded_scheduler_snapshot(session):
                 "factored_max_admitted_components",
             )
         },
-        "topology_change_counts": largest(graph.topology_change_counts),
-        "component_recompute_count": graph.component_recompute_count,
-        "component_node_visits": graph.component_node_visits,
-        "component_edge_visits": graph.component_edge_visits,
+        "topology_change_counts": largest(
+            getattr(graph, "topology_change_counts", {})
+        ),
+        "component_recompute_count": getattr(
+            graph, "component_recompute_count", 0
+        ),
+        "component_node_visits": getattr(graph, "component_node_visits", 0),
+        "component_edge_visits": getattr(graph, "component_edge_visits", 0),
         "component_incremental_refresh_count": (
-            graph.component_incremental_refresh_count
+            getattr(graph, "component_incremental_refresh_count", 0)
         ),
     }
 
