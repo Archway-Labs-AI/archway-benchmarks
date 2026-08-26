@@ -1,6 +1,7 @@
 import ast
 import json
 import sys
+from pathlib import Path
 
 import archway_benchmarks.typybench_archway_emit as emit_module
 import pytest
@@ -17,6 +18,16 @@ from archway_benchmarks.typybench_archway_emit import (
     capture_translation_trace_file,
     emit_archway_predictions,
 )
+
+
+def test_successor_probe_demands_unresolved_observations_in_persistent_session() -> None:
+    """Guard the native targeted tail against being silently disabled again."""
+
+    source = Path(emit_module.__file__).read_text(encoding="utf-8")
+
+    assert "signature_roots = requested" in source
+    assert "targeted = session.observe(signature_roots)" in source
+    assert "signature_roots = ()" not in source
 
 
 def test_observation_admission_never_merges_distinct_callable_bodies() -> None:

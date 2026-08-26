@@ -1132,13 +1132,12 @@ try:
         )
     else:
         requested = missing[:demand_limit] if demand_limit is not None else missing
-    # The native workload above already performs collective targeted waves for
-    # every supported observation in the persistent session.  Anything still
-    # unresolved is either an explicit native bottom or a superseded
-    # uninvoked-body view for which a contextual body instance exists.  Do not
-    # reinterpret those outcomes as requests for the removed coarse
-    # body-summary runtime.
-    signature_roots = ()
+    # The forward seed establishes shared repository knowledge, but a missing
+    # public observation is still a legitimate native demand.  Extend the same
+    # persistent scheduler with the unresolved observation roots collectively;
+    # do not restart analysis per annotation or route through the removed
+    # coarse body-summary runtime.
+    signature_roots = requested
     print(f"ARCHWAY_PHASE body_roots {len(signature_roots)}", file=sys.stderr, flush=True)
     if diagnostic_details and len(signature_roots) <= 32:
         print(
@@ -1265,7 +1264,11 @@ try:
                 session.scheduler.graph.component_edge_update_telemetry
             )
             topology_counts_before = dict(
-                session.scheduler.graph.topology_change_counts
+                getattr(
+                    session.scheduler.graph,
+                    "topology_change_counts",
+                    {},
+                )
             )
             gc_before = gc_profile_snapshot()
             telemetry_before = (
@@ -1327,7 +1330,7 @@ try:
                         project_marker="/sd_core/",
                     )
                     profiler.__enter__()
-                targeted = session.observe_workload(root_batch)
+                targeted = session.observe(root_batch)
             except TimeoutError:
                 timed_out_body = True
                 if timed_out_execution is None and requested_progress_timeout:
@@ -1416,8 +1419,19 @@ try:
                     label, 0.0
                 ) > 0
             }
-            workload_relevance = session.observation_workload_description(
-                root_batch
+            describe_workload = getattr(
+                session, "observation_workload_description", None
+            )
+            workload_relevance = (
+                describe_workload(root_batch)
+                if describe_workload is not None
+                else {
+                    "kind": "native-observation-cohort",
+                    "body_morphism_id": (
+                        session.observation_workload_body_id(root_address)
+                    ),
+                    "observation_count": len(root_batch),
+                }
             )
             body_profile = {
                 "index": index,
@@ -1431,7 +1445,11 @@ try:
                 "topology_change_counts": {
                     name: value - topology_counts_before.get(name, 0)
                     for name, value in (
-                        session.scheduler.graph.topology_change_counts
+                        getattr(
+                            session.scheduler.graph,
+                            "topology_change_counts",
+                            {},
+                        )
                     ).items()
                 },
                 "component_edge_updates": {
