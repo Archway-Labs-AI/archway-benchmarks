@@ -875,18 +875,17 @@ try:
             modules, entry, **session_options
         )
         workload_root_projection = getattr(
-            session, "observation_workload_roots", None
+            session, "signature_workload_roots", None
         )
-        if workload_root_projection is None:
-            # Exact observation addresses are already coalesced by the shared
-            # scheduler/store. The retired native helper returned precisely
-            # this stable-order deduplication; retaining exact query identity
-            # does not select or emulate another analysis implementation.
-            def workload_root_projection(addresses):
-                return tuple(dict.fromkeys(addresses))
-            workload_root_policy = "exact-address-deduplication"
-        else:
-            workload_root_policy = "runtime-projection"
+        workload_observer = getattr(
+            session, "observe_signature_workload", None
+        )
+        if workload_root_projection is None or workload_observer is None:
+            raise RuntimeError(
+                "analysis runtime exposes no authoritative signature "
+                "workload API"
+            )
+        workload_root_policy = "signature-body-root-projection"
     finally:
         if session_profiler is not None:
             session_profiler.__exit__(None, None, None)
@@ -1256,7 +1255,7 @@ try:
                         project_marker="/sd_core/",
                     )
                     profiler.__enter__()
-                targeted = session.observe(root_batch)
+                targeted = workload_observer(root_batch)
             except TimeoutError:
                 timed_out_body = True
                 if timed_out_execution is None and requested_progress_timeout:
@@ -1461,14 +1460,17 @@ try:
                 )
                 profiler.__enter__()
                 try:
-                    targeted = session.observe(signature_roots)
+                    targeted = workload_observer(signature_roots)
                 finally:
                     profiler.__exit__(None, None, None)
                     sampling_profile = profiler.jsonable(
                         top=40, include_stacks=diagnostic_details
                     )
             else:
-                targeted = session.observe(signature_roots) if signature_roots else None
+                targeted = (
+                    workload_observer(signature_roots)
+                    if signature_roots else None
+                )
                 sampling_profile = None
         except TimeoutError:
             targeted = None

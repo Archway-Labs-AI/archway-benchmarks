@@ -1,4 +1,5 @@
 import ast
+import inspect
 import json
 import sys
 
@@ -9,12 +10,23 @@ from archway_benchmarks.typybench_archway_emit import (
     _function_types,
     _probe_progress,
     _run_engine_probe,
+    _run_successor_repo_probe,
     _successor_function_types,
     _successor_variable_types,
     capture_runtime_phase_profile_file,
     capture_translation_trace_file,
     emit_archway_predictions,
 )
+
+
+def test_successor_probe_requires_authoritative_signature_workload_api() -> None:
+    worker_source = inspect.getsource(_run_successor_repo_probe)
+
+    assert 'session, "signature_workload_roots", None' in worker_source
+    assert 'session, "observe_signature_workload", None' in worker_source
+    assert "signature-body-root-projection" in worker_source
+    assert "observation_workload_roots" not in worker_source
+    assert "exact-address-deduplication" not in worker_source
 
 
 def test_probe_progress_retains_compact_timeout_evidence() -> None:
