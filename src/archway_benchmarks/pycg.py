@@ -939,14 +939,7 @@ def successor_archway_call_edge_result(
     analysis_started = time.perf_counter()
     include_callable_bodies = case.suite == "macro"
     stop_sampling = threading.Event()
-    scalar_provider = session.native_scalar_provider
-    assumptions = session.plan.root.assumptions
-    module_root_addresses = {
-        name: scalar_provider.module_completion_address(
-            name, f"context:module:{name}", assumptions,
-        )
-        for name in sorted(modules)
-    }
+    module_root_addresses = dict(session.module_roots)
     root_labels = {
         address.id: f"module:{name}"
         for name, address in module_root_addresses.items()
@@ -985,14 +978,6 @@ def successor_archway_call_edge_result(
         def growth_for(key) -> dict[str, int]:
             return dict(sorted(growth_by_production.get(key, {}).items()))
 
-        summary_admissions_by_result = {
-            admission.result: admission
-            for admission in session.native_callable_cell_summary_admissions()
-        }
-
-        def callable_application_for(key):
-            return summary_admissions_by_result.get(key.address)
-
         def callable_for(key) -> str | None:
             owner = session.callable_owner_for(
                 key.address.context,
@@ -1005,37 +990,7 @@ def successor_archway_call_edge_result(
             )
             if body_id in body_labels:
                 return body_labels[body_id]
-            application = callable_application_for(key)
-            if application is None:
-                return None
-            boundary = session.callable_boundaries_by_body.get(
-                application.application.body_morphism_id
-            )
-            return boundary.display_name if boundary is not None else None
-
-        def callable_value_for(key) -> dict[str, object] | None:
-            application = callable_application_for(key)
-            return (
-                {
-                    "kind": "callable_cell_application",
-                    "body_morphism_id": (
-                        application.application.body_morphism_id
-                    ),
-                    "callable_occurrence_id": (
-                        application.application.callable_occurrence_id
-                    ),
-                    "callsite_morphism_id": (
-                        application.application.callsite_morphism_id
-                    ),
-                    "caller_context": (
-                        application.application.caller_context
-                    ),
-                    "callee_context": (
-                        application.application.callee_context
-                    ),
-                }
-                if application is not None else None
-            )
+            return None
 
         hottest_productions = [
             {
@@ -1043,7 +998,7 @@ def successor_archway_call_edge_result(
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
                 "callable": callable_for(key),
-                "callable_value": callable_value_for(key),
+                "callable_value": None,
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "executions": executions,
@@ -1062,7 +1017,7 @@ def successor_archway_call_edge_result(
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
                 "callable": callable_for(key),
-                "callable_value": callable_value_for(key),
+                "callable_value": None,
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "seconds": seconds,
@@ -1439,13 +1394,18 @@ def successor_archway_call_edge_result(
         production_counts = session.scheduler.production_counts
         production_seconds = session.scheduler.production_seconds
 
-        summary_admissions = (
-            session.native_callable_cell_summary_admissions()
-        )
+        summary_admissions = session.invocation_summary_telemetry()
         hottest_callable_applications: list[dict[str, object]] = []
         if summary_admissions:
             for admission in summary_admissions:
-                address = admission.result
+                address_id = str(admission["address_id"])
+                address = next((
+                    candidate
+                    for candidate in session.store.snapshot().resolved_facts
+                    if candidate.id == address_id
+                ), None)
+                if address is None:
+                    continue
                 providers = session.scheduler.graph.providers(address)
                 executions = sum(
                     production_counts.get(provider, 0)
@@ -1461,14 +1421,14 @@ def successor_archway_call_edge_result(
                     ).prerequisites
                 }
                 hottest_callable_applications.append({
-                    "address_id": address.id,
+                    "address_id": address_id,
                     "callable": body_labels.get(
-                        admission.application.body_morphism_id
+                        admission["body_morphism_id"]
                     ),
                     "body_morphism_id": (
-                        admission.application.body_morphism_id
+                        admission["body_morphism_id"]
                     ),
-                    "input_pattern_id": admission.partition.id,
+                    "input_pattern_id": admission["input_pattern_id"],
                     "executions": executions,
                     "seconds": sum(
                         production_seconds.get(provider, 0.0)
@@ -1638,7 +1598,7 @@ def successor_archway_call_edge_result(
     )
     try:
         with profile_context as sampling_profile:
-            forward = session.run_native_semantic_call_graph()
+            forward = session.run_semantic_call_graph()
     except Exception as exc:
         evidence = current_evidence(phase="error")
         evidence["failure_traceback"] = traceback.format_exc()

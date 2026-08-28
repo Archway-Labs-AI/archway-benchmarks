@@ -142,12 +142,13 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
     assert score_edges(set(case.expected_edges), set(result.edges)) == EdgeScore(
         true_positive=1, false_positive=0, false_negative=0
     )
-    # One forward module-completion seed and one semantic-call-graph query
-    # share the same persistent native scheduler session.
-    assert result.root_demands == 2
+    # The public semantic-call-graph root owns its forward prerequisites in
+    # the same persistent scheduler session; the adapter no longer injects a
+    # second retired native-cell root.
+    assert result.root_demands == 1
     assert result.knowledge_deltas > 0
     assert result.topology_growth > 0
-    assert result.evidence["root_demand_count"] == 2
+    assert result.evidence["root_demand_count"] == 1
     assert result.evidence["resolved_fact_count"] > 0
     assert "invocation_input_growth_counts" in result.evidence
     assert result.evidence["module_closure"] == {

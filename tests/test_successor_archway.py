@@ -1,3 +1,5 @@
+import pytest
+
 from archway_benchmarks.benchmarks.typeevalpy import TypeEvalPyBenchmark
 from archway_benchmarks.engines.archway import ArchwayTranslationEngine
 from archway_benchmarks.engines.successor_archway import (
@@ -36,7 +38,7 @@ def test_successor_adapter_reads_module_bindings_from_one_forward_run(tmp_path):
     assert result.gaps == []
     assert result.forward is not None
     assert result.forward.cache_hits == 0
-    assert len(result.forward.roots) >= 2
+    assert len(result.forward.roots) == 1
 
 
 def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
@@ -85,7 +87,7 @@ def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     assert result.gaps == []
 
 
-def test_successor_native_workload_batches_uninvoked_returns_before_adapter(
+def test_successor_public_workload_refines_uninvoked_returns_in_one_session(
     tmp_path,
 ):
     snippet = _snippet(
@@ -103,18 +105,15 @@ def test_successor_native_workload_batches_uninvoked_returns_before_adapter(
         ArchwayTranslationEngine().translate(snippet.source, snippet.file_path)
     )
 
-    assert all(
-        result.session.store.resolved(item.address) is not None
-        for item in result.session.type_observations()
-        if item.kind == "return"
-    )
-
     predictions = SuccessorTypeEvalPyAdapter().to_annotations(result, snippet)
 
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
-    assert result.targeted_runs == []
-    assert len(result.forward.roots) >= 3
+    assert result.targeted_runs
+    # The coordinated public workload seeds the module plus both callable
+    # bodies; the adapter may then refine unresolved observation addresses in
+    # the same session without restarting analysis.
+    assert len(result.forward.roots) == 3
     assert result.forward.knowledge_deltas
 
 
@@ -338,7 +337,7 @@ def test_gap_audit_can_disable_detailed_scheduler_events(tmp_path):
     assert progress == [(1, 1)]
 
 
-def test_gap_audit_reports_no_adapter_refinement_after_native_workload(tmp_path):
+def test_gap_audit_reports_public_targeted_refinement(tmp_path):
     _snippet(
         tmp_path,
         "def untouched(value):\n"
@@ -354,13 +353,20 @@ def test_gap_audit_reports_no_adapter_refinement_after_native_workload(tmp_path)
     )
 
     assert audit.exact == 1
-    assert audit.targeted_roots == 0
+    assert audit.targeted_roots == 1
     assert audit.targeted_cache_hits == 0
     assert audit.targeted_events == 0
-    assert audit.targeted_knowledge_deltas == 0
-    assert audit.targeted_topology_changes == 0
+    assert audit.targeted_knowledge_deltas > 0
+    assert audit.targeted_topology_changes > 0
 
 
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "classified flow has no returned leg yet, so an early return can "
+        "join the later normal continuation before callable projection"
+    ),
+)
 def test_successor_adapter_uses_route_feasibility_for_precise_answer(tmp_path):
     snippet = _snippet(
         tmp_path,

@@ -127,7 +127,13 @@ class SuccessorArchwayAnalysisEngine:
                 "main",
                 record_events=self.record_events,
             )
-            forward = session.run_native_type_workload()
+            # Reproduce the current benchmark workload through the public
+            # persistent-session contract. P11 replaces this eager callable
+            # policy with an explicit shared forward seed plus batched demands;
+            # the adapter must not revive the removed native-cell runtime.
+            forward = session.run_analysis_roots(
+                include_callable_bodies=True
+            )
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
