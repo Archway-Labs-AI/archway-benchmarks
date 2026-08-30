@@ -6,8 +6,6 @@ import sys
 import archway_benchmarks.typybench_archway_emit as emit_module
 from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
-    _element_type,
-    _function_types,
     _probe_progress,
     _run_engine_probe,
     _run_successor_repo_probe,
@@ -204,6 +202,38 @@ def test_successor_generic_shape_refines_nominal_container_type() -> None:
 
     assert _successor_function_types(observations) == {
         (4, "f"): {"params": {}, "return": "list[str]"}
+    }
+
+
+def test_successor_generator_shape_renders_yield_type() -> None:
+    observations = [{
+        "line": 4, "name": "values", "kind": "return",
+        "function": None, "family": "GenericShapeOf",
+        "shape": {
+            "kind": "generic_shape_set",
+            "unknown": False,
+            "shapes": [{
+                "constructor": "builtins.generator",
+                "open": False,
+                "positions": [{
+                    "position": "yield:*",
+                    "value": {
+                        "nominal_types": ["builtins.int"],
+                        "nested": {
+                            "kind": "generic_shape_set",
+                            "unknown": False,
+                            "shapes": [],
+                        },
+                    },
+                }],
+            }],
+        },
+    }]
+
+    assert _successor_function_types(observations) == {
+        (4, "values"): {
+            "params": {}, "return": "Generator[int, None, None]",
+        }
     }
 
 
@@ -477,263 +507,6 @@ def f(x):
     typing_at = annotated.index("from typing import Any, Union")
     assert future_at < typing_at
     assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
-
-
-def test_function_types_extracts_signatures_from_engine_projection() -> None:
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 10},
-                "instantiations": [
-                    {
-                        "params": {"x": [{"element": {"kind": "pytype", "name": "builtins.int"}}]},
-                        "ret": {"element": {"kind": "list", "element": {"kind": "pytype", "name": "builtins.str"}}},
-                    },
-                    {
-                        "params": {"x": [{"element": {"kind": "pytype", "name": "builtins.str"}}]},
-                        "ret": {"element": {"kind": "none"}},
-                    },
-                ],
-            }
-        ]
-    }
-
-    assert _function_types(analysis) == {
-        (10, "f"): {"params": {"x": "Union[int, str]"}, "return": "Union[None, list[str]]"}
-    }
-
-
-def test_function_types_trace_preserves_raw_events_and_top_origin_spans() -> None:
-    class Trace:
-        def __init__(self) -> None:
-            self.slots = []
-
-        def add_slot(self, **slot) -> None:
-            self.slots.append(slot)
-
-    position = {"row": 2, "col": 11, "end_row": 2, "end_col": 12}
-    parameter_event = {
-        "element": {"kind": "pytype", "name": "builtins.int"}
-    }
-    analysis = {
-        "functions": [{
-            "fn_id": 1,
-            "name": "f",
-            "source_position": {"row": 1},
-            "instantiations": [{
-                "params": {"x": [parameter_event]},
-                "ret": {"element": {"kind": "top"}, "source_position": position},
-            }],
-        }]
-    }
-    trace = Trace()
-
-    _function_types(analysis, trace)
-
-    by_slot = {slot["slot"]: slot for slot in trace.slots}
-    assert by_slot["param:x"]["candidates"][0]["raw_events"] == [parameter_event]
-    assert by_slot["return"]["candidates"][0]["top_origin_positions"] == [position]
-
-
-def test_function_types_normalizes_builtins_nonetype() -> None:
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "main",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "argv": [
-                                {"element": {"kind": "pytype", "name": "builtins.NoneType"}}
-                            ]
-                        },
-                        "ret": {"element": {"kind": "pytype", "name": "NoneType"}},
-                    },
-                ],
-            }
-        ]
-    }
-
-    assert _function_types(analysis) == {
-        (1, "main"): {"params": {"argv": "None"}, "return": "None"}
-    }
-
-
-def test_builtins_nonetype_renders_as_parseable_none_annotations() -> None:
-    source = "def main(argv=None):\n    return None\n"
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "main",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "argv": [
-                                {"element": {"kind": "pytype", "name": "builtins.NoneType"}}
-                            ]
-                        },
-                        "ret": {"element": {"kind": "pytype", "name": "NoneType"}},
-                    }
-                ],
-            }
-        ]
-    }
-
-    annotated, stats = _annotate_source(source, _function_types(analysis))
-
-    ast.parse(annotated)
-    assert "NoneType" not in annotated
-    assert "def main(argv: None=None) -> None:" in annotated
-    assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
-
-
-def test_generator_element_renders_as_parseable_generator_annotation() -> None:
-    source = "def numbers():\n    yield 1\n"
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "numbers",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {},
-                        "ret": {
-                            "element": {
-                                "kind": "generator",
-                                "element": {"kind": "pytype", "name": "builtins.int"},
-                            }
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    function_types = _function_types(analysis)
-    annotated, stats = _annotate_source(source, function_types)
-
-    assert function_types == {
-        (1, "numbers"): {"params": {}, "return": "Generator[int, None, None]"}
-    }
-    ast.parse(annotated)
-    assert "unknown kind: generator" not in annotated
-    assert "from typing import Generator" in annotated
-    assert "def numbers() -> Generator[int, None, None]:" in annotated
-    assert stats == {"functions": 1, "params": 0, "returns": 1, "variables": 0}
-
-
-def test_ellipsis_pytype_renders_as_any_fallback_instead_of_lowercase_name() -> None:
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "x": [{"element": {"kind": "pytype", "name": "ellipsis"}}]
-                        },
-                        "ret": {"element": {"kind": "pytype", "name": "builtins.int"}},
-                    }
-                ],
-            }
-        ]
-    }
-
-    assert _function_types(analysis) == {
-        (1, "f"): {"params": {"x": "Any"}, "return": "int"}
-    }
-
-
-def test_element_type_maps_supported_shapes() -> None:
-    by_id = {7: {"name": "Factory"}}
-
-    assert _element_type({"kind": "top"}, by_id) == "Any"
-    assert _element_type({"kind": "dict", "key": {"kind": "pytype", "name": "builtins.str"}, "value": {"kind": "none"}}, by_id) == "dict[str, None]"
-    assert _element_type({"kind": "instance", "cls": {"body": 7}}, by_id) == "Factory"
-
-
-def test_element_type_resolves_string_body_ids() -> None:
-    by_id = {"sid:v1:body:factory": {"name": "Factory"}}
-
-    assert (
-        _element_type({"kind": "instance", "cls": {"body": "sid:v1:body:factory"}}, by_id)
-        == "Factory"
-    )
-
-
-def test_renderer_keeps_container_elements_and_parseable_union_spelling() -> None:
-    source = "def f(items, lookup, pair):\n    return pair\n"
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "items": [
-                                {
-                                    "element": {
-                                        "kind": "list",
-                                        "element": {"kind": "pytype", "name": "builtins.str"},
-                                    }
-                                }
-                            ],
-                            "lookup": [
-                                {
-                                    "element": {
-                                        "kind": "dict",
-                                        "key": {"kind": "pytype", "name": "builtins.str"},
-                                        "value": {"kind": "pytype", "name": "builtins.int"},
-                                    }
-                                }
-                            ],
-                            "pair": [
-                                {
-                                    "element": {
-                                        "kind": "tuple",
-                                        "slots": [
-                                            {"kind": "pytype", "name": "builtins.int"},
-                                            {"kind": "pytype", "name": "builtins.str"},
-                                        ],
-                                    }
-                                }
-                            ],
-                        },
-                        "ret": {
-                            "element": {
-                                "kind": "union",
-                                "elements": [
-                                    {"kind": "pytype", "name": "builtins.NoneType"},
-                                    {"kind": "pytype", "name": "builtins.int"},
-                                ],
-                            }
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    function_types = _function_types(analysis)
-    annotated, stats = _annotate_source(source, function_types)
-
-    ast.parse(annotated)
-    assert "builtins." not in annotated
-    assert "Optional" not in annotated
-    assert "def f(items: list[str], lookup: dict[str, int], pair: tuple[int, str]) -> Union[None, int]:" in annotated
-    assert "from typing import Any, Union" in annotated
-    assert stats == {"functions": 1, "params": 3, "returns": 1, "variables": 0}
 
 
 def test_emit_predictions_leaves_original_source_on_invalid_annotation_syntax(

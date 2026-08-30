@@ -22,7 +22,6 @@ from typing import Any, Optional
 from archway_benchmarks.typybench_harness import require_python_source_files
 
 
-_NONE_TYPE_NAMES = {"builtins.NoneType", "NoneType"}
 _TRACE_ENV_VAR = "ARCHWAY_TYPYBENCH_TRACE_JSONL"
 
 
@@ -597,7 +596,10 @@ def _successor_shape_annotation(value: object) -> str | None:
             nested = _successor_shape_annotation(position.get("nested"))
             return _merge_types([*nominal, *([nested] if nested else [])])
 
-        if constructor in {"list", "set"}:
+        if constructor == "generator":
+            yielded = position_type(positions.get("yield:*")) or "Any"
+            rendered.append(f"Generator[{yielded}, None, None]")
+        elif constructor in {"list", "set"}:
             elements = [
                 position_type(item) for item in positions.values()
             ]
@@ -2513,132 +2515,6 @@ class _TraceBuffer:
             self.writer.write(self.records[key])
 
 
-def _function_types(
-    analysis: dict[str, Any], trace: _TraceBuffer | None = None
-) -> dict[tuple[int, str], dict[str, Any]]:
-    out: dict[tuple[int, str], dict[str, Any]] = {}
-    functions = analysis.get("functions", []) or []
-    by_id = {f.get("fn_id"): f for f in functions}
-    for fn in functions:
-        pos = fn.get("source_position") or {}
-        row = pos.get("row")
-        name = fn.get("name")
-        if not row or not name:
-            continue
-        param_candidates: dict[str, list[str]] = {}
-        param_trace: dict[str, list[dict[str, Any]]] = {}
-        returns: list[str] = []
-        return_trace: list[dict[str, Any]] = []
-        for inst_index, inst in enumerate(fn.get("instantiations", []) or []):
-            for pname, events in (inst.get("params") or {}).items():
-                typ, candidate = _events_type(events, by_id, instantiation=inst_index)
-                param_trace.setdefault(pname, []).append(candidate)
-                if typ:
-                    param_candidates.setdefault(pname, []).append(typ)
-            ret = inst.get("ret") or {}
-            typ, reason = _render_element(ret.get("element"), by_id)
-            return_trace.append(
-                {
-                    "instantiation": inst_index,
-                    "raw_event": ret,
-                    "raw_element": ret.get("element"),
-                    "rendered_annotation": typ,
-                    "fallback_reasons": [reason] if reason else [],
-                    "top_origin_positions": _top_origin_positions([ret]),
-                }
-            )
-            if typ:
-                returns.append(typ)
-        params = {
-            pname: typ
-            for pname, candidates in param_candidates.items()
-            if (typ := _merge_types(candidates))
-        }
-        ret_type = _merge_types(returns)
-        if trace:
-            line = int(row)
-            for pname, candidates in param_trace.items():
-                trace.add_slot(
-                    line=line,
-                    function=str(name),
-                    slot=f"param:{pname}",
-                    candidates=candidates,
-                    merged_annotation=params.get(pname),
-                )
-            if return_trace:
-                trace.add_slot(
-                    line=line,
-                    function=str(name),
-                    slot="return",
-                    candidates=return_trace,
-                    merged_annotation=ret_type,
-                )
-        out[(int(row), str(name))] = {"params": params, "return": ret_type}
-    return out
-
-
-def _events_type(
-    events: Any, by_id: dict[Any, dict[str, Any]], *, instantiation: int | None = None
-) -> tuple[Optional[str], dict[str, Any]]:
-    if not events:
-        return (
-            None,
-            {
-                "instantiation": instantiation,
-                "raw_events": [],
-                "raw_elements": [],
-                "rendered_events": [],
-                "rendered_annotation": None,
-                "fallback_reasons": ["missing events"],
-                "top_origin_positions": [],
-            },
-        )
-    if isinstance(events, dict):
-        events = [events]
-    rendered_events: list[str] = []
-    raw_elements: list[Any] = []
-    reasons: list[str] = []
-    for event in events:
-        if not isinstance(event, dict):
-            reasons.append("unknown event")
-            continue
-        raw_elements.append(event.get("element"))
-        typ, reason = _render_element(event.get("element"), by_id)
-        if typ:
-            rendered_events.append(typ)
-        if reason:
-            reasons.append(reason)
-    typ = _merge_types(rendered_events)
-    return (
-        typ,
-        {
-            "instantiation": instantiation,
-            "raw_events": events,
-            "raw_elements": raw_elements,
-            "rendered_events": rendered_events,
-            "rendered_annotation": typ,
-            "fallback_reasons": reasons,
-            "top_origin_positions": _top_origin_positions(events),
-        },
-    )
-
-
-def _top_origin_positions(events: list[Any]) -> list[dict[str, Any]]:
-    positions = []
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        element = event.get("element")
-        position = event.get("source_position")
-        if (
-            isinstance(element, dict)
-            and element.get("kind") == "top"
-            and isinstance(position, dict)
-        ):
-            positions.append(position)
-    return positions
-
-
 def _merge_types(types: list[str]) -> Optional[str]:
     unique = sorted({t for t in types if t})
     if not unique:
@@ -2646,97 +2522,6 @@ def _merge_types(types: list[str]) -> Optional[str]:
     if len(unique) == 1:
         return unique[0]
     return f"Union[{', '.join(unique)}]"
-
-
-def _element_type(elt: Any, by_id: dict[Any, dict[str, Any]]) -> Optional[str]:
-    return _render_element(elt, by_id)[0]
-
-
-def _render_element(elt: Any, by_id: dict[Any, dict[str, Any]]) -> tuple[Optional[str], str | None]:
-    if not isinstance(elt, dict):
-        return None, "missing element"
-    kind = elt.get("kind")
-    if kind == "pytype":
-        name = elt.get("name")
-        typ = _clean_type_name(str(name or "Any"))
-        if typ == "ellipsis":
-            return "Any", "ellipsis pytype"
-        return typ, None if name else "missing pytype name"
-    if kind in {"top", "bottom"}:
-        return "Any", str(kind)
-    if kind == "none":
-        return "None", None
-    if kind == "list":
-        inner, reason = _render_element(elt.get("element"), by_id)
-        return f"list[{inner or 'Any'}]", _nested_reason("list.element", reason, inner)
-    if kind == "set":
-        inner, reason = _render_element(elt.get("element"), by_id)
-        return f"set[{inner or 'Any'}]", _nested_reason("set.element", reason, inner)
-    if kind == "tuple":
-        slots = elt.get("slots") or []
-        if slots:
-            rendered = [_render_element(s, by_id) for s in slots]
-            inner = ", ".join(t or "Any" for t, _ in rendered)
-            reason = _join_reasons(
-                _nested_reason(f"tuple.slot[{i}]", reason, typ)
-                for i, (typ, reason) in enumerate(rendered)
-            )
-            return f"tuple[{inner}]", reason
-        inner, reason = _render_element(elt.get("element"), by_id)
-        return f"tuple[{inner or 'Any'}, ...]", _nested_reason("tuple.element", reason, inner)
-    if kind == "dict":
-        key, key_reason = _render_element(elt.get("key"), by_id)
-        val, val_reason = _render_element(elt.get("value"), by_id)
-        return f"dict[{key or 'Any'}, {val or 'Any'}]", _join_reasons(
-            [
-                _nested_reason("dict.key", key_reason, key),
-                _nested_reason("dict.value", val_reason, val),
-            ]
-        )
-    if kind == "generator":
-        inner, reason = _render_element(elt.get("element"), by_id)
-        return f"Generator[{inner or 'Any'}, None, None]", _nested_reason(
-            "generator.element", reason, inner
-        )
-    if kind == "union":
-        rendered = [_render_element(e, by_id) for e in elt.get("elements", [])]
-        return _merge_types([t for t, _ in rendered if t]), _join_reasons(
-            _nested_reason(f"union.element[{i}]", reason, typ)
-            for i, (typ, reason) in enumerate(rendered)
-        )
-    if kind == "instance":
-        cls = elt.get("cls") or {}
-        body = cls.get("body")
-        fn = by_id.get(body)
-        if fn and fn.get("name"):
-            return str(fn["name"]), None
-        return None, "missing instance class body"
-    if kind == "class":
-        return "type", None
-    if kind == "callable":
-        return "object", "callable->object"
-    return None, f"unknown kind: {kind}"
-
-
-def _nested_reason(prefix: str, reason: str | None, rendered: str | None) -> str | None:
-    if reason:
-        return f"{prefix}: {reason}"
-    if rendered is None:
-        return f"{prefix}: missing element"
-    return None
-
-
-def _join_reasons(reasons: Any) -> str | None:
-    values = [reason for reason in reasons if reason]
-    return "; ".join(values) if values else None
-
-
-def _clean_type_name(name: str) -> str:
-    if name in _NONE_TYPE_NAMES:
-        return "None"
-    if name.startswith("builtins."):
-        return name.removeprefix("builtins.")
-    return name
 
 
 class _Annotator(ast.NodeTransformer):
