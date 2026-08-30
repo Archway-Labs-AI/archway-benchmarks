@@ -20,6 +20,7 @@ def callable_runtime_evidence(
     context_counts = session.invocation_context_counts()
     input_growth = session.invocation_input_growth_counts()
     admission_counts = session.invocation_admission_counts()
+    predicate_cache = session.predicate_reduction_cache_counts()
     lifecycle = (
         session.invocation_summary_telemetry() if include_lifecycle else ()
     )
@@ -27,6 +28,7 @@ def callable_runtime_evidence(
         "invocation_context_counts": dict(context_counts),
         "invocation_input_growth_counts": dict(input_growth),
         "invocation_admission_counts": dict(admission_counts),
+        "predicate_reduction_cache": dict(predicate_cache),
         "invocation_summary_telemetry": tuple(lifecycle),
         # Refusals were owned by the removed native scalar provider. The
         # provider-neutral runtime currently exposes admitted semantic facts,
