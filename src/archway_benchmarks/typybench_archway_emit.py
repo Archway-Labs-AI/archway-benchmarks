@@ -450,7 +450,7 @@ def _successor_function_types(
         ]
         target = (
             requirement_candidates
-            if item.get("family") == "CallableTypeCandidates"
+            if item.get("family") == "AnnotationCandidatesAt"
             else candidates
         )
         target.setdefault((int(line), function), {}).setdefault(
@@ -1519,10 +1519,6 @@ try:
                 ),
             })
         for item, candidate in session.type_candidate_observations():
-            # Nested-path candidates constrain an element/attribute reached
-            # through the parameter, not the parameter annotation itself.
-            if candidate.path or len(candidate.types) != 1:
-                continue
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
             if rel is None and module is not None:
@@ -1539,9 +1535,12 @@ try:
                 "kind": item.kind,
                 "family": item.address.family,
                 "function": item.function,
-                "types": sorted(candidate.types),
-                "precision": candidate.precision,
+                "types": [candidate.type_name],
+                "precision": (
+                    f"reviewed_open_world:{candidate.disposition.value}"
+                ),
                 "requirement_path": [],
+                "candidate_evidence": candidate.canonical_data(),
             })
     observation_projection_seconds = time.monotonic() - projection_started
     scheduler_telemetry = (

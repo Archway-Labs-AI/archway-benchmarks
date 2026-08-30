@@ -139,7 +139,7 @@ def test_successor_requirement_candidates_fill_unknown_parameter_only() -> None:
         },
         {
             "line": 4, "name": "x", "kind": "parameter",
-            "function": "f", "family": "CallableTypeCandidates",
+            "function": "f", "family": "AnnotationCandidatesAt",
             "types": ["builtins.str"],
         },
     ]
@@ -158,7 +158,7 @@ def test_successor_observed_type_precedes_requirement_candidates() -> None:
         },
         {
             "line": 4, "name": "x", "kind": "parameter",
-            "function": "f", "family": "CallableTypeCandidates",
+            "function": "f", "family": "AnnotationCandidatesAt",
             "types": ["builtins.str"],
         },
     ]
