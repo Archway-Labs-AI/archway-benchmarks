@@ -425,6 +425,7 @@ def _successor_function_types(
     requirement_candidates: dict[
         tuple[int, str], dict[str, list[str]]
     ] = {}
+    shape_candidates: dict[tuple[int, str], dict[str, list[str]]] = {}
     for item in observations:
         line = item.get("line")
         kind = item.get("kind")
@@ -443,14 +444,21 @@ def _successor_function_types(
         # FunctionDef.
         function = str(function).rsplit(".", 1)[-1]
         slot = "return" if kind == "return" else f"param:{item.get('name')}"
-        values = [
-            _successor_annotation(value)
-            for value in item.get("types", [])
-            if value
-        ]
+        values = (
+            [_successor_shape_annotation(item.get("shape"))]
+            if item.get("family") == "GenericShapeOf"
+            else [
+                _successor_annotation(value)
+                for value in item.get("types", [])
+                if value
+            ]
+        )
+        values = [value for value in values if value]
         target = (
             requirement_candidates
             if item.get("family") == "AnnotationCandidatesAt"
+            else shape_candidates
+            if item.get("family") == "GenericShapeOf"
             else candidates
         )
         target.setdefault((int(line), function), {}).setdefault(
@@ -458,12 +466,23 @@ def _successor_function_types(
         ).extend(values)
 
     rendered: dict[tuple[int, str], dict[str, Any]] = {}
-    for key in candidates.keys() | requirement_candidates.keys():
+    for key in (
+        candidates.keys() | requirement_candidates.keys()
+        | shape_candidates.keys()
+    ):
         observed_slots = candidates.get(key, {})
         fallback_slots = requirement_candidates.get(key, {})
+        shaped_slots = shape_candidates.get(key, {})
         slots = {
-            slot: observed_slots.get(slot) or fallback_slots.get(slot, [])
-            for slot in observed_slots.keys() | fallback_slots.keys()
+            slot: (
+                shaped_slots.get(slot)
+                or observed_slots.get(slot)
+                or fallback_slots.get(slot, [])
+            )
+            for slot in (
+                observed_slots.keys() | fallback_slots.keys()
+                | shaped_slots.keys()
+            )
         }
         params = {
             slot.removeprefix("param:"): merged
@@ -550,6 +569,56 @@ def _successor_annotation(value: str) -> str:
     if value == "builtins.callable":
         return "Callable"
     return value.removeprefix("builtins.")
+
+
+def _successor_shape_annotation(value: object) -> str | None:
+    """Render one bounded public GenericShapeOf value for source emission."""
+
+    if not isinstance(value, dict) or value.get("unknown"):
+        return None
+    rendered = []
+    for shape in value.get("shapes", []):
+        if not isinstance(shape, dict):
+            continue
+        constructor = _successor_annotation(str(shape.get("constructor", "")))
+        positions = {
+            str(item.get("position")): item.get("value")
+            for item in shape.get("positions", [])
+            if isinstance(item, dict)
+        }
+
+        def position_type(position: object) -> str | None:
+            if not isinstance(position, dict):
+                return None
+            nominal = [
+                _successor_annotation(str(item))
+                for item in position.get("nominal_types", [])
+            ]
+            nested = _successor_shape_annotation(position.get("nested"))
+            return _merge_types([*nominal, *([nested] if nested else [])])
+
+        if constructor in {"list", "set"}:
+            elements = [
+                position_type(item) for item in positions.values()
+            ]
+            inner = _merge_types([item for item in elements if item]) or "Any"
+            rendered.append(f"{constructor}[{inner}]")
+        elif constructor == "tuple":
+            summary = position_type(positions.get("summary:*"))
+            if summary:
+                rendered.append(f"tuple[{summary}, ...]")
+            else:
+                slots = [
+                    (name, position_type(item))
+                    for name, item in positions.items()
+                    if name.startswith("builtins.int:")
+                ]
+                slots.sort(key=lambda item: int(item[0].rsplit(":", 1)[-1]))
+                inner = ", ".join(item or "Any" for _name, item in slots)
+                rendered.append(f"tuple[{inner}]" if inner else "tuple")
+        else:
+            rendered.append(constructor)
+    return _merge_types(rendered)
 
 
 def _run_successor_repo_probe(
@@ -970,6 +1039,10 @@ try:
     forward_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE forward {forward_seconds:.6f}", file=sys.stderr, flush=True)
     observations = session.type_observations()
+    shape_observations = session.generic_shape_observations(
+        kinds=requested_observation_kinds,
+        demand=False,
+    )
     missing_observations = sorted((
         item for item in observations
         if item.kind in requested_observation_kinds
@@ -987,12 +1060,21 @@ try:
     missing = tuple(dict.fromkeys(
         item.address for item in missing_observations
     ))
-    all_signature_roots = workload_root_projection(missing)
+    # Generic-shape roots are the primary body workload. Their shared carrier
+    # publishes nominal TypeOf observations during the same diagram fold, so
+    # the adapter does not evaluate each callable once for nominal types and
+    # again for container shape.
+    shape_roots = tuple(dict.fromkeys(
+        item.address for item in shape_observations
+    ))
+    workload_addresses = shape_roots or missing
+    all_signature_roots = workload_root_projection(workload_addresses)
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
     requested = (
-        missing
+        workload_addresses
         if requested_body_labels
-        else missing[:demand_limit] if demand_limit is not None else missing
+        else workload_addresses[:demand_limit]
+        if demand_limit is not None else workload_addresses
     )
     signature_roots = workload_root_projection(requested)
     body_labels = {
@@ -1424,6 +1506,27 @@ try:
                     sorted(str(value) for value in fact.value)
                     if fact is not None else []
                 ),
+            })
+        for item in session.generic_shape_observations(
+            kinds=requested_observation_kinds,
+            demand=False,
+        ):
+            module = item.module.dotted if item.module is not None else None
+            rel = module_files.get(module)
+            if rel is None and module is not None:
+                matches = [path for name, path in module_files.items()
+                           if module == name or module.endswith("." + name)]
+                rel = matches[0] if len(matches) == 1 else None
+            fact = session.store.resolved(item.address)
+            if rel is None or fact is None or fact.value.is_bottom:
+                continue
+            files[rel].append({
+                "line": item.position.row if item.position is not None else None,
+                "name": item.name,
+                "kind": item.kind,
+                "family": item.address.family,
+                "function": item.function,
+                "shape": fact.value.canonical_data(),
             })
         for item, candidate in session.type_candidate_observations():
             module = item.module.dotted if item.module is not None else None

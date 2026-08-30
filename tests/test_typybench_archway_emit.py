@@ -170,6 +170,43 @@ def test_successor_observed_type_precedes_requirement_candidates() -> None:
     }
 
 
+def test_successor_generic_shape_refines_nominal_container_type() -> None:
+    observations = [
+        {
+            "line": 4, "name": "f", "kind": "return",
+            "function": None, "family": "TypeOf",
+            "types": ["builtins.list"],
+        },
+        {
+            "line": 4, "name": "f", "kind": "return",
+            "function": None, "family": "GenericShapeOf",
+            "shape": {
+                "kind": "generic_shape_set",
+                "unknown": False,
+                "shapes": [{
+                    "constructor": "builtins.list",
+                    "open": False,
+                    "positions": [{
+                        "position": "summary:*",
+                        "value": {
+                            "nominal_types": ["builtins.str"],
+                            "nested": {
+                                "kind": "generic_shape_set",
+                                "unknown": False,
+                                "shapes": [],
+                            },
+                        },
+                    }],
+                }],
+            },
+        },
+    ]
+
+    assert _successor_function_types(observations) == {
+        (4, "f"): {"params": {}, "return": "list[str]"}
+    }
+
+
 def test_successor_observations_match_qualified_methods_to_source_name() -> None:
     observations = [
         {
