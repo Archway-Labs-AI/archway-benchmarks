@@ -25,6 +25,8 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
     assert 'session, "signature_workload_roots", None' in worker_source
     assert 'session, "observe_signature_workload", None' in worker_source
     assert "signature-body-root-projection" in worker_source
+    assert "plan_signature_workload" in worker_source
+    assert "targeted_body_providers" not in worker_source
     assert "observation_workload_roots" not in worker_source
     assert "exact-address-deduplication" not in worker_source
 

@@ -880,7 +880,14 @@ try:
         workload_observer = getattr(
             session, "observe_signature_workload", None
         )
-        if workload_root_projection is None or workload_observer is None:
+        workload_planner = getattr(
+            session, "plan_signature_workload", None
+        )
+        if (
+            workload_root_projection is None
+            or workload_observer is None
+            or workload_planner is None
+        ):
             raise RuntimeError(
                 "analysis runtime exposes no authoritative signature "
                 "workload API"
@@ -1066,76 +1073,13 @@ try:
     if checkpoint_roots:
         targeted = None
         body_profiles = []
-        # Every root already coalesces all observations produced by one
-        # callable body, while the session retains facts, summaries, and
-        # topology across roots. Admit independent roots together, but never
-        # place two bodies backed by the same definition binding in one wave:
-        # their shared class/function prerequisite must stabilize before its
-        # next consumer is admitted. This avoids both one global scheduler
-        # drain per body and the convergence explosion caused by admitting
-        # sibling bodies simultaneously.
-        def admission_group(root_address):
-            body_id = session.observation_workload_body_id(root_address) or ""
-            for provider in session.targeted_body_providers:
-                if body_id not in provider.bodies_by_id:
-                    continue
-                binding_names = getattr(
-                    provider, "body_binding_names", None
-                )
-                boundary = session.callable_boundaries_by_body.get(body_id)
-                shared_definition = (
-                    binding_names.get(body_id, body_id)
-                    if binding_names is not None
-                    else (
-                        boundary.definition_morphism_id
-                        if boundary is not None else body_id
-                    )
-                )
-                return (
-                    id(provider),
-                    shared_definition,
-                )
-            return ("unowned", body_id)
-
         def admission_batches(roots):
-            grouped = {}
-            group_order = {}
-            for ordinal, root_address in enumerate(roots):
-                group = admission_group(root_address)
-                grouped.setdefault(group, []).append(root_address)
-                group_order.setdefault(group, ordinal)
-            minimum_batch_count = max(
-                (len(roots) + checkpoint_size - 1) // checkpoint_size,
-                max((len(items) for items in grouped.values()), default=0),
-            )
-            batches = [[] for _ in range(minimum_batch_count)]
-            batch_groups = [set() for _ in range(minimum_batch_count)]
-            # Pack the most constrained bindings first, then place every root
-            # in the least-filled legal wave. The lower bound is the larger
-            # of capacity and maximum binding multiplicity; add a wave only
-            # if the greedy packing cannot realize that bound. A wave still
-            # contains at most one consumer of any shared definition.
-            ordered_groups = sorted(
-                grouped,
-                key=lambda group: (-len(grouped[group]), group_order[group]),
-            )
-            for group in ordered_groups:
-                for root_address in grouped[group]:
-                    candidates = [
-                        index for index, current in enumerate(batches)
-                        if len(current) < checkpoint_size
-                        and group not in batch_groups[index]
-                    ]
-                    if not candidates:
-                        batches.append([])
-                        batch_groups.append(set())
-                        candidates = [len(batches) - 1]
-                    index = min(candidates, key=lambda item: (
-                        len(batches[item]), item,
-                    ))
-                    batches[index].append(root_address)
-                    batch_groups[index].add(group)
-            return tuple(tuple(batch) for batch in batches)
+            # Admission ownership and safe wave partitioning are properties
+            # of the diagram workload, not of this benchmark. The benchmark
+            # supplies only an explicit diagnostic capacity.
+            return workload_planner(
+                tuple(roots), max_wave_size=checkpoint_size
+            ).targeted_waves
         all_batches = admission_batches(signature_roots)
         requested_tail_start = (
             min(checkpoint_tail_start, len(signature_roots))
@@ -1287,48 +1231,11 @@ try:
             workload_relevance = []
             if diagnostic_details:
                 for workload_root in root_batch:
-                    workload_body_id = getattr(
-                        workload_root.subject, "body_morphism_id", ""
-                    ) or session.observation_workload_body_id(workload_root)
-                    for provider in session.targeted_body_providers:
-                        if workload_body_id not in provider.bodies_by_id:
-                            continue
-                        root_observations = getattr(
-                            provider, "_root_observations", None
+                    workload_relevance.append(
+                        session.observation_catalog.workload_relevance(
+                            workload_root
                         )
-                        templates = (
-                            root_observations.get(workload_root)
-                            if root_observations is not None
-                            else tuple(
-                                template for template in provider.plan.templates
-                                if template.body_morphism_id
-                                == workload_body_id
-                            )
-                        )
-                        active_counts = getattr(
-                            provider,
-                            "_workload_active_morphism_counts",
-                            {},
-                        )
-                        required_bindings = getattr(
-                            provider,
-                            "_required_definition_bindings",
-                            {},
-                        )
-                        workload_relevance.append({
-                            "root_id": workload_root.id,
-                            "observation_count": len(templates),
-                            "active_morphism_count": (
-                                active_counts.get(workload_root)
-                            ),
-                            "required_definition_bindings": sorted(
-                                required_bindings.get((
-                                    workload_body_id,
-                                    workload_root.context,
-                                ), ())
-                            ),
-                        })
-                        break
+                    )
             body_profile = {
                 "index": index,
                 "label": body_label,
