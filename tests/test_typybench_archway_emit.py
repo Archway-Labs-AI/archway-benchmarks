@@ -23,7 +23,7 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
     worker_source = inspect.getsource(_run_successor_repo_probe)
 
     assert 'session, "signature_workload_roots", None' in worker_source
-    assert 'session, "observe_signature_workload", None' in worker_source
+    assert 'getattr(session, "run_workload", None)' in worker_source
     assert "signature-body-root-projection" in worker_source
     assert "plan_signature_workload" in worker_source
     assert "targeted_body_providers" not in worker_source

@@ -127,18 +127,19 @@ class SuccessorArchwayAnalysisEngine:
                 "main",
                 record_events=self.record_events,
             )
-            # Reproduce the current benchmark workload through the public
-            # persistent-session contract. P11 replaces this eager callable
-            # policy with an explicit shared forward seed plus batched demands;
-            # the adapter must not revive the removed native-cell runtime.
-            forward = session.run_analysis_roots(
-                include_callable_bodies=True
+            # Seed only the explicit program entry. Requested type readouts
+            # below extend this same session through shared callable-body
+            # workload roots; unrequested bodies are not eager entry points.
+            forward_workload = session.run_workload(
+                session.plan_signature_workload(
+                    (), entry_modules=("main",)
+                )
             )
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
                 session=session,
-                forward=forward,
+                forward=forward_workload.seed_run,
             )
         except Exception as exc:
             return SuccessorArchwayResult(
@@ -184,11 +185,12 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
             if address not in demanded_addresses
         ):
             demanded_addresses.update(new_addresses)
-            result.targeted_runs.append(
-                result.session.observe(tuple(sorted(
+            workload = result.session.run_workload(
+                result.session.plan_signature_workload(tuple(sorted(
                     new_addresses, key=lambda address: address.id
                 )))
             )
+            result.targeted_runs.extend(workload.targeted_runs)
             # Targeted refinement may discover a context-specific instance
             # of an observation template (most notably a callable-summary
             # application) while the fallback address that triggered the

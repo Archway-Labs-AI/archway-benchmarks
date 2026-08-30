@@ -877,16 +877,14 @@ try:
         workload_root_projection = getattr(
             session, "signature_workload_roots", None
         )
-        workload_observer = getattr(
-            session, "observe_signature_workload", None
-        )
         workload_planner = getattr(
             session, "plan_signature_workload", None
         )
+        workload_runner = getattr(session, "run_workload", None)
         if (
             workload_root_projection is None
-            or workload_observer is None
             or workload_planner is None
+            or workload_runner is None
         ):
             raise RuntimeError(
                 "analysis runtime exposes no authoritative signature "
@@ -941,25 +939,23 @@ try:
         signal.signal(signal.SIGALRM, timeout_forward)
         signal.alarm(requested_forward_timeout)
     try:
-        # TypyBench requests repository-wide type observations.  Seed those
-        # observations as one shared reduced-product wave; backward relevance
-        # admits concrete/control/call coordinates when type production needs
-        # them, without eagerly evaluating the full executable product.
-        type_priority_forward = getattr(
-            session, "run_type_priority_forward", None
+        # Seed one explicit importable entry when requested. Repository-wide
+        # signature observations remain targeted workload roots below; every
+        # module is translated, but none is an implicit executable entry.
+        forward_workload = (
+            session.run_workload(session.plan_support_workload(
+                (), entry_modules=(entry,)
+            ))
+            if run_forward_seed else None
         )
         forward = (
-            type_priority_forward()
-            if run_forward_seed and type_priority_forward is not None
-            else None
+            forward_workload.seed_run
+            if forward_workload is not None else None
         )
         forward_policy = (
-            "type-priority-forward"
+            "explicit-entry-forward"
             if forward is not None
-            else (
-                "unsupported-skipped"
-                if run_forward_seed else "disabled"
-            )
+            else "disabled"
         )
     except TimeoutError:
         timed_out_forward = True
@@ -1199,7 +1195,9 @@ try:
                         project_marker="/sd_core/",
                     )
                     profiler.__enter__()
-                targeted = workload_observer(root_batch)
+                targeted = workload_runner(
+                    workload_planner(tuple(root_batch))
+                )
             except TimeoutError:
                 timed_out_body = True
                 if timed_out_execution is None and requested_progress_timeout:
@@ -1367,7 +1365,9 @@ try:
                 )
                 profiler.__enter__()
                 try:
-                    targeted = workload_observer(signature_roots)
+                    targeted = workload_runner(
+                        workload_planner(tuple(signature_roots))
+                    )
                 finally:
                     profiler.__exit__(None, None, None)
                     sampling_profile = profiler.jsonable(
@@ -1375,7 +1375,7 @@ try:
                     )
             else:
                 targeted = (
-                    workload_observer(signature_roots)
+                    workload_runner(workload_planner(tuple(signature_roots)))
                     if signature_roots else None
                 )
                 sampling_profile = None

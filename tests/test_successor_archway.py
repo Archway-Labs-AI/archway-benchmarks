@@ -1,5 +1,3 @@
-import pytest
-
 from archway_benchmarks.benchmarks.typeevalpy import TypeEvalPyBenchmark
 from archway_benchmarks.engines.archway import ArchwayTranslationEngine
 from archway_benchmarks.engines.successor_archway import (
@@ -110,11 +108,12 @@ def test_successor_public_workload_refines_uninvoked_returns_in_one_session(
     assert predictions == list(snippet.annotations)
     assert result.gaps == []
     assert result.targeted_runs
-    # The coordinated public workload seeds the module plus both callable
-    # bodies; the adapter may then refine unresolved observation addresses in
-    # the same session without restarting analysis.
-    assert len(result.forward.roots) == 3
+    # The coordinated public workload seeds only the explicit module entry;
+    # both requested callable bodies are then refined in one shared wave.
+    assert len(result.forward.roots) == 1
     assert result.forward.knowledge_deltas
+    assert len(result.targeted_runs) == 1
+    assert len(result.targeted_runs[0].roots) == 2
 
 
 def test_successor_adapter_remaps_contexts_discovered_by_refinement(tmp_path):
@@ -360,13 +359,6 @@ def test_gap_audit_reports_public_targeted_refinement(tmp_path):
     assert audit.targeted_topology_changes > 0
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "classified flow has no returned leg yet, so an early return can "
-        "join the later normal continuation before callable projection"
-    ),
-)
 def test_successor_adapter_uses_route_feasibility_for_precise_answer(tmp_path):
     snippet = _snippet(
         tmp_path,
