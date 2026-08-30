@@ -1277,6 +1277,16 @@ def successor_archway_call_edge_result(
                     "production_repeats_by_family"
                 ].items()
             )),
+            "production_changes_by_family": dict(sorted(
+                aggregate_production[
+                    "production_changes_by_family"
+                ].items()
+            )),
+            "production_growth_coordinates_by_family": dict(sorted(
+                aggregate_production[
+                    "production_growth_coordinates_by_family"
+                ].items()
+            )),
             "production_seconds_by_family": dict(sorted(
                 aggregate_production[
                     "production_seconds_by_family"
@@ -1292,6 +1302,30 @@ def successor_archway_call_edge_result(
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
+            "trace_invocations": dict(sorted(
+                aggregate_production["trace_invocations"].items()
+            )),
+            "trace_iterations": dict(sorted(
+                aggregate_production["trace_iterations"].items()
+            )),
+            "trace_max_iterations": dict(sorted(
+                aggregate_production["trace_max_iterations"].items()
+            )),
+            "trace_nonconvergences": dict(sorted(
+                aggregate_production["trace_nonconvergences"].items()
+            )),
+            "morphism_transfer_reuse": dict(
+                session.morphism_transfer_reuse_counts()
+            ),
+            "morphism_transfer_reuse_by_operation": dict(
+                session.morphism_transfer_reuse_by_operation()
+            ),
+            "morphism_fact_output_barriers": dict(
+                session.morphism_fact_output_barriers()
+            ),
+            "morphism_read_intersections": dict(
+                session.morphism_read_intersections()
+            ),
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
             ),
@@ -1538,6 +1572,14 @@ def successor_archway_call_edge_result(
             "production_repeats_by_family": top_counts(
                 Counter(production["production_repeats_by_family"])
             ),
+            "production_changes_by_family": top_counts(
+                Counter(production["production_changes_by_family"])
+            ),
+            "production_growth_coordinates_by_family": top_counts(
+                Counter(production[
+                    "production_growth_coordinates_by_family"
+                ])
+            ),
             "production_seconds_by_family": top_counts(
                 Counter(production["production_seconds_by_family"])
             ),
@@ -1551,6 +1593,30 @@ def successor_archway_call_edge_result(
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
+            "trace_invocations": top_counts(Counter(
+                production["trace_invocations"]
+            )),
+            "trace_iterations": top_counts(Counter(
+                production["trace_iterations"]
+            )),
+            "trace_max_iterations": top_counts(Counter(
+                production["trace_max_iterations"]
+            )),
+            "trace_nonconvergences": top_counts(Counter(
+                production["trace_nonconvergences"]
+            )),
+            "morphism_transfer_reuse": dict(
+                session.morphism_transfer_reuse_counts()
+            ),
+            "morphism_transfer_reuse_by_operation": dict(
+                session.morphism_transfer_reuse_by_operation()
+            ),
+            "morphism_fact_output_barriers": dict(
+                session.morphism_fact_output_barriers()
+            ),
+            "morphism_read_intersections": dict(
+                session.morphism_read_intersections()
+            ),
             **callable_evidence,
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
