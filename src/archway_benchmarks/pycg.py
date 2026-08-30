@@ -1292,6 +1292,9 @@ def successor_archway_call_edge_result(
                     "production_seconds_by_family"
                 ].items()
             )),
+            "production_hotspots": list(
+                aggregate_production["production_hotspots"]
+            ),
             "hottest_productions": hottest_productions,
             "slowest_productions": slowest_productions,
             "hottest_transfers": hottest_transfers,
@@ -1583,6 +1586,7 @@ def successor_archway_call_edge_result(
             "production_seconds_by_family": top_counts(
                 Counter(production["production_seconds_by_family"])
             ),
+            "production_hotspots": list(production["production_hotspots"]),
             "production_executions_by_provider": top_counts(
                 Counter(production["production_executions_by_provider"])
             ),
