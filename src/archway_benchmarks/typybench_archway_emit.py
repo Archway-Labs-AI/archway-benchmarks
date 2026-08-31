@@ -1903,6 +1903,9 @@ try:
             "invocation_admissions": dict(
                 optional_session_diagnostic("invocation_admission_counts", {})
             ),
+            "invocation_summaries": list(
+                optional_session_diagnostic("invocation_summary_telemetry", ())
+            ) if diagnostic_details else [],
             "invocation_application_hotspots": list(
                 optional_session_diagnostic("invocation_application_hotspots", ())
             ),
