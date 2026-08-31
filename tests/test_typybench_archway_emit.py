@@ -459,8 +459,8 @@ def test_repository_emission_can_include_diagram_class_fields_explicitly(
             "files": {"demo.py": [{
                 "line": 2,
                 "name": "Model.value",
-                "kind": "variable",
-                "family": "ClassFieldTypeOf",
+                "kind": "class_field",
+                "family": "ClassAttributeTypeOf",
                 "function": None,
                 "types": ["builtins.int"],
             }]},
@@ -496,6 +496,21 @@ def test_class_field_emission_rejects_ordinary_class_attributes() -> None:
     assert _successor_variable_types(
         observations, class_fields_only=True
     ) == {}
+
+
+def test_class_field_emission_accepts_only_reviewed_transform_projection() -> None:
+    observations = [{
+        "line": 2,
+        "name": "Model.value",
+        "kind": "class_field",
+        "family": "ClassAttributeTypeOf",
+        "function": None,
+        "types": ["builtins.int"],
+    }]
+
+    assert _successor_variable_types(
+        observations, class_fields_only=True
+    ) == {(2, "value"): "int"}
 
 
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:

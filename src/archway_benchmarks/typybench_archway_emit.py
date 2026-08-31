@@ -209,7 +209,7 @@ def emit_archway_predictions(
     checkpoint_roots: bool = True,
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
-    emit_class_field_annotations: bool = False,
+    emit_class_field_annotations: bool = True,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -621,12 +621,17 @@ def _successor_variable_types(
     for item in observations:
         line = item.get("line")
         name = item.get("name")
-        if not line or item.get("kind") != "variable" or not name:
+        if (
+            not line
+            or item.get("kind") not in {"variable", "class_field"}
+            or not name
+        ):
             continue
         if class_fields_only and (
             item.get("function") is not None
             or "." not in str(name)
-            or item.get("family") != "ClassFieldTypeOf"
+            or item.get("kind") != "class_field"
+            or item.get("family") != "ClassAttributeTypeOf"
         ):
             continue
         # Class-attribute observations retain their qualified semantic name
