@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from archway_benchmarks.typybench_harness import require_python_source_files
+from archway_benchmarks.typybench_scored_slots import scored_slots
 
 
 _TRACE_ENV_VAR = "ARCHWAY_TYPYBENCH_TRACE_JSONL"
@@ -144,6 +145,7 @@ class FileProfile:
     error: str | None = None
     trace_tail: str | None = None
     analysis_summary: dict[str, Any] | None = None
+    scored_slot_accounting: dict[str, int] | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -162,6 +164,7 @@ class FileProfile:
             "error": self.error,
             "trace_tail": self.trace_tail,
             "analysis_summary": self.analysis_summary,
+            "scored_slot_accounting": self.scored_slot_accounting,
         }
 
 
@@ -182,6 +185,7 @@ class EmitStats:
     analysis_summary: dict[str, Any] | None = None
     probe_error: str | None = None
     probe_trace_tail: str | None = None
+    scored_slot_accounting: dict[str, int] = field(default_factory=dict)
 
 
 def emit_archway_predictions(
@@ -205,7 +209,6 @@ def emit_archway_predictions(
     checkpoint_roots: bool = True,
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
-    emit_variable_annotations: bool = False,
     emit_class_field_annotations: bool = False,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
@@ -242,6 +245,7 @@ def emit_archway_predictions(
     params_annotated = 0
     returns_annotated = 0
     variables_annotated = 0
+    scored_slot_accounting: dict[str, int] = {}
     failures: list[dict[str, str]] = []
     file_profiles: list[FileProfile] = []
 
@@ -260,7 +264,6 @@ def emit_archway_predictions(
             observation_kinds=frozenset((
                 "parameter",
                 "return",
-                *(("variable",) if emit_variable_annotations else ()),
             )),
         )
         seconds_repo_probe = time.monotonic() - probe_started
@@ -276,6 +279,13 @@ def emit_archway_predictions(
             # elapsed-budget check below used to replace this richer failure
             # with one generic error per file.
             if not record.get("ok"):
+                file_accounting = _scored_slot_accounting(
+                    src.read_text(encoding="utf-8"), [], {},
+                )
+                for name, count in file_accounting.items():
+                    scored_slot_accounting[name] = (
+                        scored_slot_accounting.get(name, 0) + count
+                    )
                 err = str(record.get("error", "no engine result"))[:300]
                 failures.append({"file": rel_s, "error": err})
                 profile = FileProfile(
@@ -287,6 +297,7 @@ def emit_archway_predictions(
                     error=err,
                     trace_tail=record.get("trace_tail"),
                     analysis_summary=record.get("analysis_summary"),
+                    scored_slot_accounting=file_accounting,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -298,6 +309,13 @@ def emit_archway_predictions(
                 .get("translation_failures", {})
             )
             if rel_s in translation_failures:
+                file_accounting = _scored_slot_accounting(
+                    src.read_text(encoding="utf-8"), [], {},
+                )
+                for name, count in file_accounting.items():
+                    scored_slot_accounting[name] = (
+                        scored_slot_accounting.get(name, 0) + count
+                    )
                 err = str(translation_failures[rel_s])[:300]
                 failures.append({"file": rel_s, "error": err})
                 profile = FileProfile(
@@ -308,6 +326,7 @@ def emit_archway_predictions(
                     seconds_engine_probe=round(seconds_probe, 6),
                     error=err,
                     analysis_summary=record.get("analysis_summary"),
+                    scored_slot_accounting=file_accounting,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -321,10 +340,6 @@ def emit_archway_predictions(
                 record.get("files", {}).get(rel_s, []), trace=file_trace
             )
             variable_types = (
-                _successor_variable_types(
-                    record.get("files", {}).get(rel_s, []), trace=file_trace
-                )
-                if emit_variable_annotations else
                 _successor_variable_types(
                     record.get("files", {}).get(rel_s, []),
                     trace=file_trace,
@@ -344,6 +359,16 @@ def emit_archway_predictions(
                     trace=file_trace,
                 )
             except SyntaxError as exc:
+                file_accounting = _scored_slot_accounting(
+                    raw,
+                    record.get("files", {}).get(rel_s, []),
+                    function_types,
+                    annotation_failed=True,
+                )
+                for name, count in file_accounting.items():
+                    scored_slot_accounting[name] = (
+                        scored_slot_accounting.get(name, 0) + count
+                    )
                 error = f"emit SyntaxError: {exc}"[:300]
                 failures.append({"file": rel_s, "error": error})
                 profile = FileProfile(
@@ -357,6 +382,7 @@ def emit_archway_predictions(
                     functions_seen=len(function_types),
                     error=error,
                     analysis_summary=record.get("analysis_summary"),
+                    scored_slot_accounting=file_accounting,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -367,6 +393,17 @@ def emit_archway_predictions(
             params_annotated += file_stats["params"]
             returns_annotated += file_stats["returns"]
             variables_annotated += file_stats["variables"]
+            file_accounting = _scored_slot_accounting(
+                raw,
+                record.get("files", {}).get(rel_s, []),
+                function_types,
+                emitted_params=file_stats["params"],
+                emitted_returns=file_stats["returns"],
+            )
+            for name, count in file_accounting.items():
+                scored_slot_accounting[name] = (
+                    scored_slot_accounting.get(name, 0) + count
+                )
             dest.write_text(annotated, encoding="utf-8")
             profile = FileProfile(
                 repo_name=repo_name,
@@ -382,6 +419,7 @@ def emit_archway_predictions(
                 returns_annotated=file_stats["returns"],
                 variables_annotated=file_stats["variables"],
                 analysis_summary=record.get("analysis_summary"),
+                scored_slot_accounting=file_accounting,
             )
             file_profiles.append(profile)
             if profile_writer:
@@ -412,6 +450,7 @@ def emit_archway_predictions(
             if not repo_record.get("ok") else None
         ),
         probe_trace_tail=repo_record.get("trace_tail"),
+        scored_slot_accounting=scored_slot_accounting,
     )
 
 
@@ -435,13 +474,12 @@ def _successor_function_types(
             function = function or item.get("name")
         if not function:
             continue
-        # Successor observations retain the semantic qualified callable name
-        # (for example ``PaperQAEnvironment.__init__``), while the source
-        # annotation adapter addresses a definition by its source-local name
-        # and line.  The line retains the necessary disambiguation; preserving
-        # the qualifier here prevents every method parameter from matching its
-        # FunctionDef.
-        function = str(function).rsplit(".", 1)[-1]
+        # Definition provenance and the qualified lexical callable name are
+        # the source-editing identity. Observation rows may identify a formal
+        # use or bind wire and are diagnostic only; they are not a stable join
+        # for multiline signatures.
+        definition_line = item.get("definition_line") or line
+        function = str(function)
         slot = "return" if kind == "return" else f"param:{item.get('name')}"
         values = (
             [_successor_shape_annotation(item.get("shape"))]
@@ -460,7 +498,7 @@ def _successor_function_types(
             if item.get("family") == "GenericShapeOf"
             else candidates
         )
-        target.setdefault((int(line), function), {}).setdefault(
+        target.setdefault((int(definition_line), function), {}).setdefault(
             slot, []
         ).extend(values)
 
@@ -507,6 +545,67 @@ def _successor_function_types(
                     merged_annotation=(ret if slot == "return" else params.get(slot.removeprefix("param:"))),
                 )
     return rendered
+
+
+def _scored_slot_accounting(
+    source: str,
+    observations: list[dict[str, Any]],
+    function_types: dict[tuple[int, str], dict[str, Any]],
+    *,
+    emitted_params: int = 0,
+    emitted_returns: int = 0,
+    annotation_failed: bool = False,
+) -> dict[str, int]:
+    """Account for the complete potential direct TypyBench scoring surface."""
+
+    manifest = scored_slots(source)
+    manifest_by_key = {item.adapter_key: item for item in manifest}
+    cataloged = set()
+    for item in observations:
+        kind = item.get("kind")
+        if kind not in {"parameter", "return"}:
+            continue
+        function = item.get("function")
+        if kind == "return":
+            function = function or item.get("name")
+        line = item.get("definition_line") or item.get("line")
+        if not function or not line:
+            continue
+        role = "return" if kind == "return" else f"param:{item.get('name')}"
+        cataloged.add((int(line), str(function), role))
+
+    resolved = set()
+    for (line, function), info in function_types.items():
+        for name in (info.get("params") or {}):
+            resolved.add((line, function, f"param:{name}"))
+        if info.get("return"):
+            resolved.add((line, function, "return"))
+
+    manifest_keys = set(manifest_by_key)
+    resolved_manifest = resolved & manifest_keys
+    preserved = sum(
+        manifest_by_key[key].has_annotation for key in resolved_manifest
+    )
+    emitted = emitted_params + emitted_returns
+    resolved_unrenderable = (
+        len(resolved_manifest) if annotation_failed else 0
+    )
+    resolved_not_emitted = (
+        0 if annotation_failed else
+        max(0, len(resolved_manifest) - preserved - emitted)
+    )
+    return {
+        "manifest_slots": len(manifest_keys),
+        "engine_cataloged_slots": len(cataloged & manifest_keys),
+        "resolved_candidates": len(resolved_manifest),
+        "resolved_emitted": emitted,
+        "resolved_preserved": preserved,
+        "resolved_unrenderable": resolved_unrenderable,
+        "resolved_not_emitted": resolved_not_emitted,
+        "unresolved_facts": len((cataloged & manifest_keys) - resolved),
+        "uncataloged_engine_identity": len(manifest_keys - cataloged),
+        "orphan_engine_observations": len(cataloged - manifest_keys),
+    }
 
 
 def _successor_variable_types(
@@ -1499,10 +1598,15 @@ try:
                 continue
             files[rel].append({
                 "line": item.position.row if item.position is not None else None,
+                "definition_line": (
+                    item.definition_position.row
+                    if item.definition_position is not None else None
+                ),
                 "name": item.name,
                 "kind": item.kind,
                 "family": item.address.family,
                 "function": item.function,
+                "body_morphism_id": item.body_morphism_id,
                 # Retain unresolved catalog entries as explicit missing
                 # evidence.  The source adapter inserts nothing for an empty
                 # set, while diagnostic traces can now distinguish an open
@@ -1527,10 +1631,15 @@ try:
                 continue
             files[rel].append({
                 "line": item.position.row if item.position is not None else None,
+                "definition_line": (
+                    item.definition_position.row
+                    if item.definition_position is not None else None
+                ),
                 "name": item.name,
                 "kind": item.kind,
                 "family": item.address.family,
                 "function": item.function,
+                "body_morphism_id": item.body_morphism_id,
                 "shape": fact.value.canonical_data(),
             })
         for item, candidate in session.type_candidate_observations():
@@ -2547,16 +2656,40 @@ class _Annotator(ast.NodeTransformer):
         self.needs_typing = False
         self.typing_imports: set[str] = set()
         self.trace = trace
+        self._lexical_scope: list[str] = []
+        self._trace_function_identity: str | None = None
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:
+        self._lexical_scope.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._lexical_scope.pop()
+        return node
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
-        self.generic_visit(node)
-        self._annotate_function(node)
+        self._visit_function(node)
         return node
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:
-        self.generic_visit(node)
-        self._annotate_function(node)
+        self._visit_function(node)
         return node
+
+    def _visit_function(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> None:
+        qualified = ".".join((*self._lexical_scope, node.name))
+        previous_identity = self._trace_function_identity
+        self._trace_function_identity = qualified
+        try:
+            self._annotate_function(node, qualified)
+        finally:
+            self._trace_function_identity = previous_identity
+        self._lexical_scope.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._lexical_scope.pop()
 
     def visit_Assign(self, node: ast.Assign) -> ast.AST:
         self.generic_visit(node)
@@ -2587,8 +2720,12 @@ class _Annotator(ast.NodeTransformer):
             node,
         )
 
-    def _annotate_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        info = self.function_types.get((node.lineno, node.name))
+    def _annotate_function(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        qualified: str,
+    ) -> None:
+        info = self.function_types.get((node.lineno, qualified))
         if not info:
             for arg in [
                 *node.args.posonlyargs,
@@ -2694,7 +2831,7 @@ class _Annotator(ast.NodeTransformer):
         if self.trace:
             self.trace.mark_insertion(
                 line=node.lineno,
-                function=node.name,
+                function=self._trace_function_identity or node.name,
                 slot=slot,
                 inserted=inserted,
                 reason=reason,
@@ -2711,7 +2848,7 @@ class _Annotator(ast.NodeTransformer):
             return
         self.trace.add_slot(
             line=node.lineno,
-            function=node.name,
+            function=self._trace_function_identity or node.name,
             slot=slot,
             candidates=[{
                 "instantiation": None,

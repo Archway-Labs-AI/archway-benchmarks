@@ -10,6 +10,7 @@ from archway_benchmarks.typybench_archway_emit import (
     _run_engine_probe,
     _run_successor_repo_probe,
     _successor_function_types,
+    _scored_slot_accounting,
     _successor_variable_types,
     capture_runtime_phase_profile_file,
     capture_translation_trace_file,
@@ -257,7 +258,7 @@ def test_successor_observations_match_qualified_methods_to_source_name() -> None
 
     function_types = _successor_function_types(observations)
     assert function_types == {
-        (4, "__init__"): {
+        (4, "Environment.__init__"): {
             "params": {"enabled": "bool"},
             "return": "None",
         }
@@ -272,6 +273,86 @@ def test_successor_observations_match_qualified_methods_to_source_name() -> None
     )
     assert "def __init__(self, enabled: bool) -> None:" in annotated
     assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
+
+
+def test_successor_observations_use_definition_identity_for_multiline_method() -> None:
+    observations = [{
+        "line": 6,
+        "definition_line": 2,
+        "name": "value",
+        "kind": "parameter",
+        "function": "Model.convert",
+        "body_morphism_id": "sid:v1:box:body",
+        "types": ["builtins.str"],
+    }]
+
+    function_types = _successor_function_types(observations)
+    annotated, stats = _annotate_source(
+        "class Model:\n"
+        "    def convert(\n"
+        "        self,\n"
+        "        value,\n"
+        "    ):\n"
+        "        return value\n",
+        function_types,
+    )
+
+    assert "value: str" in annotated
+    assert stats["params"] == 1
+
+
+def test_scored_slot_accounting_separates_unresolved_and_identity_gaps() -> None:
+    source = (
+        "def mapped(value):\n"
+        "    return value\n"
+        "\n"
+        "def absent(flag):\n"
+        "    return flag\n"
+    )
+    observations = [
+        {
+            "line": 1,
+            "definition_line": 1,
+            "name": "value",
+            "kind": "parameter",
+            "function": "mapped",
+            "types": ["builtins.str"],
+        },
+        {
+            "line": 1,
+            "definition_line": 1,
+            "name": "mapped",
+            "kind": "return",
+            "function": None,
+            "types": [],
+        },
+        {
+            "line": 99,
+            "definition_line": 99,
+            "name": "ghost",
+            "kind": "return",
+            "function": None,
+            "types": ["builtins.int"],
+        },
+    ]
+    function_types = _successor_function_types(observations)
+
+    accounting = _scored_slot_accounting(
+        source, observations, function_types, emitted_params=1,
+    )
+
+    assert accounting == {
+        "manifest_slots": 4,
+        "engine_cataloged_slots": 2,
+        "resolved_candidates": 1,
+        "resolved_emitted": 1,
+        "resolved_preserved": 0,
+        "resolved_unrenderable": 0,
+        "resolved_not_emitted": 0,
+        "unresolved_facts": 1,
+        "uncataloged_engine_identity": 2,
+        "orphan_engine_observations": 1,
+    }
 
 
 def test_successor_variable_observations_annotate_class_and_instance_stores() -> None:
@@ -318,7 +399,7 @@ def test_successor_variable_observations_annotate_class_and_instance_stores() ->
     }
 
 
-def test_repository_emission_keeps_variable_annotations_opt_in(
+def test_repository_emission_demands_only_direct_scorer_signature_slots(
     monkeypatch, tmp_path,
 ) -> None:
     source_root = tmp_path / "repo"
@@ -355,25 +436,9 @@ def test_repository_emission_keeps_variable_annotations_opt_in(
         predictions_root=default_root,
         engine_worktree=engine,
     )
-    opt_in_root = tmp_path / "opt-in"
-    opted_in = emit_archway_predictions(
-        repo_name="demo",
-        untyped_root=source_root,
-        predictions_root=opt_in_root,
-        engine_worktree=engine,
-        emit_variable_annotations=True,
-    )
-
     assert (default_root / "demo" / "demo.py").read_text() == "value = 1\n"
     assert default.variables_annotated == 0
-    assert "value: int = 1" in (
-        opt_in_root / "demo" / "demo.py"
-    ).read_text()
-    assert opted_in.variables_annotated == 1
-    assert requested_kinds == [
-        frozenset(("parameter", "return")),
-        frozenset(("parameter", "return", "variable")),
-    ]
+    assert requested_kinds == [frozenset(("parameter", "return"))]
 
 
 def test_repository_emission_can_include_diagram_class_fields_explicitly(
