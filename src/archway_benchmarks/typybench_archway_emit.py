@@ -926,7 +926,10 @@ try:
             "possible_entry_modules": frozenset(),
             "class_field_observations": True,
         }
-        if "body_observations_only" in session_parameters:
+        if (
+            "variable" in requested_observation_kinds
+            and "body_observations_only" in session_parameters
+        ):
             session_options["body_observations_only"] = True
             observation_policy = "body-observations-only"
         elif "signature_observations_only" in session_parameters:
