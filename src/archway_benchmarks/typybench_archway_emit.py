@@ -511,16 +511,18 @@ def _successor_function_types(
         | shape_candidates.keys()
     ):
         observed_slots = candidates.get(key, {})
-        fallback_slots = requirement_candidates.get(key, {})
+        supported_slots = requirement_candidates.get(key, {})
         shaped_slots = shape_candidates.get(key, {})
         slots = {
             slot: (
                 shaped_slots.get(slot)
-                or observed_slots.get(slot)
-                or fallback_slots.get(slot, [])
+                or (
+                    observed_slots.get(slot, [])
+                    + supported_slots.get(slot, [])
+                )
             )
             for slot in (
-                observed_slots.keys() | fallback_slots.keys()
+                observed_slots.keys() | supported_slots.keys()
                 | shaped_slots.keys()
             )
         }

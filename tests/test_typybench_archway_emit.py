@@ -150,7 +150,7 @@ def test_successor_requirement_candidates_fill_unknown_parameter_only() -> None:
     }
 
 
-def test_successor_observed_type_precedes_requirement_candidates() -> None:
+def test_successor_observed_type_composes_with_supported_candidates() -> None:
     observations = [
         {
             "line": 4, "name": "x", "kind": "parameter",
@@ -165,7 +165,7 @@ def test_successor_observed_type_precedes_requirement_candidates() -> None:
     ]
 
     assert _successor_function_types(observations) == {
-        "f": {"params": {"x": "bytes"}, "return": None}
+        "f": {"params": {"x": "Union[bytes, str]"}, "return": None}
     }
 
 
