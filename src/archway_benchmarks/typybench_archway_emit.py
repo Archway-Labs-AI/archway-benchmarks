@@ -696,11 +696,22 @@ def _successor_shape_annotation(value: object) -> str | None:
         def position_type(position: object) -> str | None:
             if not isinstance(position, dict):
                 return None
+            nested_value = position.get("nested")
+            nested_constructors = {
+                _successor_annotation(str(item.get("constructor", "")))
+                for item in (
+                    nested_value.get("shapes", [])
+                    if isinstance(nested_value, dict) else []
+                )
+                if isinstance(item, dict)
+            }
             nominal = [
                 _successor_annotation(str(item))
                 for item in position.get("nominal_types", [])
+                if _successor_annotation(str(item))
+                not in nested_constructors
             ]
-            nested = _successor_shape_annotation(position.get("nested"))
+            nested = _successor_shape_annotation(nested_value)
             return _merge_types([*nominal, *([nested] if nested else [])])
 
         if constructor == "generator":
@@ -725,6 +736,22 @@ def _successor_shape_annotation(value: object) -> str | None:
                 slots.sort(key=lambda item: int(item[0].rsplit(":", 1)[-1]))
                 inner = ", ".join(item or "Any" for _name, item in slots)
                 rendered.append(f"tuple[{inner}]" if inner else "tuple")
+        elif constructor == "dict":
+            values = [
+                position_type(item) for item in positions.values()
+            ]
+            value_type = _merge_types(
+                [item for item in values if item]
+            ) or "Any"
+            key_candidates = []
+            for name in positions:
+                if name in {"summary:*", "rest:*"} or ":" not in name:
+                    continue
+                key_candidates.append(_successor_annotation(
+                    name.split(":", 1)[0]
+                ))
+            key_type = _merge_types(key_candidates) or "Any"
+            rendered.append(f"dict[{key_type}, {value_type}]")
         else:
             rendered.append(constructor)
     return _merge_types(rendered)

@@ -238,6 +238,52 @@ def test_successor_generator_shape_renders_yield_type() -> None:
     }
 
 
+def test_successor_generic_shape_renders_nested_mapping_value() -> None:
+    observations = [{
+        "line": 4, "name": "payload", "kind": "return",
+        "function": None, "family": "GenericShapeOf",
+        "shape": {
+            "kind": "generic_shape_set",
+            "unknown": False,
+            "shapes": [{
+                "constructor": "builtins.dict",
+                "open": False,
+                "positions": [{
+                    "position": "builtins.str:'items'",
+                    "value": {
+                        "nominal_types": ["builtins.list"],
+                        "nested": {
+                            "kind": "generic_shape_set",
+                            "unknown": False,
+                            "shapes": [{
+                                "constructor": "builtins.list",
+                                "open": False,
+                                "positions": [{
+                                    "position": "builtins.int:0",
+                                    "value": {
+                                        "nominal_types": ["builtins.str"],
+                                        "nested": {
+                                            "kind": "generic_shape_set",
+                                            "unknown": False,
+                                            "shapes": [],
+                                        },
+                                    },
+                                }],
+                            }],
+                        },
+                    },
+                }],
+            }],
+        },
+    }]
+
+    assert _successor_function_types(observations) == {
+        "payload": {
+            "params": {}, "return": "dict[str, list[str]]",
+        }
+    }
+
+
 def test_successor_observations_match_qualified_methods_to_source_name() -> None:
     observations = [
         {
