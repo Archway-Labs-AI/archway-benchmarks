@@ -10,6 +10,7 @@ that TypyBench itself writes.
 from __future__ import annotations
 
 import csv
+import json
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -78,6 +79,19 @@ class TypyBenchResult:
     @property
     def repo_b_consistency_errors(self) -> int:
         return int(self.values["repo_b_consistency"] or 0)
+
+
+@dataclass(frozen=True)
+class TypyBenchScoredKeys:
+    """Exact key-level result exported by the native TypyBench scorer."""
+
+    repo_name: str
+    keys: tuple[dict[str, object], ...]
+    path: Path
+
+    @property
+    def missing_count(self) -> int:
+        return sum(bool(item.get("missing")) for item in self.keys)
 
 
 def build_command(
@@ -301,6 +315,29 @@ def result_csv_path(
     repo_name: str, predictions_root: Path = DEFAULT_PREDICTIONS_ROOT
 ) -> Path:
     return Path(predictions_root) / repo_name / f"{repo_name}_results_w_exact.csv"
+
+
+def scored_keys_path(
+    repo_name: str, predictions_root: Path = DEFAULT_PREDICTIONS_ROOT
+) -> Path:
+    return Path(predictions_root) / repo_name / f"{repo_name}_scored_keys.json"
+
+
+def parse_scored_keys(
+    repo_name: str, predictions_root: Path = DEFAULT_PREDICTIONS_ROOT
+) -> TypyBenchScoredKeys:
+    path = scored_keys_path(repo_name, predictions_root)
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if payload.get("schema") != "typybench-scored-keys-v1":
+        raise ValueError(f"unsupported TypyBench scored-key schema: {path}")
+    keys = tuple(payload.get("keys") or ())
+    if payload.get("count") != len(keys):
+        raise ValueError(f"invalid TypyBench scored-key count: {path}")
+    return TypyBenchScoredKeys(
+        repo_name=str(payload["repo_name"]),
+        keys=keys,
+        path=path,
+    )
 
 
 def stage_single_repo_prediction_root(
