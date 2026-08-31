@@ -207,8 +207,20 @@ def emit_archway_predictions(
     analysis_observation_mode: str = "summary",
     type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
+    checkpoint_batch_start: int | None = None,
+    checkpoint_batch_count: int | None = None,
+    checkpoint_replay_prefix: bool = True,
+    body_labels: tuple[str, ...] = (),
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
+    sample_rate_hz: float | None = None,
+    sample_targeted: bool = False,
+    sample_forward: bool = False,
+    sample_session_open: bool = False,
+    session_open_timeout: int | None = None,
+    forward_timeout: int | None = None,
+    run_forward_seed: bool = True,
+    collect_predictions: bool = True,
     emit_class_field_annotations: bool = True,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
@@ -258,9 +270,21 @@ def emit_archway_predictions(
             timeout=timeout,
             progress_log=progress_log,
             checkpoint_roots=checkpoint_roots,
+            checkpoint_batch_start=checkpoint_batch_start,
+            checkpoint_batch_count=checkpoint_batch_count,
+            checkpoint_replay_prefix=checkpoint_replay_prefix,
+            body_labels=body_labels,
             body_timeout=body_timeout,
             progress_timeout=progress_timeout,
-            diagnostic_details=False,
+            sample_rate_hz=sample_rate_hz,
+            sample_targeted=sample_targeted,
+            sample_forward=sample_forward,
+            sample_session_open=sample_session_open,
+            session_open_timeout=session_open_timeout,
+            forward_timeout=forward_timeout,
+            run_forward_seed=run_forward_seed,
+            collect_predictions=collect_predictions,
+            diagnostic_details=(analysis_observation_mode == "diagnostic"),
             observation_kinds=frozenset((
                 "parameter",
                 "return",
@@ -781,9 +805,11 @@ def _run_successor_repo_probe(
     progress_timeout: int | None = None,
     callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
+    sample_targeted: bool = False,
     sample_body_label: str | None = None,
     sample_forward: bool = False,
     sample_session_open: bool = False,
+    session_open_timeout: int | None = None,
     run_forward_seed: bool = True,
     forward_timeout: int | None = None,
     record_timings: bool = False,
@@ -831,8 +857,12 @@ def _run_successor_repo_probe(
         raise ValueError("sample_body_label requires sample_rate_hz")
     if sample_forward and sample_rate_hz is None:
         raise ValueError("sample_forward requires sample_rate_hz")
+    if sample_targeted and sample_rate_hz is None:
+        raise ValueError("sample_targeted requires sample_rate_hz")
     if forward_timeout is not None and forward_timeout <= 0:
         raise ValueError("forward_timeout must be positive")
+    if session_open_timeout is not None and session_open_timeout <= 0:
+        raise ValueError("session_open_timeout must be positive")
     unsupported_observation_kinds = observation_kinds - {
         "parameter", "return", "variable",
     }
@@ -889,6 +919,8 @@ checkpoint_batch_count = int(sys.argv[23])
 contextual_summary_evaluation = sys.argv[24] == "contextual-summaries"
 requested_progress_timeout = int(sys.argv[25]) or None
 requested_root_ids = frozenset(json.loads(sys.argv[26]))
+sample_targeted = sys.argv[27] == "sample-targeted"
+requested_session_open_timeout = int(sys.argv[28]) or None
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -1045,6 +1077,11 @@ try:
             project_marker="/sd_core/",
         )
         session_profiler.__enter__()
+    if requested_session_open_timeout:
+        def timeout_session_open(_signum, _frame):
+            raise TimeoutError("session-open diagnostic cutoff")
+        signal.signal(signal.SIGALRM, timeout_session_open)
+        signal.alarm(requested_session_open_timeout)
     try:
         session_parameters = inspect.signature(
             open_hybrid_program_session
@@ -1102,6 +1139,8 @@ try:
             )
         workload_root_policy = "signature-body-root-projection"
     finally:
+        if requested_session_open_timeout:
+            signal.alarm(0)
         if session_profiler is not None:
             session_profiler.__exit__(None, None, None)
             print(
@@ -1119,6 +1158,10 @@ try:
 
     def optional_session_diagnostic(name, default):
         method = getattr(session, name, None)
+        return method() if method is not None else default
+
+    def optional_scheduler_diagnostic(name, default):
+        method = getattr(session.scheduler, name, None)
         return method() if method is not None else default
 
     if disable_cyclic_gc:
@@ -1252,7 +1295,8 @@ try:
         )
     targeted_profiler = None
     if (
-        sample_rate_hz
+        sample_targeted
+        and sample_rate_hz
         and not sample_forward
         and sample_body_label is None
         and signature_roots
@@ -1741,7 +1785,7 @@ try:
         if session.invocation_registry is not None else None
     )
     component_hotspots = (
-        session.scheduler.component_hotspots()
+        optional_scheduler_diagnostic("component_hotspots", ())
         if diagnostic_details else ()
     )
     if component_hotspots and summary_registry is not None:
@@ -1824,11 +1868,15 @@ try:
             ),
             "gc": gc_profile_snapshot(),
             "production_replay_hotspots": (
-                session.scheduler.production_replay_hotspots()
+                optional_scheduler_diagnostic(
+                    "production_replay_hotspots", ()
+                )
                 if diagnostic_details else ()
             ),
             "production_replay_operation_hotspots": (
-                session.scheduler.production_replay_operation_hotspots()
+                optional_scheduler_diagnostic(
+                    "production_replay_operation_hotspots", ()
+                )
                 if diagnostic_details else ()
             ),
             "morphism_transfer_reuse": dict(
@@ -1979,6 +2027,8 @@ os._exit(0)
             ),
             str(progress_timeout or 0),
             json.dumps(tuple(dict.fromkeys(root_ids or ()))),
+            "sample-targeted" if sample_targeted else "no-targeted-sample",
+            str(session_open_timeout or 0),
         ]
         progress_stream = None
         if progress_log is not None:

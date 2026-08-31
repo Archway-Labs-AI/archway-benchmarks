@@ -121,6 +121,53 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert profile.trace_tail == "ARCHWAY_BODY 1/12"
 
 
+def test_emit_forwards_diagram_native_localized_profile_controls(
+    monkeypatch, tmp_path,
+) -> None:
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "demo.py").write_text("value = 1\n", encoding="utf-8")
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    captured = {}
+
+    def probe(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "files": {"demo.py": []},
+            "translation_failures": {},
+            "analysis_summary": {},
+        }
+
+    monkeypatch.setattr(emit_module, "_run_successor_repo_probe", probe)
+    emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=tmp_path / "predictions",
+        engine_worktree=engine,
+        checkpoint_batch_start=2,
+        checkpoint_batch_count=1,
+        checkpoint_replay_prefix=False,
+        body_labels=("demo:target",),
+        body_timeout=12,
+        sample_rate_hz=25,
+        sample_targeted=True,
+        run_forward_seed=False,
+        collect_predictions=False,
+    )
+
+    assert captured["checkpoint_batch_start"] == 2
+    assert captured["checkpoint_batch_count"] == 1
+    assert captured["checkpoint_replay_prefix"] is False
+    assert captured["body_labels"] == ("demo:target",)
+    assert captured["body_timeout"] == 12
+    assert captured["sample_rate_hz"] == 25
+    assert captured["sample_targeted"] is True
+    assert captured["run_forward_seed"] is False
+    assert captured["collect_predictions"] is False
+
+
 def test_successor_observations_render_function_signatures() -> None:
     observations = [
         {"line": 4, "name": "x", "kind": "parameter", "function": "f", "types": ["builtins.int"]},
