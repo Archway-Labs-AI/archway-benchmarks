@@ -148,6 +148,7 @@ def test_emit_forwards_diagram_native_localized_profile_controls(
         engine_worktree=engine,
         checkpoint_batch_start=2,
         checkpoint_batch_count=1,
+        max_wave_size=3,
         checkpoint_replay_prefix=False,
         body_labels=("demo:target",),
         body_timeout=12,
@@ -159,6 +160,7 @@ def test_emit_forwards_diagram_native_localized_profile_controls(
 
     assert captured["checkpoint_batch_start"] == 2
     assert captured["checkpoint_batch_count"] == 1
+    assert captured["checkpoint_size"] == 3
     assert captured["checkpoint_replay_prefix"] is False
     assert captured["body_labels"] == ("demo:target",)
     assert captured["body_timeout"] == 12
