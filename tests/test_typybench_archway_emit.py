@@ -128,7 +128,7 @@ def test_successor_observations_render_function_signatures() -> None:
     ]
 
     assert _successor_function_types(observations) == {
-        (4, "f"): {"params": {"x": "int"}, "return": "str"}
+        "f": {"params": {"x": "int"}, "return": "str"}
     }
 
 
@@ -146,7 +146,7 @@ def test_successor_requirement_candidates_fill_unknown_parameter_only() -> None:
     ]
 
     assert _successor_function_types(observations) == {
-        (4, "f"): {"params": {"x": "str"}, "return": None}
+        "f": {"params": {"x": "str"}, "return": None}
     }
 
 
@@ -165,7 +165,7 @@ def test_successor_observed_type_precedes_requirement_candidates() -> None:
     ]
 
     assert _successor_function_types(observations) == {
-        (4, "f"): {"params": {"x": "bytes"}, "return": None}
+        "f": {"params": {"x": "bytes"}, "return": None}
     }
 
 
@@ -202,7 +202,7 @@ def test_successor_generic_shape_refines_nominal_container_type() -> None:
     ]
 
     assert _successor_function_types(observations) == {
-        (4, "f"): {"params": {}, "return": "list[str]"}
+        "f": {"params": {}, "return": "list[str]"}
     }
 
 
@@ -232,7 +232,7 @@ def test_successor_generator_shape_renders_yield_type() -> None:
     }]
 
     assert _successor_function_types(observations) == {
-        (4, "values"): {
+        "values": {
             "params": {}, "return": "Generator[int, None, None]",
         }
     }
@@ -258,7 +258,7 @@ def test_successor_observations_match_qualified_methods_to_source_name() -> None
 
     function_types = _successor_function_types(observations)
     assert function_types == {
-        (4, "Environment.__init__"): {
+        "Environment.__init__": {
             "params": {"enabled": "bool"},
             "return": "None",
         }
@@ -508,8 +508,8 @@ async def g(items, **kwargs):
     return items
 '''
     function_types = {
-        (3, "f"): {"params": {"x": "int", "y": "Union[int, str]"}, "return": "Any"},
-        (6, "g"): {
+        "f": {"params": {"x": "int", "y": "Union[int, str]"}, "return": "Any"},
+        "g": {
             "params": {"items": "list[str]", "kwargs": "dict[str, int]"},
             "return": "list[str]",
         },
@@ -532,7 +532,7 @@ def test_annotate_source_uses_existing_import_spelling_for_semantic_types() -> N
         "    return item\n"
     )
     function_types = {
-        (4, "select"): {
+        "select": {
             "params": {
                 "item": "list[paperqa.types.DocDetails]",
             },
@@ -548,7 +548,7 @@ def test_annotate_source_uses_existing_import_spelling_for_semantic_types() -> N
 
 def test_annotate_source_preserves_existing_annotations() -> None:
     source = "def f(x: str) -> str:\n    return x\n"
-    function_types = {(1, "f"): {"params": {"x": "int"}, "return": "int"}}
+    function_types = {"f": {"params": {"x": "int"}, "return": "int"}}
 
     annotated, stats = _annotate_source(source, function_types)
 
@@ -563,7 +563,7 @@ from __future__ import annotations
 def f(x):
     return x
 '''
-    function_types = {(4, "f"): {"params": {"x": "Any"}, "return": "Any"}}
+    function_types = {"f": {"params": {"x": "Any"}, "return": "Any"}}
 
     annotated, stats = _annotate_source(source, function_types)
 

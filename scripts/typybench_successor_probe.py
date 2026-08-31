@@ -319,6 +319,7 @@ def main() -> None:
         "top_restart_reasons": top_restart_reasons,
         "top_restart_operation_reasons": top_restart_operation_reasons,
         "trace_tail": result.get("trace_tail"),
+        "files": result.get("files") if args.collect_predictions else None,
     }
     encoded = json.dumps(report, sort_keys=True)
     if args.output_json is None:

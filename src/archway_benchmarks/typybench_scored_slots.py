@@ -32,8 +32,8 @@ class ScoredSlot:
         return "return" if self.kind is ScoredSlotKind.RETURN else f"param:{self.name}"
 
     @property
-    def adapter_key(self) -> tuple[int, str, str]:
-        return self.definition_line, self.qualified_callable, self.role
+    def adapter_key(self) -> tuple[str, str]:
+        return self.qualified_callable, self.role
 
     def jsonable(self) -> dict[str, object]:
         return {

@@ -456,14 +456,15 @@ def emit_archway_predictions(
 
 def _successor_function_types(
     observations: list[dict[str, Any]], trace: _TraceBuffer | None = None
-) -> dict[tuple[int, str], dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Render compact successor observations into the annotation adapter shape."""
 
-    candidates: dict[tuple[int, str], dict[str, list[str]]] = {}
+    candidates: dict[str, dict[str, list[str]]] = {}
     requirement_candidates: dict[
-        tuple[int, str], dict[str, list[str]]
+        str, dict[str, list[str]]
     ] = {}
-    shape_candidates: dict[tuple[int, str], dict[str, list[str]]] = {}
+    shape_candidates: dict[str, dict[str, list[str]]] = {}
+    definition_lines: dict[str, int] = {}
     for item in observations:
         line = item.get("line")
         kind = item.get("kind")
@@ -478,8 +479,10 @@ def _successor_function_types(
         # the source-editing identity. Observation rows may identify a formal
         # use or bind wire and are diagnostic only; they are not a stable join
         # for multiline signatures.
-        definition_line = item.get("definition_line") or line
         function = str(function)
+        definition_lines.setdefault(
+            function, int(item.get("definition_line") or line)
+        )
         slot = "return" if kind == "return" else f"param:{item.get('name')}"
         values = (
             [_successor_shape_annotation(item.get("shape"))]
@@ -498,11 +501,11 @@ def _successor_function_types(
             if item.get("family") == "GenericShapeOf"
             else candidates
         )
-        target.setdefault((int(definition_line), function), {}).setdefault(
+        target.setdefault(function, {}).setdefault(
             slot, []
         ).extend(values)
 
-    rendered: dict[tuple[int, str], dict[str, Any]] = {}
+    rendered: dict[str, dict[str, Any]] = {}
     for key in (
         candidates.keys() | requirement_candidates.keys()
         | shape_candidates.keys()
@@ -536,7 +539,7 @@ def _successor_function_types(
                     else "no inferred parameter candidate"
                 )
                 trace.add_slot(
-                    line=key[0], function=key[1], slot=slot,
+                    line=definition_lines[key], function=key, slot=slot,
                     candidates=[{
                         "successor_types": values,
                         **({"fallback_reasons": [fallback]}
@@ -550,7 +553,7 @@ def _successor_function_types(
 def _scored_slot_accounting(
     source: str,
     observations: list[dict[str, Any]],
-    function_types: dict[tuple[int, str], dict[str, Any]],
+    function_types: dict[str, dict[str, Any]],
     *,
     emitted_params: int = 0,
     emitted_returns: int = 0,
@@ -572,14 +575,14 @@ def _scored_slot_accounting(
         if not function or not line:
             continue
         role = "return" if kind == "return" else f"param:{item.get('name')}"
-        cataloged.add((int(line), str(function), role))
+        cataloged.add((str(function), role))
 
     resolved = set()
-    for (line, function), info in function_types.items():
+    for function, info in function_types.items():
         for name in (info.get("params") or {}):
-            resolved.add((line, function, f"param:{name}"))
+            resolved.add((function, f"param:{name}"))
         if info.get("return"):
-            resolved.add((line, function, "return"))
+            resolved.add((function, "return"))
 
     manifest_keys = set(manifest_by_key)
     resolved_manifest = resolved & manifest_keys
@@ -2639,7 +2642,7 @@ def _merge_types(types: list[str]) -> Optional[str]:
 class _Annotator(ast.NodeTransformer):
     def __init__(
         self,
-        function_types: dict[tuple[int, str], dict[str, Any]],
+        function_types: dict[str, dict[str, Any]],
         variable_types: dict[tuple[int, str], str] | None = None,
         annotation_aliases: dict[str, str] | None = None,
         trace: _TraceBuffer | None = None,
@@ -2725,7 +2728,7 @@ class _Annotator(ast.NodeTransformer):
         node: ast.FunctionDef | ast.AsyncFunctionDef,
         qualified: str,
     ) -> None:
-        info = self.function_types.get((node.lineno, qualified))
+        info = self.function_types.get(qualified)
         if not info:
             for arg in [
                 *node.args.posonlyargs,
@@ -2922,7 +2925,7 @@ def _localize_annotation(value: str, aliases: dict[str, str]) -> str:
 
 def _annotate_source(
     source: str,
-    function_types: dict[tuple[int, str], dict[str, Any]],
+    function_types: dict[str, dict[str, Any]],
     variable_types: dict[tuple[int, str], str] | None = None,
     trace: _TraceBuffer | None = None,
 ) -> tuple[str, dict[str, int]]:
