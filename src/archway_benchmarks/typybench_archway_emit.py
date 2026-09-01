@@ -1289,6 +1289,10 @@ try:
         for plan in session.module_plans.values()
         for template in plan.templates
     }
+    requested_body_ids = frozenset(
+        body_id for body_id, label in body_labels.items()
+        if label in requested_body_labels
+    )
     if requested_body_labels:
         signature_roots = tuple(
             root_address for root_address in signature_roots
@@ -1716,7 +1720,13 @@ try:
             signal.alarm(requested_projection_timeout)
         try:
             projected_candidate_observations = (
-                session.type_candidate_observations(unresolved_only=True)
+                session.type_candidate_observations(
+                    unresolved_only=True,
+                    body_morphism_ids=(
+                        requested_body_ids
+                        if requested_body_labels else None
+                    ),
+                )
             )
         except TimeoutError:
             timed_out_projection = True
