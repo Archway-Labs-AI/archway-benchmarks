@@ -275,6 +275,9 @@ def main() -> None:
         "invocation_summaries": invocation_summaries,
         "invocation_inputs": top_counts(summary.get("invocation_inputs")),
         "invocation_admissions": top_counts(summary.get("invocation_admissions")),
+        "invocation_application_runtime": top_counts(
+            summary.get("invocation_application_runtime")
+        ),
         "invocation_application_hotspots": summary.get(
             "invocation_application_hotspots"
         ),

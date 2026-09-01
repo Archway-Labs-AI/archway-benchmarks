@@ -1993,6 +1993,11 @@ try:
             "invocation_admissions": dict(
                 optional_session_diagnostic("invocation_admission_counts", {})
             ),
+            "invocation_application_runtime": dict(
+                optional_session_diagnostic(
+                    "invocation_application_runtime_counts", {}
+                )
+            ),
             "invocation_summaries": list(
                 optional_session_diagnostic("invocation_summary_telemetry", ())
             ) if diagnostic_details else [],
