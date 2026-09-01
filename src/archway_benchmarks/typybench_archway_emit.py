@@ -214,6 +214,7 @@ def emit_archway_predictions(
     body_labels: tuple[str, ...] = (),
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
+    projection_timeout: int | None = None,
     sample_rate_hz: float | None = None,
     sample_targeted: bool = False,
     sample_forward: bool = False,
@@ -279,6 +280,7 @@ def emit_archway_predictions(
             body_labels=body_labels,
             body_timeout=body_timeout,
             progress_timeout=progress_timeout,
+            projection_timeout=projection_timeout,
             sample_rate_hz=sample_rate_hz,
             sample_targeted=sample_targeted,
             sample_forward=sample_forward,
@@ -807,6 +809,7 @@ def _run_successor_repo_probe(
     root_ids: tuple[str, ...] | None = None,
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
+    projection_timeout: int | None = None,
     callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
     sample_targeted: bool = False,
@@ -841,6 +844,8 @@ def _run_successor_repo_probe(
         raise ValueError("callable_input_exact_limit must be non-negative")
     if progress_timeout is not None and progress_timeout <= 0:
         raise ValueError("progress_timeout must be positive")
+    if projection_timeout is not None and projection_timeout <= 0:
+        raise ValueError("projection_timeout must be positive")
     if checkpoint_size <= 0:
         raise ValueError("checkpoint_size must be positive")
     if checkpoint_tail_start is not None and checkpoint_tail_start < 0:
@@ -925,6 +930,7 @@ requested_progress_timeout = int(sys.argv[25]) or None
 requested_root_ids = frozenset(json.loads(sys.argv[26]))
 sample_targeted = sys.argv[27] == "sample-targeted"
 requested_session_open_timeout = int(sys.argv[28]) or None
+requested_projection_timeout = int(sys.argv[29]) or None
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -1663,18 +1669,57 @@ try:
             sampling_profile = locals().get("sampling_profile")
         finally:
             signal.alarm(0)
-    if targeted_profiler is not None:
-        targeted_profiler.__exit__(None, None, None)
-        sampling_profile = targeted_profiler.jsonable(
-            top=40, include_stacks=diagnostic_details
-        )
     targeted_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
     projection_started = time.monotonic()
     files = {}
+    projection_breakdown = {}
+    timed_out_projection = False
     if collect_predictions:
+        type_catalog_started = time.monotonic()
+        projected_type_observations = session.type_observations()
+        projection_breakdown["type_catalog"] = (
+            time.monotonic() - type_catalog_started
+        )
+
+        shape_catalog_started = time.monotonic()
+        projected_shape_observations = session.generic_shape_observations(
+            kinds=requested_observation_kinds,
+            demand=False,
+        )
+        projection_breakdown["shape_catalog"] = (
+            time.monotonic() - shape_catalog_started
+        )
+
+        candidate_analysis_started = time.monotonic()
+        candidate_executions_before = (
+            session.scheduler.production_execution_count
+        )
+        if requested_projection_timeout:
+            def timeout_projection(_signum, _frame):
+                raise TimeoutError("diagnostic observation projection cutoff")
+            signal.signal(signal.SIGALRM, timeout_projection)
+            signal.alarm(requested_projection_timeout)
+        try:
+            projected_candidate_observations = (
+                session.type_candidate_observations(unresolved_only=True)
+            )
+        except TimeoutError:
+            timed_out_projection = True
+            projected_candidate_observations = ()
+        finally:
+            signal.alarm(0)
+        projection_breakdown["candidate_analysis"] = (
+            time.monotonic() - candidate_analysis_started
+        )
+        projection_breakdown["candidate_analysis_executions"] = (
+            session.scheduler.production_execution_count
+            - candidate_executions_before
+        )
+
+        render_started = time.monotonic()
         files = {str(path.relative_to(root)): [] for path in all_paths}
-        for item in session.type_observations():
+        for item in projected_type_observations:
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
             if rel is None and module is not None:
@@ -1704,10 +1749,7 @@ try:
                     if fact is not None else []
                 ),
             })
-        for item in session.generic_shape_observations(
-            kinds=requested_observation_kinds,
-            demand=False,
-        ):
+        for item in projected_shape_observations:
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
             if rel is None and module is not None:
@@ -1730,7 +1772,7 @@ try:
                 "body_morphism_id": item.body_morphism_id,
                 "shape": fact.value.canonical_data(),
             })
-        for item, candidate in session.type_candidate_observations():
+        for item, candidate in projected_candidate_observations:
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
             if rel is None and module is not None:
@@ -1754,7 +1796,13 @@ try:
                 "requirement_path": [],
                 "candidate_evidence": candidate.canonical_data(),
             })
+        projection_breakdown["render"] = time.monotonic() - render_started
     observation_projection_seconds = time.monotonic() - projection_started
+    if targeted_profiler is not None:
+        targeted_profiler.__exit__(None, None, None)
+        sampling_profile = targeted_profiler.jsonable(
+            top=40, include_stacks=diagnostic_details
+        )
     scheduler_telemetry = (
         dict(session.scheduler.aggregate_production_telemetry)
         if diagnostic_details else {
@@ -1903,6 +1951,7 @@ try:
                 "targeted": targeted_seconds - forward_seconds,
                 "observation_projection": observation_projection_seconds,
             },
+            "observation_projection_breakdown": projection_breakdown,
             "scheduler": scheduler_telemetry,
             "component_hotspots": (
                 component_hotspots
@@ -1964,6 +2013,7 @@ try:
                 )
             ) if diagnostic_details else [],
             "sampling_profile": sampling_profile,
+            "timed_out_projection": timed_out_projection,
             "unresolved_summary_bodies": dict(
                 unresolved_summary_bodies.most_common(32)
             ),
@@ -2073,6 +2123,7 @@ os._exit(0)
             json.dumps(tuple(dict.fromkeys(root_ids or ()))),
             "sample-targeted" if sample_targeted else "no-targeted-sample",
             str(session_open_timeout or 0),
+            str(projection_timeout or 0),
         ]
         progress_stream = None
         if progress_log is not None:

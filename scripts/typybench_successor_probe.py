@@ -36,8 +36,18 @@ def main() -> None:
     parser.add_argument("--root-id", action="append", dest="root_ids")
     parser.add_argument("--body-timeout", type=int)
     parser.add_argument("--progress-timeout", type=int)
+    parser.add_argument(
+        "--projection-timeout",
+        type=int,
+        help="gracefully cut off scorer candidate analysis and retain its sample",
+    )
     parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
+    parser.add_argument(
+        "--sample-targeted",
+        action="store_true",
+        help="sample targeted work and post-target candidate analysis",
+    )
     parser.add_argument("--sample-body-label")
     parser.add_argument(
         "--sample-forward",
@@ -135,8 +145,10 @@ def main() -> None:
         root_ids=tuple(args.root_ids or ()),
         body_timeout=args.body_timeout,
         progress_timeout=args.progress_timeout,
+        projection_timeout=args.projection_timeout,
         callable_input_exact_limit=args.callable_input_exact_limit,
         sample_rate_hz=args.sample_rate_hz,
+        sample_targeted=args.sample_targeted,
         sample_body_label=args.sample_body_label,
         sample_forward=args.sample_forward,
         forward_timeout=args.forward_timeout,
@@ -230,6 +242,9 @@ def main() -> None:
         "ok": result.get("ok"),
         "error": result.get("error"),
         "phase_seconds": summary.get("phase_seconds"),
+        "observation_projection_breakdown": summary.get(
+            "observation_projection_breakdown"
+        ),
         "phase_progress": summary.get("phase_progress"),
         "active_translation_file": summary.get("active_translation_file"),
         "active_body": summary.get("active_body"),
@@ -281,6 +296,7 @@ def main() -> None:
             None if args.compact_diagnostics else summary.get("body_plan")
         ),
         "timed_out_body": summary.get("timed_out_body"),
+        "timed_out_projection": summary.get("timed_out_projection"),
         "timed_out_forward": summary.get("timed_out_forward"),
         "unique_productions": scheduler.get("unique_production_count"),
         "production_executions": scheduler.get("production_execution_count"),
