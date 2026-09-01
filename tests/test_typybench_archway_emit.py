@@ -30,6 +30,11 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
     assert "exact-address-deduplication" not in worker_source
     assert '"contextual_summary_evaluation": (' in worker_source
     assert "contextual_summary_evaluation\n            )," in worker_source
+    assert '"callable_input_exact_limit" in session_parameters' in worker_source
+    assert (
+        'session_options["callable_input_exact_limit"] = ('
+        in worker_source
+    )
     assert "TYPE_OF,\n    open_hybrid_program_session," in worker_source
     assert "session.store.history_since(" in worker_source
 

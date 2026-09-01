@@ -274,6 +274,9 @@ def main() -> None:
         "invocation_contexts": top_counts(summary.get("invocation_contexts")),
         "invocation_summaries": invocation_summaries,
         "invocation_inputs": top_counts(summary.get("invocation_inputs")),
+        "invocation_input_dimensions": summary.get(
+            "invocation_input_dimensions"
+        ),
         "invocation_admissions": top_counts(summary.get("invocation_admissions")),
         "invocation_application_runtime": top_counts(
             summary.get("invocation_application_runtime")

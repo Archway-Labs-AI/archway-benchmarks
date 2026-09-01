@@ -1115,6 +1115,10 @@ try:
             "possible_entry_modules": frozenset(),
             "class_field_observations": True,
         }
+        if "callable_input_exact_limit" in session_parameters:
+            session_options["callable_input_exact_limit"] = (
+                callable_input_exact_limit
+            )
         if (
             "variable" in requested_observation_kinds
             and "body_observations_only" in session_parameters
@@ -2028,6 +2032,11 @@ try:
             "invocation_inputs": dict(
                 optional_session_diagnostic("invocation_input_growth_counts", {})
             ),
+            "invocation_input_dimensions": list(
+                optional_session_diagnostic(
+                    "invocation_input_dimension_telemetry", ()
+                )
+            ) if diagnostic_details else [],
             "invocation_admissions": dict(
                 optional_session_diagnostic("invocation_admission_counts", {})
             ),
