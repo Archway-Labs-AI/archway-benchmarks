@@ -28,6 +28,8 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
     assert "targeted_body_providers" not in worker_source
     assert "observation_workload_roots" not in worker_source
     assert "exact-address-deduplication" not in worker_source
+    assert '"contextual_summary_evaluation": (' in worker_source
+    assert "contextual_summary_evaluation\n            )," in worker_source
 
 
 def test_probe_progress_retains_compact_timeout_evidence() -> None:

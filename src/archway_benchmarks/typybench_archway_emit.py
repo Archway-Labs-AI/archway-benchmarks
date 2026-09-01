@@ -1092,6 +1092,9 @@ try:
             "record_events": False,
             "record_timings": record_timings,
             "record_telemetry": diagnostic_details,
+            "contextual_summary_evaluation": (
+                contextual_summary_evaluation
+            ),
             # TypyBench observes a repository as an importable library surface;
             # it does not identify an executable entry point.  Keep one root
             # for bulk import seeding, but bind every module's ``__name__`` to
