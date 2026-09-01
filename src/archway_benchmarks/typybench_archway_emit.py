@@ -1293,6 +1293,15 @@ try:
         body_id for body_id, label in body_labels.items()
         if label in requested_body_labels
     )
+    requested_class_definition_ids = frozenset(
+        boundary.enclosing_class_definition_id
+        for body_id in requested_body_ids
+        for boundary in (
+            session.callable_boundaries_by_body.get(body_id),
+        )
+        if boundary is not None
+        and boundary.enclosing_class_definition_id is not None
+    )
     if requested_body_labels:
         signature_roots = tuple(
             root_address for root_address in signature_roots
@@ -1725,6 +1734,10 @@ try:
                     body_morphism_ids=(
                         requested_body_ids
                         if requested_body_labels else None
+                    ),
+                    class_definition_ids=(
+                        requested_class_definition_ids
+                        if requested_body_labels else frozenset()
                     ),
                 )
             )
