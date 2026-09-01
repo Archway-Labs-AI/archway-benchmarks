@@ -1712,7 +1712,18 @@ try:
     files = {}
     projection_breakdown = {}
     timed_out_projection = False
-    if collect_predictions:
+    # A body timeout intentionally leaves a partial monotone scheduler state.
+    # It is useful diagnostic evidence, but it is not a converged analysis
+    # result and must never be consumed by observation projection.  Doing so
+    # previously turned a bounded performance probe into misleading downstream
+    # semantic failures (for example, iterator-frame invariants observed while
+    # an interrupted production still owned its cursor).
+    projection_skipped_reason = (
+        "targeted_body_timed_out" if collect_predictions and timed_out_body
+        else None
+    )
+    predictions_collected = collect_predictions and not timed_out_body
+    if predictions_collected:
         type_catalog_started = time.monotonic()
         projected_type_observations = session.type_observations()
         projection_breakdown["type_catalog"] = (
@@ -1975,7 +1986,11 @@ try:
             })),
         } for item in component_hotspots)
     unresolved_summary_bodies = Counter()
-    if diagnostic_details and collect_predictions and summary_registry is not None:
+    if (
+        diagnostic_details
+        and predictions_collected
+        and summary_registry is not None
+    ):
         callable_labels = {
             body_id: f"{boundary.module_name}:{boundary.qualified_name}"
             for body_id, boundary
@@ -2099,6 +2114,7 @@ try:
             ) if diagnostic_details else [],
             "sampling_profile": sampling_profile,
             "timed_out_projection": timed_out_projection,
+            "projection_skipped_reason": projection_skipped_reason,
             "unresolved_summary_bodies": dict(
                 unresolved_summary_bodies.most_common(32)
             ),

@@ -302,6 +302,9 @@ def main() -> None:
             None if args.compact_diagnostics else summary.get("body_plan")
         ),
         "timed_out_body": summary.get("timed_out_body"),
+        "projection_skipped_reason": summary.get(
+            "projection_skipped_reason"
+        ),
         "timed_out_projection": summary.get("timed_out_projection"),
         "timed_out_forward": summary.get("timed_out_forward"),
         "unique_productions": scheduler.get("unique_production_count"),

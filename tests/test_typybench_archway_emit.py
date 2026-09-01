@@ -41,6 +41,17 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
     assert "requested successor body labels are not present" in worker_source
 
 
+def test_successor_probe_does_not_project_partial_timed_out_state() -> None:
+    worker_source = inspect.getsource(_run_successor_repo_probe)
+
+    assert (
+        "predictions_collected = collect_predictions and not timed_out_body"
+        in worker_source
+    )
+    assert '"targeted_body_timed_out"' in worker_source
+    assert '"projection_skipped_reason": projection_skipped_reason' in worker_source
+
+
 def test_probe_progress_retains_compact_timeout_evidence() -> None:
     progress = _probe_progress(
         "ARCHWAY_PHASE translation 8.125000\n"
