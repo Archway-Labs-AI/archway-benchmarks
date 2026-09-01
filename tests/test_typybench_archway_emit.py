@@ -30,6 +30,8 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
     assert "exact-address-deduplication" not in worker_source
     assert '"contextual_summary_evaluation": (' in worker_source
     assert "contextual_summary_evaluation\n            )," in worker_source
+    assert "TYPE_OF,\n    open_hybrid_program_session," in worker_source
+    assert "session.store.history_since(" in worker_source
 
 
 def test_probe_progress_retains_compact_timeout_evidence() -> None:

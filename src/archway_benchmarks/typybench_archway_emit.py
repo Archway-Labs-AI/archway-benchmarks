@@ -894,7 +894,10 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
-from sd_core.analysis.diagram_analysis import open_hybrid_program_session
+from sd_core.analysis.diagram_analysis import (
+    TYPE_OF,
+    open_hybrid_program_session,
+)
 from sd_core.tooling.analysis_arena import AnalysisAllocationArena
 from sd_core.tooling.harness import TranslationResult
 
@@ -1410,6 +1413,7 @@ try:
         for index, root_batch in enumerate(root_batches, 1):
             root_address = root_batch[0]
             body_started = time.monotonic()
+            knowledge_sequence_before = session.store.sequence
             executions_before = session.scheduler.production_execution_count
             topology_before = session.scheduler.graph.topology_generation
             edge_telemetry_before = dict(
@@ -1591,6 +1595,12 @@ try:
                     root_label(item)
                     for item in root_batch
                 ],
+                # Diagnostic-only causal join between scheduler waves and the
+                # semantic surface. Sequence boundaries are O(1) to capture;
+                # projected source observations are attributed to these
+                # intervals once during result assembly.
+                "knowledge_sequence_before": knowledge_sequence_before,
+                "knowledge_sequence_after": session.store.sequence,
             }
             body_profiles.append(
                 body_profile if diagnostic_details else {
@@ -1718,6 +1728,18 @@ try:
         )
 
         render_started = time.monotonic()
+        type_resolution_sequences = {}
+        if diagnostic_details:
+            for delta in session.store.history_since(0):
+                for change in delta.resolution_changes:
+                    if change.address.family != TYPE_OF:
+                        continue
+                    address_id = change.address.id
+                    prior = type_resolution_sequences.get(address_id)
+                    type_resolution_sequences[address_id] = (
+                        delta.sequence if prior is None else prior[0],
+                        delta.sequence,
+                    )
         files = {str(path.relative_to(root)): [] for path in all_paths}
         for item in projected_type_observations:
             module = item.module.dotted if item.module is not None else None
@@ -1740,6 +1762,22 @@ try:
                 "family": item.address.family,
                 "function": item.function,
                 "body_morphism_id": item.body_morphism_id,
+                **(
+                    {
+                        "address_id": item.address.id,
+                        "first_resolution_sequence": (
+                            type_resolution_sequences[item.address.id][0]
+                            if item.address.id in type_resolution_sequences
+                            else None
+                        ),
+                        "last_resolution_sequence": (
+                            type_resolution_sequences[item.address.id][1]
+                            if item.address.id in type_resolution_sequences
+                            else None
+                        ),
+                    }
+                    if diagnostic_details else {}
+                ),
                 # Retain unresolved catalog entries as explicit missing
                 # evidence.  The source adapter inserts nothing for an empty
                 # set, while diagnostic traces can now distinguish an open
