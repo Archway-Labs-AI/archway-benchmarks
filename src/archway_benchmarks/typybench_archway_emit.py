@@ -223,6 +223,7 @@ def emit_archway_predictions(
     run_forward_seed: bool = True,
     collect_predictions: bool = True,
     emit_class_field_annotations: bool = True,
+    contextual_summary_evaluation: bool = False,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -287,6 +288,7 @@ def emit_archway_predictions(
             run_forward_seed=run_forward_seed,
             collect_predictions=collect_predictions,
             diagnostic_details=(analysis_observation_mode == "diagnostic"),
+            contextual_summary_evaluation=contextual_summary_evaluation,
             observation_kinds=frozenset((
                 "parameter",
                 "return",
@@ -1785,10 +1787,44 @@ try:
             ),
         }
     )
+    scheduler_telemetry["convergence_regions"] = dict(
+        session.scheduler.convergence_region_diagnostics()
+    )
     summary_registry = (
         session.invocation_registry.callable_summaries
         if session.invocation_registry is not None else None
     )
+    convergence_regions = scheduler_telemetry.get("convergence_regions")
+    if isinstance(convergence_regions, dict) and summary_registry is not None:
+        region_labels = {}
+        for application_address, instance in (
+            summary_registry.contextual_instances.items()
+        ):
+            spec = summary_registry.applications.get(application_address)
+            if spec is None:
+                continue
+            body_id = spec.callable_value.body_morphism_id
+            boundary = session.callable_boundaries_by_body.get(body_id)
+            region_labels[instance.context] = {
+                "body_morphism_id": body_id,
+                "callable": (
+                    f"{boundary.module_name}:{boundary.qualified_name}"
+                    if boundary is not None else body_id
+                ),
+            }
+        for collection_name in (
+            "largest_regions", "largest_mixed_components"
+        ):
+            for row in convergence_regions.get(collection_name, ()):
+                nested = (
+                    row.get("largest_regions", ())
+                    if collection_name == "largest_mixed_components"
+                    else (row,)
+                )
+                for region_row in nested:
+                    label = region_labels.get(region_row.get("region_id"))
+                    if label is not None:
+                        region_row.update(label)
     component_hotspots = (
         optional_scheduler_diagnostic("component_hotspots", ())
         if diagnostic_details else ()
