@@ -211,6 +211,8 @@ def main() -> None:
     replay_operation_hotspots = summary.get(
         "production_replay_operation_hotspots"
     ) or []
+    production_hotspots = scheduler.get("production_hotspots") or []
+    invocation_summaries = summary.get("invocation_summaries") or []
     if args.compact_diagnostics:
         replay_hotspots = [
             {
@@ -222,6 +224,8 @@ def main() -> None:
             }
             for item in replay_hotspots[:12]
         ]
+        production_hotspots = production_hotspots[:20]
+        invocation_summaries = invocation_summaries[:32]
     report = {
         "ok": result.get("ok"),
         "error": result.get("error"),
@@ -253,6 +257,7 @@ def main() -> None:
             top_counts(summary.get("morphism_read_intersections"), 30)
         ),
         "invocation_contexts": top_counts(summary.get("invocation_contexts")),
+        "invocation_summaries": invocation_summaries,
         "invocation_inputs": top_counts(summary.get("invocation_inputs")),
         "invocation_admissions": top_counts(summary.get("invocation_admissions")),
         "invocation_application_hotspots": summary.get(
@@ -281,6 +286,7 @@ def main() -> None:
         "production_executions": scheduler.get("production_execution_count"),
         "repeated_productions": scheduler.get("repeated_production_count"),
         "production_replay_hotspots": replay_hotspots,
+        "production_hotspots": production_hotspots,
         "production_replay_operation_hotspots": replay_operation_hotspots,
         "affected_selected": worklist.get("affected_component_selected"),
         "topology_restarts": worklist.get("topology_restart"),
