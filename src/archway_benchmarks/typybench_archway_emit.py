@@ -663,7 +663,9 @@ def _successor_variable_types(
             item.get("function") is not None
             or "." not in str(name)
             or item.get("kind") != "class_field"
-            or item.get("family") != "ClassAttributeTypeOf"
+            or item.get("family") not in {
+                "ClassAttributeTypeOf", "AnnotationCandidatesAt",
+            }
         ):
             continue
         # Class-attribute observations retain their qualified semantic name
@@ -1289,6 +1291,14 @@ try:
         for plan in session.module_plans.values()
         for template in plan.templates
     }
+    unmatched_body_labels = requested_body_labels.difference(
+        body_labels.values()
+    )
+    if unmatched_body_labels:
+        raise ValueError(
+            "requested successor body labels are not present in the "
+            "translated program: " + ", ".join(sorted(unmatched_body_labels))
+        )
     requested_body_ids = frozenset(
         body_id for body_id, label in body_labels.items()
         if label in requested_body_labels

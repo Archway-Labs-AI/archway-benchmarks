@@ -37,6 +37,8 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
     )
     assert "TYPE_OF,\n    open_hybrid_program_session," in worker_source
     assert "session.store.history_since(" in worker_source
+    assert "unmatched_body_labels = requested_body_labels.difference(" in worker_source
+    assert "requested successor body labels are not present" in worker_source
 
 
 def test_probe_progress_retains_compact_timeout_evidence() -> None:
@@ -615,6 +617,22 @@ def test_class_field_emission_accepts_only_reviewed_transform_projection() -> No
     assert _successor_variable_types(
         observations, class_fields_only=True
     ) == {(2, "value"): "int"}
+
+
+def test_class_field_emission_accepts_reviewed_annotation_candidate() -> None:
+    observations = [{
+        "line": 2,
+        "name": "Model.value",
+        "kind": "class_field",
+        "family": "AnnotationCandidatesAt",
+        "function": None,
+        "types": ["pkg.Value"],
+        "precision": "reviewed_open_world:possible",
+    }]
+
+    assert _successor_variable_types(
+        observations, class_fields_only=True
+    ) == {(2, "value"): "pkg.Value"}
 
 
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:
