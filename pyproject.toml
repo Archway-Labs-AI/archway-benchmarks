@@ -39,6 +39,11 @@ dev = [
     "pytest>=7.0",
     "ruff>=0.1.0",
     "mypy>=1.0",
+    # Runtime dependencies required by the in-process Archway integration
+    # tests. The engine source itself is supplied explicitly by the caller.
+    "PyYAML",
+    "immutables>=0.21,<1",
+    "mcp>=2,<3",
     "fastapi>=0.110",
     "uvicorn>=0.27",
     "jinja2>=3.1",
@@ -57,6 +62,9 @@ archway-bench = "archway_benchmarks.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/archway_benchmarks"]
 artifacts = ["src/archway_benchmarks/dashboard/templates/*.html", "src/archway_benchmarks/dashboard/static/*"]
+
+[tool.hatch.envs.default]
+features = ["dev"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

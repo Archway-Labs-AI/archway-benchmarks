@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -39,13 +40,47 @@ from archway_benchmarks.types import Location
 
 
 def _revision(path: Path) -> str:
-    return subprocess.run(
+    revision = subprocess.run(
         ("git", "-C", str(path), "rev-parse", "HEAD"),
         check=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
     ).stdout.strip()
+    status = subprocess.run(
+        ("git", "-C", str(path), "status", "--porcelain=v1"),
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    ).stdout
+    if not status:
+        return revision
+    digest = hashlib.sha256()
+    digest.update(subprocess.run(
+        ("git", "-C", str(path), "diff", "--binary", "HEAD"),
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout)
+    untracked = subprocess.run(
+        (
+            "git", "-C", str(path), "ls-files", "--others",
+            "--exclude-standard", "-z",
+        ),
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout.split(b"\0")
+    for relative_bytes in sorted(item for item in untracked if item):
+        relative = relative_bytes.decode("utf-8", errors="surrogateescape")
+        digest.update(relative_bytes)
+        digest.update(b"\0")
+        candidate = path / relative
+        if candidate.is_file():
+            digest.update(candidate.read_bytes())
+        digest.update(b"\0")
+    return f"{revision}-dirty-{digest.hexdigest()[:24]}"
 
 
 def _load_records(path: Path) -> tuple[dict[str, object] | None, dict[str, dict]]:
@@ -79,7 +114,12 @@ def _load_records(path: Path) -> tuple[dict[str, object] | None, dict[str, dict]
     return header, records
 
 
-def _summary(records: dict[str, dict], total_snippets: int) -> dict[str, object]:
+def _summary(
+    records: dict[str, dict],
+    total_snippets: int,
+    failures: dict[str, dict] | None = None,
+) -> dict[str, object]:
+    failures = failures or {}
     classifications: Counter[str] = Counter()
     for record in records.values():
         classifications.update(record.get("classifications", {}))
@@ -92,8 +132,24 @@ def _summary(records: dict[str, dict], total_snippets: int) -> dict[str, object]
         "predictions": sum(item["predictions"] for item in records.values()),
         "exact": exact,
         "exact_fraction": exact / annotations if annotations else 0.0,
-        "elapsed_seconds": sum(item["seconds"] for item in records.values()),
+        "elapsed_seconds": sum(
+            item["seconds"]
+            for item in (*records.values(), *failures.values())
+        ),
         "classifications": dict(sorted(classifications.items())),
+        "slow_snippets": sum(
+            bool(item.get("slow"))
+            for item in (*records.values(), *failures.values())
+        ),
+        "failed_snippets": len(failures),
+        "failures": [
+            {
+                "suite_path": suite_path,
+                "seconds": record["seconds"],
+                "error": record["error"],
+            }
+            for suite_path, record in sorted(failures.items())
+        ],
     }
 
 
@@ -135,6 +191,26 @@ def _require_nonempty_corpus(snippets, corpus_root: Path):
             f"TypeEvalPy corpus contains no recognized snippets: {corpus_root}"
         )
     return snippets
+
+
+def _select_snippets(snippets, paths, prefixes):
+    """Select a deterministic union of exact and prefix semantic cohorts."""
+
+    requested_paths = frozenset(paths)
+    requested_prefixes = tuple(prefixes)
+    if not requested_paths and not requested_prefixes:
+        return tuple(snippets)
+    return tuple(
+        snippet
+        for snippet in snippets
+        if (
+            snippet.suite_path in requested_paths
+            or any(
+                snippet.suite_path.startswith(prefix)
+                for prefix in requested_prefixes
+            )
+        )
+    )
 
 
 def _persist_run(
@@ -206,15 +282,34 @@ def main() -> None:
     parser.add_argument("corpus_root", type=Path)
     parser.add_argument("checkpoint_jsonl", type=Path)
     parser.add_argument("engine_worktree", type=Path)
-    parser.add_argument("--per-snippet-timeout", type=float, default=30.0)
+    parser.add_argument("--per-snippet-timeout", type=float, default=120.0)
+    parser.add_argument("--slow-snippet-seconds", type=float, default=30.0)
     parser.add_argument("--progress-every", type=int, default=25)
     parser.add_argument("--max-snippets", type=int)
+    parser.add_argument(
+        "--suite-path",
+        action="append",
+        default=[],
+        help="Run one exact suite path; repeat to select a cohort.",
+    )
+    parser.add_argument(
+        "--suite-path-prefix",
+        action="append",
+        default=[],
+        help="Run suite paths under this prefix; repeat to union cohorts.",
+    )
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument("--db", type=Path)
     parser.add_argument("--notes")
     args = parser.parse_args()
     if args.per_snippet_timeout <= 0:
         parser.error("--per-snippet-timeout must be positive")
+    if args.slow_snippet_seconds <= 0:
+        parser.error("--slow-snippet-seconds must be positive")
+    if args.slow_snippet_seconds >= args.per_snippet_timeout:
+        parser.error(
+            "--slow-snippet-seconds must be less than --per-snippet-timeout"
+        )
     if args.progress_every <= 0:
         parser.error("--progress-every must be positive")
 
@@ -230,6 +325,14 @@ def main() -> None:
     snippets = _require_nonempty_corpus(
         benchmark.load(), args.corpus_root.resolve()
     )
+    requested_paths = frozenset(args.suite_path)
+    requested_prefixes = tuple(args.suite_path_prefix)
+    if requested_paths or requested_prefixes:
+        snippets = _select_snippets(
+            snippets, requested_paths, requested_prefixes
+        )
+        if not snippets:
+            parser.error("suite-path selectors matched no snippets")
     if args.max_snippets is not None:
         snippets = snippets[:args.max_snippets]
     harness_root = Path(__file__).resolve().parents[1]
@@ -241,11 +344,16 @@ def main() -> None:
         "harness_revision": _revision(harness_root),
         "corpus_revision": _revision(args.corpus_root.resolve()),
         "snippet_count": len(snippets),
+        "suite_paths": sorted(requested_paths),
+        "suite_path_prefixes": list(requested_prefixes),
+        "slow_snippet_seconds": args.slow_snippet_seconds,
+        "hard_snippet_timeout_seconds": args.per_snippet_timeout,
     }
     header, records = (
         (None, {}) if args.no_resume
         else _load_records(args.checkpoint_jsonl)
     )
+    failures: dict[str, dict] = {}
     if header is not None and header != expected_header:
         raise RuntimeError(
             "checkpoint provenance differs from this run; use a new path"
@@ -322,6 +430,7 @@ def main() -> None:
                 "kind": "snippet",
                 "suite_path": snippet.suite_path,
                 "seconds": elapsed,
+                "slow": elapsed >= args.slow_snippet_seconds,
                 "annotations": len(ground_truth),
                 "predictions": len(predicted),
                 "exact": sum(
@@ -343,15 +452,18 @@ def main() -> None:
             }
             stream.write(json.dumps(record, sort_keys=True) + "\n")
             stream.flush()
-            records[snippet.suite_path] = record
+            if error:
+                failures[snippet.suite_path] = record
+            else:
+                records[snippet.suite_path] = record
             if (
                 index % args.progress_every == 0
-                or elapsed >= min(5.0, args.per_snippet_timeout / 2)
+                or elapsed >= args.slow_snippet_seconds
                 or error
                 or index == len(snippets)
             ):
                 os.fsync(stream.fileno())
-                current = _summary(records, len(snippets))
+                current = _summary(records, len(snippets), failures)
                 print(
                     "TYPEEVALPY_PROGRESS "
                     + json.dumps({
@@ -363,14 +475,10 @@ def main() -> None:
                     file=sys.stderr,
                     flush=True,
                 )
-            if error:
-                raise RuntimeError(
-                    f"analysis failed at {snippet.suite_path}: {error}"
-                )
         os.fsync(stream.fileno())
 
-    summary = _summary(records, len(snippets))
-    if args.db is not None:
+    summary = _summary(records, len(snippets), failures)
+    if args.db is not None and not failures:
         resolved_db = args.db.resolve()
         summary["local_run_id"] = _persist_run(
             benchmark=benchmark,
@@ -393,6 +501,11 @@ def main() -> None:
         encoding="utf-8",
     )
     os.replace(temporary, summary_path)
+    if failures:
+        raise RuntimeError(
+            "analysis completed with failed snippets: "
+            + ", ".join(sorted(failures))
+        )
     print(json.dumps(summary, sort_keys=True))
 
 

@@ -39,13 +39,6 @@ _DEFAULT_AUTOGEN_CORPUS = (
     / "autogen_typeevalpy_benchmark"
     / "python_features"
 )
-_DEFAULT_DEPENDENCY_ROOTS = (
-    _TYPEEVALPY_ROOT
-    / "micro-benchmark-excluded"
-    / "typeevalpy_external_module",
-)
-
-
 def _typeevalpy_dependency_roots(corpus_root: Path) -> tuple[Path, ...]:
     """Locate TypeEvalPy's separately packaged external test dependency.
 
@@ -58,7 +51,6 @@ def _typeevalpy_dependency_roots(corpus_root: Path) -> tuple[Path, ...]:
     candidates = (
         *(ancestor / "micro-benchmark-excluded" / "typeevalpy_external_module"
           for ancestor in (corpus_root, *corpus_root.parents)),
-        *_DEFAULT_DEPENDENCY_ROOTS,
     )
     return tuple(dict.fromkeys(root for root in candidates if root.is_dir()))
 
