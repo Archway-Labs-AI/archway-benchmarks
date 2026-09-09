@@ -20,9 +20,9 @@ from pathlib import Path
 from typing import Any, Optional
 
 from archway_benchmarks.typybench_harness import require_python_source_files
+from archway_benchmarks.typybench_scored_slots import scored_slots
 
 
-_NONE_TYPE_NAMES = {"builtins.NoneType", "NoneType"}
 _TRACE_ENV_VAR = "ARCHWAY_TYPYBENCH_TRACE_JSONL"
 
 
@@ -98,41 +98,6 @@ def _probe_progress(stderr: str) -> dict[str, Any]:
                     active_body = None
             except ValueError:
                 continue
-        elif line.startswith("ARCHWAY_BODY_DETAIL "):
-            try:
-                detail = json.loads(
-                    line.removeprefix("ARCHWAY_BODY_DETAIL ")
-                )
-            except json.JSONDecodeError:
-                continue
-            if not isinstance(detail, dict):
-                continue
-            index = detail.get("index")
-            profile = next(
-                (
-                    item for item in reversed(body_profiles)
-                    if item["index"] == index
-                ),
-                None,
-            )
-            if profile is not None:
-                profile["performance_detail"] = {
-                    key: detail[key]
-                    for key in (
-                        "top_execution_families",
-                        "top_family_seconds",
-                        "top_production_operations",
-                        "top_production_seconds",
-                        "top_production_phases",
-                        "top_production_phase_seconds",
-                        "top_transfer_operations",
-                        "top_transfer_seconds",
-                        "topology_change_counts",
-                        "component_edge_updates",
-                        "gc",
-                    )
-                    if key in detail
-                }
         elif line.startswith("ARCHWAY_TRANSLATION_START "):
             active_translation_file = line.removeprefix(
                 "ARCHWAY_TRANSLATION_START "
@@ -180,6 +145,7 @@ class FileProfile:
     error: str | None = None
     trace_tail: str | None = None
     analysis_summary: dict[str, Any] | None = None
+    scored_slot_accounting: dict[str, int] | None = None
 
     def to_json(self) -> dict[str, Any]:
         return {
@@ -198,6 +164,7 @@ class FileProfile:
             "error": self.error,
             "trace_tail": self.trace_tail,
             "analysis_summary": self.analysis_summary,
+            "scored_slot_accounting": self.scored_slot_accounting,
         }
 
 
@@ -212,13 +179,13 @@ class EmitStats:
     params_annotated: int
     returns_annotated: int
     variables_annotated: int = 0
-    seconds_engine_probe: float = 0.0
     failures: tuple[dict[str, str], ...] = field(default_factory=tuple)
     file_profiles: tuple[FileProfile, ...] = field(default_factory=tuple)
     engine_sha: str | None = None
     analysis_summary: dict[str, Any] | None = None
     probe_error: str | None = None
     probe_trace_tail: str | None = None
+    scored_slot_accounting: dict[str, int] = field(default_factory=dict)
 
 
 def emit_archway_predictions(
@@ -235,22 +202,29 @@ def emit_archway_predictions(
     trace_jsonl: Path | None = None,
     profile_jsonl: Path | None = None,
     progress_log: Path | None = None,
+    body_summary_consumption: str = "off",
+    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
     checkpoint_roots: bool = True,
-    body_timeout: int | None = None,
-    body_labels: tuple[str, ...] | None = None,
+    max_wave_size: int = 8,
     checkpoint_batch_start: int | None = None,
     checkpoint_batch_count: int | None = None,
     checkpoint_replay_prefix: bool = True,
-    run_forward_seed: bool = True,
+    body_labels: tuple[str, ...] = (),
+    body_timeout: int | None = None,
     progress_timeout: int | None = None,
-    sample_session_open: bool = False,
-    sample_forward: bool = False,
+    projection_timeout: int | None = None,
     sample_rate_hz: float | None = None,
+    sample_targeted: bool = False,
+    sample_forward: bool = False,
+    sample_session_open: bool = False,
     session_open_timeout: int | None = None,
     forward_timeout: int | None = None,
-    emit_variable_annotations: bool = False,
+    run_forward_seed: bool = True,
+    collect_predictions: bool = True,
     emit_class_field_annotations: bool = True,
+    contextual_summary_evaluation: bool = False,
 ) -> EmitStats:
     """Analyze one TypyBench repo and write ``predictions/<repo_name>``.
 
@@ -286,11 +260,11 @@ def emit_archway_predictions(
     params_annotated = 0
     returns_annotated = 0
     variables_annotated = 0
+    scored_slot_accounting: dict[str, int] = {}
     failures: list[dict[str, str]] = []
     file_profiles: list[FileProfile] = []
 
     try:
-        started = time.monotonic()
         probe_started = time.monotonic()
         repo_record = _run_successor_repo_probe(
             engine_worktree=Path(engine_worktree),
@@ -299,28 +273,27 @@ def emit_archway_predictions(
             timeout=timeout,
             progress_log=progress_log,
             checkpoint_roots=checkpoint_roots,
-            body_timeout=body_timeout,
-            body_labels=body_labels,
+            checkpoint_size=max_wave_size,
             checkpoint_batch_start=checkpoint_batch_start,
             checkpoint_batch_count=checkpoint_batch_count,
             checkpoint_replay_prefix=checkpoint_replay_prefix,
-            run_forward_seed=run_forward_seed,
+            body_labels=body_labels,
+            body_timeout=body_timeout,
             progress_timeout=progress_timeout,
-            sample_session_open=sample_session_open,
-            sample_forward=sample_forward,
+            projection_timeout=projection_timeout,
             sample_rate_hz=sample_rate_hz,
+            sample_targeted=sample_targeted,
+            sample_forward=sample_forward,
+            sample_session_open=sample_session_open,
             session_open_timeout=session_open_timeout,
             forward_timeout=forward_timeout,
-            diagnostic_details=(
-                analysis_observation_mode == "diagnostic"
-            ),
-            record_timings=(analysis_observation_mode == "diagnostic"),
+            run_forward_seed=run_forward_seed,
+            collect_predictions=collect_predictions,
+            diagnostic_details=(analysis_observation_mode == "diagnostic"),
+            contextual_summary_evaluation=contextual_summary_evaluation,
             observation_kinds=frozenset((
                 "parameter",
                 "return",
-                *(("variable",) if (
-                    emit_variable_annotations or emit_class_field_annotations
-                ) else ()),
             )),
         )
         seconds_repo_probe = time.monotonic() - probe_started
@@ -330,14 +303,19 @@ def emit_archway_predictions(
             rel_s = str(rel)
             dest = dest_root / rel
             record = repo_record
-            # The engine probe is one repository-wide persistent session.
-            # Per-file rows must not each claim its complete wall time.
-            seconds_probe = 0.0
+            seconds_probe = seconds_repo_probe
             # Preserve the probe's compact phase/cohort evidence when the
             # repository-wide subprocess itself consumed the timeout.  The
             # elapsed-budget check below used to replace this richer failure
             # with one generic error per file.
             if not record.get("ok"):
+                file_accounting = _scored_slot_accounting(
+                    src.read_text(encoding="utf-8"), [], {},
+                )
+                for name, count in file_accounting.items():
+                    scored_slot_accounting[name] = (
+                        scored_slot_accounting.get(name, 0) + count
+                    )
                 err = str(record.get("error", "no engine result"))[:300]
                 failures.append({"file": rel_s, "error": err})
                 profile = FileProfile(
@@ -349,23 +327,7 @@ def emit_archway_predictions(
                     error=err,
                     trace_tail=record.get("trace_tail"),
                     analysis_summary=record.get("analysis_summary"),
-                )
-                file_profiles.append(profile)
-                if profile_writer:
-                    profile_writer.write(profile)
-                continue
-
-            remaining = timeout - (time.monotonic() - started)
-            if remaining <= 0:
-                error = f"TimeoutExpired: repo analysis exceeded {timeout}s"
-                failures.append({"file": rel_s, "error": error})
-                profile = FileProfile(
-                    repo_name=repo_name,
-                    file=rel_s,
-                    status="repo_timeout",
-                    seconds_total=round(time.monotonic() - file_started, 6),
-                    seconds_engine_probe=0.0,
-                    error=error,
+                    scored_slot_accounting=file_accounting,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -377,6 +339,13 @@ def emit_archway_predictions(
                 .get("translation_failures", {})
             )
             if rel_s in translation_failures:
+                file_accounting = _scored_slot_accounting(
+                    src.read_text(encoding="utf-8"), [], {},
+                )
+                for name, count in file_accounting.items():
+                    scored_slot_accounting[name] = (
+                        scored_slot_accounting.get(name, 0) + count
+                    )
                 err = str(translation_failures[rel_s])[:300]
                 failures.append({"file": rel_s, "error": err})
                 profile = FileProfile(
@@ -387,6 +356,7 @@ def emit_archway_predictions(
                     seconds_engine_probe=round(seconds_probe, 6),
                     error=err,
                     analysis_summary=record.get("analysis_summary"),
+                    scored_slot_accounting=file_accounting,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -400,10 +370,6 @@ def emit_archway_predictions(
                 record.get("files", {}).get(rel_s, []), trace=file_trace
             )
             variable_types = (
-                _successor_variable_types(
-                    record.get("files", {}).get(rel_s, []), trace=file_trace
-                )
-                if emit_variable_annotations else
                 _successor_variable_types(
                     record.get("files", {}).get(rel_s, []),
                     trace=file_trace,
@@ -423,6 +389,16 @@ def emit_archway_predictions(
                     trace=file_trace,
                 )
             except SyntaxError as exc:
+                file_accounting = _scored_slot_accounting(
+                    raw,
+                    record.get("files", {}).get(rel_s, []),
+                    function_types,
+                    annotation_failed=True,
+                )
+                for name, count in file_accounting.items():
+                    scored_slot_accounting[name] = (
+                        scored_slot_accounting.get(name, 0) + count
+                    )
                 error = f"emit SyntaxError: {exc}"[:300]
                 failures.append({"file": rel_s, "error": error})
                 profile = FileProfile(
@@ -436,6 +412,7 @@ def emit_archway_predictions(
                     functions_seen=len(function_types),
                     error=error,
                     analysis_summary=record.get("analysis_summary"),
+                    scored_slot_accounting=file_accounting,
                 )
                 file_profiles.append(profile)
                 if profile_writer:
@@ -446,6 +423,17 @@ def emit_archway_predictions(
             params_annotated += file_stats["params"]
             returns_annotated += file_stats["returns"]
             variables_annotated += file_stats["variables"]
+            file_accounting = _scored_slot_accounting(
+                raw,
+                record.get("files", {}).get(rel_s, []),
+                function_types,
+                emitted_params=file_stats["params"],
+                emitted_returns=file_stats["returns"],
+            )
+            for name, count in file_accounting.items():
+                scored_slot_accounting[name] = (
+                    scored_slot_accounting.get(name, 0) + count
+                )
             dest.write_text(annotated, encoding="utf-8")
             profile = FileProfile(
                 repo_name=repo_name,
@@ -461,6 +449,7 @@ def emit_archway_predictions(
                 returns_annotated=file_stats["returns"],
                 variables_annotated=file_stats["variables"],
                 analysis_summary=record.get("analysis_summary"),
+                scored_slot_accounting=file_accounting,
             )
             file_profiles.append(profile)
             if profile_writer:
@@ -482,7 +471,6 @@ def emit_archway_predictions(
         params_annotated=params_annotated,
         returns_annotated=returns_annotated,
         variables_annotated=variables_annotated,
-        seconds_engine_probe=round(seconds_repo_probe, 6),
         failures=tuple(failures),
         file_profiles=tuple(file_profiles),
         engine_sha=engine_sha,
@@ -492,18 +480,21 @@ def emit_archway_predictions(
             if not repo_record.get("ok") else None
         ),
         probe_trace_tail=repo_record.get("trace_tail"),
+        scored_slot_accounting=scored_slot_accounting,
     )
 
 
 def _successor_function_types(
     observations: list[dict[str, Any]], trace: _TraceBuffer | None = None
-) -> dict[tuple[int, str], dict[str, Any]]:
+) -> dict[str, dict[str, Any]]:
     """Render compact successor observations into the annotation adapter shape."""
 
-    candidates: dict[tuple[int, str], dict[str, list[str]]] = {}
+    candidates: dict[str, dict[str, list[str]]] = {}
     requirement_candidates: dict[
-        tuple[int, str], dict[str, list[str]]
+        str, dict[str, list[str]]
     ] = {}
+    shape_candidates: dict[str, dict[str, list[str]]] = {}
+    definition_lines: dict[str, int] = {}
     for item in observations:
         line = item.get("line")
         kind = item.get("kind")
@@ -514,35 +505,56 @@ def _successor_function_types(
             function = function or item.get("name")
         if not function:
             continue
-        # Successor observations retain the semantic qualified callable name
-        # (for example ``PaperQAEnvironment.__init__``), while the source
-        # annotation adapter addresses a definition by its source-local name
-        # and line.  The line retains the necessary disambiguation; preserving
-        # the qualifier here prevents every method parameter from matching its
-        # FunctionDef.
-        function = str(function).rsplit(".", 1)[-1]
+        # Definition provenance and the qualified lexical callable name are
+        # the source-editing identity. Observation rows may identify a formal
+        # use or bind wire and are diagnostic only; they are not a stable join
+        # for multiline signatures.
+        function = str(function)
+        definition_lines.setdefault(
+            function, int(item.get("definition_line") or line)
+        )
         slot = "return" if kind == "return" else f"param:{item.get('name')}"
-        values = [
-            _successor_annotation(value)
-            for value in item.get("types", [])
-            if value
-        ]
+        values = (
+            [_successor_shape_annotation(item.get("shape"))]
+            if item.get("family") == "GenericShapeOf"
+            else [
+                _successor_annotation(value)
+                for value in item.get("types", [])
+                if value
+            ]
+        )
+        values = [value for value in values if value]
         target = (
             requirement_candidates
-            if item.get("family") == "CallableTypeCandidates"
+            if item.get("family") == "AnnotationCandidatesAt"
+            else shape_candidates
+            if item.get("family") == "GenericShapeOf"
             else candidates
         )
-        target.setdefault((int(line), function), {}).setdefault(
+        target.setdefault(function, {}).setdefault(
             slot, []
         ).extend(values)
 
-    rendered: dict[tuple[int, str], dict[str, Any]] = {}
-    for key in candidates.keys() | requirement_candidates.keys():
+    rendered: dict[str, dict[str, Any]] = {}
+    for key in (
+        candidates.keys() | requirement_candidates.keys()
+        | shape_candidates.keys()
+    ):
         observed_slots = candidates.get(key, {})
-        fallback_slots = requirement_candidates.get(key, {})
+        supported_slots = requirement_candidates.get(key, {})
+        shaped_slots = shape_candidates.get(key, {})
         slots = {
-            slot: observed_slots.get(slot) or fallback_slots.get(slot, [])
-            for slot in observed_slots.keys() | fallback_slots.keys()
+            slot: (
+                shaped_slots.get(slot)
+                or (
+                    observed_slots.get(slot, [])
+                    + supported_slots.get(slot, [])
+                )
+            )
+            for slot in (
+                observed_slots.keys() | supported_slots.keys()
+                | shaped_slots.keys()
+            )
         }
         params = {
             slot.removeprefix("param:"): merged
@@ -559,7 +571,7 @@ def _successor_function_types(
                     else "no inferred parameter candidate"
                 )
                 trace.add_slot(
-                    line=key[0], function=key[1], slot=slot,
+                    line=definition_lines[key], function=key, slot=slot,
                     candidates=[{
                         "successor_types": values,
                         **({"fallback_reasons": [fallback]}
@@ -568,6 +580,67 @@ def _successor_function_types(
                     merged_annotation=(ret if slot == "return" else params.get(slot.removeprefix("param:"))),
                 )
     return rendered
+
+
+def _scored_slot_accounting(
+    source: str,
+    observations: list[dict[str, Any]],
+    function_types: dict[str, dict[str, Any]],
+    *,
+    emitted_params: int = 0,
+    emitted_returns: int = 0,
+    annotation_failed: bool = False,
+) -> dict[str, int]:
+    """Account for the complete potential direct TypyBench scoring surface."""
+
+    manifest = scored_slots(source)
+    manifest_by_key = {item.adapter_key: item for item in manifest}
+    cataloged = set()
+    for item in observations:
+        kind = item.get("kind")
+        if kind not in {"parameter", "return"}:
+            continue
+        function = item.get("function")
+        if kind == "return":
+            function = function or item.get("name")
+        line = item.get("definition_line") or item.get("line")
+        if not function or not line:
+            continue
+        role = "return" if kind == "return" else f"param:{item.get('name')}"
+        cataloged.add((str(function), role))
+
+    resolved = set()
+    for function, info in function_types.items():
+        for name in (info.get("params") or {}):
+            resolved.add((function, f"param:{name}"))
+        if info.get("return"):
+            resolved.add((function, "return"))
+
+    manifest_keys = set(manifest_by_key)
+    resolved_manifest = resolved & manifest_keys
+    preserved = sum(
+        manifest_by_key[key].has_annotation for key in resolved_manifest
+    )
+    emitted = emitted_params + emitted_returns
+    resolved_unrenderable = (
+        len(resolved_manifest) if annotation_failed else 0
+    )
+    resolved_not_emitted = (
+        0 if annotation_failed else
+        max(0, len(resolved_manifest) - preserved - emitted)
+    )
+    return {
+        "manifest_slots": len(manifest_keys),
+        "engine_cataloged_slots": len(cataloged & manifest_keys),
+        "resolved_candidates": len(resolved_manifest),
+        "resolved_emitted": emitted,
+        "resolved_preserved": preserved,
+        "resolved_unrenderable": resolved_unrenderable,
+        "resolved_not_emitted": resolved_not_emitted,
+        "unresolved_facts": len((cataloged & manifest_keys) - resolved),
+        "uncataloged_engine_identity": len(manifest_keys - cataloged),
+        "orphan_engine_observations": len(cataloged - manifest_keys),
+    }
 
 
 def _successor_variable_types(
@@ -580,14 +653,19 @@ def _successor_variable_types(
     for item in observations:
         line = item.get("line")
         name = item.get("name")
-        if not line or item.get("kind") != "variable" or not name:
+        if (
+            not line
+            or item.get("kind") not in {"variable", "class_field"}
+            or not name
+        ):
             continue
         if class_fields_only and (
             item.get("function") is not None
             or "." not in str(name)
-            or item.get("family") != "ClassAttributeTypeOf"
-            or "transformed constructor-field type"
-            not in item.get("evidence_rules", ())
+            or item.get("kind") != "class_field"
+            or item.get("family") not in {
+                "ClassAttributeTypeOf", "AnnotationCandidatesAt",
+            }
         ):
             continue
         # Class-attribute observations retain their qualified semantic name
@@ -633,13 +711,84 @@ def _successor_annotation(value: str) -> str:
     return value.removeprefix("builtins.")
 
 
-def _observation_admission_group(session, root_address) -> tuple[object, str]:
-    """Group exact observations only by their owning callable boundary."""
+def _successor_shape_annotation(value: object) -> str | None:
+    """Render one bounded public GenericShapeOf value for source emission."""
 
-    body_id = session.observation_workload_body_id(root_address)
-    if body_id is None:
-        return ("unowned", root_address.id)
-    return ("callable", body_id)
+    if not isinstance(value, dict) or value.get("unknown"):
+        return None
+    rendered = []
+    for shape in value.get("shapes", []):
+        if not isinstance(shape, dict):
+            continue
+        constructor = _successor_annotation(str(shape.get("constructor", "")))
+        positions = {
+            str(item.get("position")): item.get("value")
+            for item in shape.get("positions", [])
+            if isinstance(item, dict)
+        }
+
+        def position_type(position: object) -> str | None:
+            if not isinstance(position, dict):
+                return None
+            nested_value = position.get("nested")
+            nested_constructors = {
+                _successor_annotation(str(item.get("constructor", "")))
+                for item in (
+                    nested_value.get("shapes", [])
+                    if isinstance(nested_value, dict) else []
+                )
+                if isinstance(item, dict)
+            }
+            nominal = [
+                _successor_annotation(str(item))
+                for item in position.get("nominal_types", [])
+                if _successor_annotation(str(item))
+                not in nested_constructors
+            ]
+            nested = _successor_shape_annotation(nested_value)
+            return _merge_types([*nominal, *([nested] if nested else [])])
+
+        if constructor == "generator":
+            yielded = position_type(positions.get("yield:*")) or "Any"
+            rendered.append(f"Generator[{yielded}, None, None]")
+        elif constructor in {"list", "set"}:
+            elements = [
+                position_type(item) for item in positions.values()
+            ]
+            inner = _merge_types([item for item in elements if item]) or "Any"
+            rendered.append(f"{constructor}[{inner}]")
+        elif constructor == "tuple":
+            summary = position_type(positions.get("summary:*"))
+            if summary:
+                rendered.append(f"tuple[{summary}, ...]")
+            else:
+                slots = [
+                    (name, position_type(item))
+                    for name, item in positions.items()
+                    if name.startswith("builtins.int:")
+                ]
+                slots.sort(key=lambda item: int(item[0].rsplit(":", 1)[-1]))
+                inner = ", ".join(item or "Any" for _name, item in slots)
+                rendered.append(f"tuple[{inner}]" if inner else "tuple")
+        elif constructor == "dict":
+            values = [
+                position_type(item) for item in positions.values()
+            ]
+            value_type = _merge_types(
+                [item for item in values if item]
+            ) or "Any"
+            key_candidates = []
+            for name in positions:
+                if name in {"summary:*", "rest:*"} or ":" not in name:
+                    continue
+                key_candidates.append(_successor_annotation(
+                    name.split(":", 1)[0]
+                ))
+            key_type = _merge_types(key_candidates) or "Any"
+            rendered.append(f"dict[{key_type}, {value_type}]")
+        else:
+            rendered.append(constructor)
+    return _merge_types(rendered)
 
 
 def _run_successor_repo_probe(
@@ -651,7 +800,7 @@ def _run_successor_repo_probe(
     progress_log: Path | None = None,
     demand_limit: int | None = None,
     checkpoint_roots: bool = False,
-    checkpoint_size: int = 1,
+    checkpoint_size: int = 8,
     checkpoint_tail_start: int | None = None,
     checkpoint_tail_count: int | None = None,
     checkpoint_batch_start: int | None = None,
@@ -662,7 +811,10 @@ def _run_successor_repo_probe(
     root_ids: tuple[str, ...] | None = None,
     body_timeout: int | None = None,
     progress_timeout: int | None = None,
+    projection_timeout: int | None = None,
+    callable_input_exact_limit: int | None = None,
     sample_rate_hz: float | None = None,
+    sample_targeted: bool = False,
     sample_body_label: str | None = None,
     sample_forward: bool = False,
     sample_session_open: bool = False,
@@ -671,6 +823,7 @@ def _run_successor_repo_probe(
     forward_timeout: int | None = None,
     record_timings: bool = False,
     diagnostic_details: bool = True,
+    contextual_summary_evaluation: bool = False,
     collect_predictions: bool = True,
     observation_kinds: frozenset[str] = frozenset((
         "parameter", "return",
@@ -689,8 +842,12 @@ def _run_successor_repo_probe(
         raise ValueError(
             "body_timeout requires a selected body or checkpointed roots"
         )
+    if callable_input_exact_limit is not None and callable_input_exact_limit < 0:
+        raise ValueError("callable_input_exact_limit must be non-negative")
     if progress_timeout is not None and progress_timeout <= 0:
         raise ValueError("progress_timeout must be positive")
+    if projection_timeout is not None and projection_timeout <= 0:
+        raise ValueError("projection_timeout must be positive")
     if checkpoint_size <= 0:
         raise ValueError("checkpoint_size must be positive")
     if checkpoint_tail_start is not None and checkpoint_tail_start < 0:
@@ -711,10 +868,12 @@ def _run_successor_repo_probe(
         raise ValueError("sample_body_label requires sample_rate_hz")
     if sample_forward and sample_rate_hz is None:
         raise ValueError("sample_forward requires sample_rate_hz")
-    if session_open_timeout is not None and session_open_timeout <= 0:
-        raise ValueError("session_open_timeout must be positive")
+    if sample_targeted and sample_rate_hz is None:
+        raise ValueError("sample_targeted requires sample_rate_hz")
     if forward_timeout is not None and forward_timeout <= 0:
         raise ValueError("forward_timeout must be positive")
+    if session_open_timeout is not None and session_open_timeout <= 0:
+        raise ValueError("session_open_timeout must be positive")
     unsupported_observation_kinds = observation_kinds - {
         "parameter", "return", "variable",
     }
@@ -727,6 +886,7 @@ def _run_successor_repo_probe(
     engine_worktree = Path(engine_worktree).resolve()
     probe = r'''
 import gc
+import inspect
 import json
 import os
 import signal
@@ -736,7 +896,10 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
-from sd_core.analysis.diagram_analysis import open_hybrid_program_session
+from sd_core.analysis.diagram_analysis import (
+    TYPE_OF,
+    open_hybrid_program_session,
+)
 from sd_core.tooling.analysis_arena import AnalysisAllocationArena
 from sd_core.tooling.harness import TranslationResult
 
@@ -746,28 +909,33 @@ checkpoint_roots = sys.argv[3] == "checkpoint"
 requested_body_label = sys.argv[4] or None
 requested_body_labels = frozenset(json.loads(requested_body_label)) if requested_body_label else frozenset()
 requested_body_timeout = int(sys.argv[5]) or None
-sample_rate_hz = float(sys.argv[6]) or None
-sample_body_label = sys.argv[7] or None
-record_timings = sys.argv[8] == "timings"
-diagnostic_details = sys.argv[9] == "diagnostics"
-collect_predictions = sys.argv[10] == "predictions"
-checkpoint_size = int(sys.argv[11])
-checkpoint_tail_start = int(sys.argv[12])
-checkpoint_tail_count = int(sys.argv[13])
+exact_limit_arg = int(sys.argv[6])
+callable_input_exact_limit = exact_limit_arg if exact_limit_arg >= 0 else None
+sample_rate_hz = float(sys.argv[7]) or None
+sample_body_label = sys.argv[8] or None
+record_timings = sys.argv[9] == "timings"
+diagnostic_details = sys.argv[10] == "diagnostics"
+collect_predictions = sys.argv[11] == "predictions"
+checkpoint_size = int(sys.argv[12])
+checkpoint_tail_start = int(sys.argv[13])
+checkpoint_tail_count = int(sys.argv[14])
 requested_observation_kinds = frozenset(
-    item for item in sys.argv[14].split(",") if item
+    item for item in sys.argv[15].split(",") if item
 )
-sample_forward = sys.argv[15] == "sample-forward"
-requested_forward_timeout = int(sys.argv[16]) or None
-disable_cyclic_gc = sys.argv[17] == "disable-cyclic-gc"
-checkpoint_replay_prefix = sys.argv[18] == "replay-prefix"
-run_forward_seed = sys.argv[19] == "run-forward-seed"
-sample_session_open = sys.argv[20] == "sample-session-open"
-checkpoint_batch_start = int(sys.argv[21])
-checkpoint_batch_count = int(sys.argv[22])
-requested_progress_timeout = int(sys.argv[23]) or None
-requested_root_ids = frozenset(json.loads(sys.argv[24]))
-requested_session_open_timeout = int(sys.argv[25]) or None
+sample_forward = sys.argv[16] == "sample-forward"
+requested_forward_timeout = int(sys.argv[17]) or None
+disable_cyclic_gc = sys.argv[18] == "disable-cyclic-gc"
+checkpoint_replay_prefix = sys.argv[19] == "replay-prefix"
+run_forward_seed = sys.argv[20] == "run-forward-seed"
+sample_session_open = sys.argv[21] == "sample-session-open"
+checkpoint_batch_start = int(sys.argv[22])
+checkpoint_batch_count = int(sys.argv[23])
+contextual_summary_evaluation = sys.argv[24] == "contextual-summaries"
+requested_progress_timeout = int(sys.argv[25]) or None
+requested_root_ids = frozenset(json.loads(sys.argv[26]))
+sample_targeted = sys.argv[27] == "sample-targeted"
+requested_session_open_timeout = int(sys.argv[28]) or None
+requested_projection_timeout = int(sys.argv[29]) or None
 
 # Repository sessions intentionally retain a large immutable scheduler/store
 # graph.  Cyclic-GC pauses can therefore masquerade as semantic work whose
@@ -865,61 +1033,15 @@ def bounded_scheduler_snapshot(session):
     """Retain monotone progress counters even when a diagnostic cutoff fires."""
     scheduler = session.scheduler
     graph = scheduler.graph
-    factored_telemetry = getattr(scheduler, "_factored_telemetry", None)
-    factored = (
-        factored_telemetry.summary()
-        if factored_telemetry is not None
-        else {}
-    )
-    aggregate = scheduler.aggregate_production_telemetry
-    def largest(mapping, limit=30):
-        return dict(sorted(
-            mapping.items(), key=lambda item: (-item[1], item[0])
-        )[:limit])
     return {
-        "topology_generation": graph.topology_generation,
         "unique_production_count": scheduler.unique_production_count,
         "production_execution_count": scheduler.production_execution_count,
         "repeated_production_count": scheduler.repeated_production_count,
-        "production_executions_by_family": largest(
-            aggregate.get("production_executions_by_family", {})
-        ),
-        "production_repeats_by_family": largest(
-            aggregate.get("production_repeats_by_family", {})
-        ),
-        "production_seconds_by_family": largest(
-            aggregate.get("production_seconds_by_family", {})
-        ),
-        "worklist_schedule_counts": largest(
-            aggregate.get("worklist_schedule_counts", {})
-        ),
-        "knowledge_commit_counts": largest(
-            scheduler.store.commit_counts
-        ),
-        "factored_phases": {
-            key: factored.get(key, {} if key.endswith("counts") else 0)
-            for key in (
-                "factored_phase_counts",
-                "factored_phase_seconds",
-                "factored_rebase_outcome_counts",
-                "factored_rebase_outcome_seconds",
-                "factored_admission_size_counts",
-                "factored_topology_refresh_size_counts",
-                "factored_topology_refresh_delta_counts",
-                "factored_max_admitted_productions",
-                "factored_max_admitted_components",
-            )
-        },
-        "topology_change_counts": largest(
-            getattr(graph, "topology_change_counts", {})
-        ),
-        "component_recompute_count": getattr(
-            graph, "component_recompute_count", 0
-        ),
-        "component_node_visits": getattr(graph, "component_node_visits", 0),
-        "component_edge_visits": getattr(graph, "component_edge_visits", 0),
+        "component_recompute_count": graph.component_recompute_count,
+        "component_node_visits": graph.component_node_visits,
+        "component_edge_visits": graph.component_edge_visits,
         "component_incremental_refresh_count": (
-            getattr(graph, "component_incremental_refresh_count", 0)
+            graph.component_incremental_refresh_count
         ),
     }
 
@@ -972,23 +1094,19 @@ try:
         session_profiler.__enter__()
     if requested_session_open_timeout:
         def timeout_session_open(_signum, _frame):
-            raise TimeoutError("diagnostic session-open cutoff")
+            raise TimeoutError("session-open diagnostic cutoff")
         signal.signal(signal.SIGALRM, timeout_session_open)
         signal.alarm(requested_session_open_timeout)
-    session_sampling_profile = None
     try:
-        session = open_hybrid_program_session(
-            modules, entry, record_events=False,
-            record_timings=record_timings,
-            record_telemetry=diagnostic_details,
-            # Retain an explicit benchmark-only equivalence oracle while the
-            # hierarchical region worklist is being validated. Production
-            # analysis defaults to the new ordering; setting this variable to
-            # ``0`` asks the same engine revision to use its flat deque.
-            hierarchical_region_worklist=(
-                os.environ.get(
-                    "ARCHWAY_HIERARCHICAL_REGION_WORKLIST", "1"
-                ) != "0"
+        session_parameters = inspect.signature(
+            open_hybrid_program_session
+        ).parameters
+        session_options = {
+            "record_events": False,
+            "record_timings": record_timings,
+            "record_telemetry": diagnostic_details,
+            "contextual_summary_evaluation": (
+                contextual_summary_evaluation
             ),
             # TypyBench observes a repository as an importable library surface;
             # it does not identify an executable entry point.  Keep one root
@@ -996,26 +1114,62 @@ try:
             # its qualified import name.  Treating an arbitrary shallow module
             # as ``__main__`` executes CLI guards and admits an unrelated whole
             # application call graph into signature inference.
-            possible_entry_modules=frozenset(),
-            # TypyBench requests callable signatures and class fields rather
-            # than an executable-entry trace.  Select that observation policy
-            # through the public restored runtime contract; class-field
-            # templates are part of the ordinary diagram catalog.
-            signature_observations_only=True,
-            class_field_observations=(
-                "variable" in requested_observation_kinds
-            ),
+            "possible_entry_modules": frozenset(),
+            "class_field_observations": True,
+        }
+        if "callable_input_exact_limit" in session_parameters:
+            session_options["callable_input_exact_limit"] = (
+                callable_input_exact_limit
+            )
+        if (
+            "variable" in requested_observation_kinds
+            and "body_observations_only" in session_parameters
+        ):
+            session_options["body_observations_only"] = True
+            observation_policy = "body-observations-only"
+        elif "signature_observations_only" in session_parameters:
+            # The restored reduced-product runtime catalogs parameters,
+            # returns, and explicitly requested class fields through its
+            # signature scope. This is the narrowest supported TypyBench
+            # workload; do not silently fall back to the full variable
+            # catalog or select a different runtime implementation.
+            session_options["signature_observations_only"] = True
+            observation_policy = "signature-observations-only"
+        else:
+            raise RuntimeError(
+                "analysis runtime exposes no scoped TypyBench observation "
+                "policy"
+            )
+        session = open_hybrid_program_session(
+            modules, entry, **session_options
         )
+        workload_root_projection = getattr(
+            session, "signature_workload_roots", None
+        )
+        workload_planner = getattr(
+            session, "plan_signature_workload", None
+        )
+        workload_runner = getattr(session, "run_workload", None)
+        if (
+            workload_root_projection is None
+            or workload_planner is None
+            or workload_runner is None
+        ):
+            raise RuntimeError(
+                "analysis runtime exposes no authoritative signature "
+                "workload API"
+            )
+        workload_root_policy = "signature-body-root-projection"
     finally:
-        signal.alarm(0)
+        if requested_session_open_timeout:
+            signal.alarm(0)
         if session_profiler is not None:
             session_profiler.__exit__(None, None, None)
-            session_sampling_profile = session_profiler.jsonable(
-                top=40, include_stacks=diagnostic_details
-            )
             print(
                 "ARCHWAY_SESSION_PROFILE " + json.dumps(
-                    session_sampling_profile,
+                    session_profiler.jsonable(
+                        top=40, include_stacks=diagnostic_details
+                    ),
                     separators=(",", ":"),
                 ),
                 file=sys.stderr,
@@ -1023,6 +1177,15 @@ try:
             )
     session_open_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE session_open {session_open_seconds:.6f}", file=sys.stderr, flush=True)
+
+    def optional_session_diagnostic(name, default):
+        method = getattr(session, name, None)
+        return method() if method is not None else default
+
+    def optional_scheduler_diagnostic(name, default):
+        method = getattr(session.scheduler, name, None)
+        return method() if method is not None else default
+
     if disable_cyclic_gc:
         # Translation/session construction creates temporary cyclic objects
         # that are not part of the persistent semantic graph.  Collect those
@@ -1051,13 +1214,23 @@ try:
         signal.signal(signal.SIGALRM, timeout_forward)
         signal.alarm(requested_forward_timeout)
     try:
-        # TypyBench requests repository-wide type observations.  Seed those
-        # observations as one shared reduced-product wave; backward relevance
-        # admits concrete/control/call coordinates when type production needs
-        # them, without eagerly evaluating the full executable product.
-        forward = (
-            session.run_analysis_roots(include_callable_bodies=True)
+        # Seed one explicit importable entry when requested. Repository-wide
+        # signature observations remain targeted workload roots below; every
+        # module is translated, but none is an implicit executable entry.
+        forward_workload = (
+            session.run_workload(session.plan_support_workload(
+                (), entry_modules=(entry,)
+            ))
             if run_forward_seed else None
+        )
+        forward = (
+            forward_workload.seed_run
+            if forward_workload is not None else None
+        )
+        forward_policy = (
+            "explicit-entry-forward"
+            if forward is not None
+            else "disabled"
         )
     except TimeoutError:
         timed_out_forward = True
@@ -1072,6 +1245,10 @@ try:
     forward_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE forward {forward_seconds:.6f}", file=sys.stderr, flush=True)
     observations = session.type_observations()
+    shape_observations = session.generic_shape_observations(
+        kinds=requested_observation_kinds,
+        demand=False,
+    )
     missing_observations = sorted((
         item for item in observations
         if item.kind in requested_observation_kinds
@@ -1089,16 +1266,23 @@ try:
     missing = tuple(dict.fromkeys(
         item.address for item in missing_observations
     ))
-    all_signature_root_count = len({
-        (
-            "callable",
-            session.observation_workload_body_id(address),
-        )
-        if session.observation_workload_body_id(address) is not None
-        else ("fact", address.id)
-        for address in missing
-    })
+    # Generic-shape roots are the primary body workload. Their shared carrier
+    # publishes nominal TypeOf observations during the same diagram fold, so
+    # the adapter does not evaluate each callable once for nominal types and
+    # again for container shape.
+    shape_roots = tuple(dict.fromkeys(
+        item.address for item in shape_observations
+    ))
+    workload_addresses = shape_roots or missing
+    all_signature_roots = workload_root_projection(workload_addresses)
     print(f"ARCHWAY_PHASE signature_demands {len(missing)}", file=sys.stderr, flush=True)
+    requested = (
+        workload_addresses
+        if requested_body_labels
+        else workload_addresses[:demand_limit]
+        if demand_limit is not None else workload_addresses
+    )
+    signature_roots = workload_root_projection(requested)
     body_labels = {
         template.body_morphism_id: (
             f"{template.module.dotted if template.module else '?'}:"
@@ -1107,44 +1291,34 @@ try:
         for plan in session.module_plans.values()
         for template in plan.templates
     }
-    if requested_body_labels:
-        available_body_labels = {
-            body_labels.get(session.observation_workload_body_id(address), "?")
-            for address in missing
-            if session.observation_workload_body_id(address) is not None
-        }
-        unmatched_body_labels = requested_body_labels - available_body_labels
-        if unmatched_body_labels:
-            related_labels = sorted(
-                label for label in available_body_labels
-                if any(
-                    requested.rsplit(":", 1)[-1].rsplit(".", 1)[-1]
-                    in label
-                    for requested in unmatched_body_labels
-                )
-            )[:20]
-            raise ValueError(
-                "requested callable body labels were not present in the "
-                "observation workload: "
-                + ", ".join(sorted(unmatched_body_labels))
-                + (
-                    "; related labels: " + ", ".join(related_labels)
-                    if related_labels else ""
-                )
-            )
-        requested = tuple(
-            address for address in missing
-            if body_labels.get(session.observation_workload_body_id(address))
-            in requested_body_labels
+    unmatched_body_labels = requested_body_labels.difference(
+        body_labels.values()
+    )
+    if unmatched_body_labels:
+        raise ValueError(
+            "requested successor body labels are not present in the "
+            "translated program: " + ", ".join(sorted(unmatched_body_labels))
         )
-    else:
-        requested = missing[:demand_limit] if demand_limit is not None else missing
-    # The forward seed establishes shared repository knowledge, but a missing
-    # public observation is still a legitimate native demand.  Extend the same
-    # persistent scheduler with the unresolved observation roots collectively;
-    # do not restart analysis per annotation or route through the removed
-    # coarse body-summary runtime.
-    signature_roots = requested
+    requested_body_ids = frozenset(
+        body_id for body_id, label in body_labels.items()
+        if label in requested_body_labels
+    )
+    requested_class_definition_ids = frozenset(
+        boundary.enclosing_class_definition_id
+        for body_id in requested_body_ids
+        for boundary in (
+            session.callable_boundaries_by_body.get(body_id),
+        )
+        if boundary is not None
+        and boundary.enclosing_class_definition_id is not None
+    )
+    if requested_body_labels:
+        signature_roots = tuple(
+            root_address for root_address in signature_roots
+            if body_labels.get(
+                session.observation_workload_body_id(root_address) or ""
+            ) in requested_body_labels
+        )
     if requested_root_ids:
         signature_roots = tuple(
             root_address for root_address in signature_roots
@@ -1155,7 +1329,7 @@ try:
         print(
             "ARCHWAY_ROOTS " + json.dumps([
                 body_labels.get(
-                    session.observation_workload_body_id(item), "?"
+                    getattr(item.subject, "body_morphism_id", ""), "?"
                 )
                 for item in signature_roots
             ]),
@@ -1164,7 +1338,8 @@ try:
         )
     targeted_profiler = None
     if (
-        sample_rate_hz
+        sample_targeted
+        and sample_rate_hz
         and not sample_forward
         and sample_body_label is None
         and signature_roots
@@ -1204,23 +1379,13 @@ try:
     if checkpoint_roots:
         targeted = None
         body_profiles = []
-        # Public roots retain exact observation identity.  Group observations
-        # by the diagram callable that owns their shared workload, then admit
-        # one callable group per convergence wave.  The session creates the
-        # internal shared carrier; the adapter must not infer it from a public
-        # root subject or mix unrelated callable groups by an arbitrary size.
-        def admission_group(root_address):
-            body_id = session.observation_workload_body_id(root_address)
-            if body_id is None:
-                return ("unowned", root_address.id)
-            return ("callable", body_id)
-
         def admission_batches(roots):
-            grouped = {}
-            for root_address in roots:
-                group = admission_group(root_address)
-                grouped.setdefault(group, []).append(root_address)
-            return tuple(tuple(items) for items in grouped.values())
+            # Admission ownership and safe wave partitioning are properties
+            # of the diagram workload, not of this benchmark. The benchmark
+            # supplies only an explicit diagnostic capacity.
+            return workload_planner(
+                tuple(roots), max_wave_size=checkpoint_size
+            ).targeted_waves
         all_batches = admission_batches(signature_roots)
         requested_tail_start = (
             min(checkpoint_tail_start, len(signature_roots))
@@ -1258,11 +1423,13 @@ try:
         # Labels and ownership come from the diagram's canonical workload
         # catalog rather than reinterpreting fact-subject implementation
         # details in the benchmark adapter.
+        def root_label(root_address):
+            body_id = session.observation_workload_body_id(root_address)
+            return body_labels.get(body_id, "?")
+
         print(
             "ARCHWAY_BODY_PLAN " + json.dumps([[
-                body_labels.get(
-                    session.observation_workload_body_id(root), "?"
-                )
+                root_label(root)
                 for root in root_batch
             ]
                 for root_batch in root_batches
@@ -1273,6 +1440,7 @@ try:
         for index, root_batch in enumerate(root_batches, 1):
             root_address = root_batch[0]
             body_started = time.monotonic()
+            knowledge_sequence_before = session.store.sequence
             executions_before = session.scheduler.production_execution_count
             topology_before = session.scheduler.graph.topology_generation
             edge_telemetry_before = dict(
@@ -1286,6 +1454,15 @@ try:
                 )
             )
             gc_before = gc_profile_snapshot()
+            summary_registry = session.invocation_registry.callable_summaries
+            applications_before = frozenset(
+                summary_registry.applications
+            ) if diagnostic_details and summary_registry is not None else frozenset()
+            initialized_modules_before = frozenset(
+                module_name
+                for module_name, module_root in session.module_roots.items()
+                if session.store.resolved(module_root) is not None
+            ) if diagnostic_details else frozenset()
             telemetry_before = (
                 session.scheduler.production_family_telemetry
                 if diagnostic_details else None
@@ -1296,23 +1473,7 @@ try:
             family_seconds_before = (
                 telemetry_before["seconds"] if telemetry_before else {}
             )
-            transfer_counts_before = (
-                dict(session.scheduler.transfer_operation_counts)
-                if diagnostic_details else {}
-            )
-            transfer_seconds_before = (
-                dict(session.scheduler.transfer_operation_seconds)
-                if diagnostic_details else {}
-            )
-            production_operation_before = (
-                session.scheduler.production_operation_telemetry
-                if diagnostic_details else {"executions": {}, "seconds": {}}
-            )
-            production_phase_before = (
-                session.scheduler.production_phase_telemetry
-                if diagnostic_details else {"counts": {}, "seconds": {}}
-            )
-            body_id = session.observation_workload_body_id(root_address)
+            body_id = session.observation_workload_body_id(root_address) or ""
             body_label = body_labels.get(body_id, "?")
             print(
                 f"ARCHWAY_BODY_START {index}/{len(root_batches)} "
@@ -1345,7 +1506,9 @@ try:
                         project_marker="/sd_core/",
                     )
                     profiler.__enter__()
-                targeted = session.observe(root_batch)
+                targeted = workload_runner(
+                    workload_planner(tuple(root_batch))
+                )
             except TimeoutError:
                 timed_out_body = True
                 if timed_out_execution is None and requested_progress_timeout:
@@ -1374,80 +1537,14 @@ try:
                 for family, seconds in telemetry_after["seconds"].items()
                 if seconds - family_seconds_before.get(family, 0.0) > 0
             }
-            transfer_count_deltas = {
-                operation: count - transfer_counts_before.get(operation, 0)
-                for operation, count in (
-                    session.scheduler.transfer_operation_counts.items()
-                )
-                if count - transfer_counts_before.get(operation, 0) > 0
-            } if diagnostic_details else {}
-            transfer_second_deltas = {
-                operation: seconds - transfer_seconds_before.get(
-                    operation, 0.0
-                )
-                for operation, seconds in (
-                    session.scheduler.transfer_operation_seconds.items()
-                )
-                if seconds - transfer_seconds_before.get(operation, 0.0) > 0
-            } if diagnostic_details else {}
-            production_operation_after = (
-                session.scheduler.production_operation_telemetry
-                if diagnostic_details else {"executions": {}, "seconds": {}}
-            )
-            production_operation_deltas = {
-                operation: count - production_operation_before[
-                    "executions"
-                ].get(operation, 0)
-                for operation, count in production_operation_after[
-                    "executions"
-                ].items()
-                if count - production_operation_before["executions"].get(
-                    operation, 0
-                ) > 0
-            }
-            production_operation_second_deltas = {
-                operation: seconds - production_operation_before[
-                    "seconds"
-                ].get(operation, 0.0)
-                for operation, seconds in production_operation_after[
-                    "seconds"
-                ].items()
-                if seconds - production_operation_before["seconds"].get(
-                    operation, 0.0
-                ) > 0
-            }
-            production_phase_after = (
-                session.scheduler.production_phase_telemetry
-                if diagnostic_details else {"counts": {}, "seconds": {}}
-            )
-            production_phase_count_deltas = {
-                label: count - production_phase_before["counts"].get(label, 0)
-                for label, count in production_phase_after["counts"].items()
-                if count - production_phase_before["counts"].get(label, 0) > 0
-            }
-            production_phase_second_deltas = {
-                label: seconds - production_phase_before["seconds"].get(
-                    label, 0.0
-                )
-                for label, seconds in production_phase_after["seconds"].items()
-                if seconds - production_phase_before["seconds"].get(
-                    label, 0.0
-                ) > 0
-            }
-            describe_workload = getattr(
-                session, "observation_workload_description", None
-            )
-            workload_relevance = (
-                describe_workload(root_batch)
-                if describe_workload is not None
-                else {
-                    "kind": "native-observation-cohort",
-                    "body_morphism_id": (
-                        session.observation_workload_body_id(root_address)
-                    ),
-                    "observation_count": len(root_batch),
-                }
-            )
+            workload_relevance = []
+            if diagnostic_details:
+                for workload_root in root_batch:
+                    workload_relevance.append(
+                        session.observation_catalog.workload_relevance(
+                            workload_root
+                        )
+                    )
             body_profile = {
                 "index": index,
                 "label": body_label,
@@ -1482,39 +1579,55 @@ try:
                     family_second_deltas.items(),
                     key=lambda item: (-item[1], item[0]),
                 )[:8],
-                "top_transfer_operations": sorted(
-                    transfer_count_deltas.items(),
-                    key=lambda item: (-item[1], item[0]),
-                )[:12],
-                "top_production_operations": sorted(
-                    production_operation_deltas.items(),
-                    key=lambda item: (-item[1], item[0]),
-                )[:12],
-                "top_production_seconds": sorted(
-                    production_operation_second_deltas.items(),
-                    key=lambda item: (-item[1], item[0]),
-                )[:12],
-                "top_production_phases": sorted(
-                    production_phase_count_deltas.items(),
-                    key=lambda item: (-item[1], item[0]),
-                )[:20],
-                "top_production_phase_seconds": sorted(
-                    production_phase_second_deltas.items(),
-                    key=lambda item: (-item[1], item[0]),
-                )[:20],
-                "top_transfer_seconds": sorted(
-                    transfer_second_deltas.items(),
-                    key=lambda item: (-item[1], item[0]),
-                )[:12],
+                "top_new_application_callers": (
+                    Counter(
+                        (
+                            spec.invocation.caller_context,
+                            spec.callable_value.body_morphism_id,
+                        )
+                        for application, spec
+                        in summary_registry.applications.items()
+                        if application not in applications_before
+                    ).most_common(12)
+                    if diagnostic_details and summary_registry is not None
+                    else []
+                ),
+                "top_new_application_bodies": (
+                    Counter(
+                        body_labels.get(
+                            spec.callable_value.body_morphism_id,
+                            spec.callable_value.body_morphism_id,
+                        )
+                        for application, spec
+                        in summary_registry.applications.items()
+                        if application not in applications_before
+                    ).most_common(24)
+                    if diagnostic_details and summary_registry is not None
+                    else []
+                ),
+                "new_initialized_modules": (
+                    sorted(
+                        module_name
+                        for module_name, module_root
+                        in session.module_roots.items()
+                        if module_name not in initialized_modules_before
+                        and session.store.resolved(module_root) is not None
+                    )
+                    if diagnostic_details else []
+                ),
                 "workload_relevance": workload_relevance,
                 "root_id": root_address.id,
                 "root_ids": [item.id for item in root_batch],
                 "root_labels": [
-                    body_labels.get(
-                        session.observation_workload_body_id(item), "?"
-                    )
+                    root_label(item)
                     for item in root_batch
                 ],
+                # Diagnostic-only causal join between scheduler waves and the
+                # semantic surface. Sequence boundaries are O(1) to capture;
+                # projected source observations are attributed to these
+                # intervals once during result assembly.
+                "knowledge_sequence_before": knowledge_sequence_before,
+                "knowledge_sequence_after": session.store.sequence,
             }
             body_profiles.append(
                 body_profile if diagnostic_details else {
@@ -1547,45 +1660,6 @@ try:
                 + (f" {root_address.id}" if diagnostic_details else ""),
                 file=sys.stderr, flush=True,
             )
-            if diagnostic_details:
-                print(
-                    "ARCHWAY_BODY_DETAIL " + json.dumps({
-                        "index": index,
-                        "top_execution_families": body_profile[
-                            "top_execution_families"
-                        ],
-                        "top_family_seconds": body_profile[
-                            "top_family_seconds"
-                        ],
-                        "top_production_operations": body_profile[
-                            "top_production_operations"
-                        ],
-                        "top_production_seconds": body_profile[
-                            "top_production_seconds"
-                        ],
-                        "top_production_phases": body_profile[
-                            "top_production_phases"
-                        ],
-                        "top_production_phase_seconds": body_profile[
-                            "top_production_phase_seconds"
-                        ],
-                        "top_transfer_operations": body_profile[
-                            "top_transfer_operations"
-                        ],
-                        "top_transfer_seconds": body_profile[
-                            "top_transfer_seconds"
-                        ],
-                        "topology_change_counts": body_profile[
-                            "topology_change_counts"
-                        ],
-                        "component_edge_updates": body_profile[
-                            "component_edge_updates"
-                        ],
-                        "gc": body_profile["gc"],
-                    }, separators=(",", ":")),
-                    file=sys.stderr,
-                    flush=True,
-                )
             if timed_out_body:
                 break
     else:
@@ -1608,14 +1682,19 @@ try:
                 )
                 profiler.__enter__()
                 try:
-                    targeted = session.observe(signature_roots)
+                    targeted = workload_runner(
+                        workload_planner(tuple(signature_roots))
+                    )
                 finally:
                     profiler.__exit__(None, None, None)
                     sampling_profile = profiler.jsonable(
                         top=40, include_stacks=diagnostic_details
                     )
             else:
-                targeted = session.observe(signature_roots) if signature_roots else None
+                targeted = (
+                    workload_runner(workload_planner(tuple(signature_roots)))
+                    if signature_roots else None
+                )
                 sampling_profile = None
         except TimeoutError:
             targeted = None
@@ -1627,18 +1706,90 @@ try:
             sampling_profile = locals().get("sampling_profile")
         finally:
             signal.alarm(0)
-    if targeted_profiler is not None:
-        targeted_profiler.__exit__(None, None, None)
-        sampling_profile = targeted_profiler.jsonable(
-            top=40, include_stacks=diagnostic_details
-        )
     targeted_seconds = time.monotonic() - phase_started
     print(f"ARCHWAY_PHASE targeted {targeted_seconds:.6f}", file=sys.stderr, flush=True)
     projection_started = time.monotonic()
     files = {}
-    if collect_predictions:
+    projection_breakdown = {}
+    timed_out_projection = False
+    # A body timeout intentionally leaves a partial monotone scheduler state.
+    # It is useful diagnostic evidence, but it is not a converged analysis
+    # result and must never be consumed by observation projection.  Doing so
+    # previously turned a bounded performance probe into misleading downstream
+    # semantic failures (for example, iterator-frame invariants observed while
+    # an interrupted production still owned its cursor).
+    projection_skipped_reason = (
+        "targeted_body_timed_out" if collect_predictions and timed_out_body
+        else None
+    )
+    predictions_collected = collect_predictions and not timed_out_body
+    if predictions_collected:
+        type_catalog_started = time.monotonic()
+        projected_type_observations = session.type_observations()
+        projection_breakdown["type_catalog"] = (
+            time.monotonic() - type_catalog_started
+        )
+
+        shape_catalog_started = time.monotonic()
+        projected_shape_observations = session.generic_shape_observations(
+            kinds=requested_observation_kinds,
+            demand=False,
+        )
+        projection_breakdown["shape_catalog"] = (
+            time.monotonic() - shape_catalog_started
+        )
+
+        candidate_analysis_started = time.monotonic()
+        candidate_executions_before = (
+            session.scheduler.production_execution_count
+        )
+        if requested_projection_timeout:
+            def timeout_projection(_signum, _frame):
+                raise TimeoutError("diagnostic observation projection cutoff")
+            signal.signal(signal.SIGALRM, timeout_projection)
+            signal.alarm(requested_projection_timeout)
+        try:
+            projected_candidate_observations = (
+                session.type_candidate_observations(
+                    unresolved_only=True,
+                    body_morphism_ids=(
+                        requested_body_ids
+                        if requested_body_labels else None
+                    ),
+                    class_definition_ids=(
+                        requested_class_definition_ids
+                        if requested_body_labels else frozenset()
+                    ),
+                )
+            )
+        except TimeoutError:
+            timed_out_projection = True
+            projected_candidate_observations = ()
+        finally:
+            signal.alarm(0)
+        projection_breakdown["candidate_analysis"] = (
+            time.monotonic() - candidate_analysis_started
+        )
+        projection_breakdown["candidate_analysis_executions"] = (
+            session.scheduler.production_execution_count
+            - candidate_executions_before
+        )
+
+        render_started = time.monotonic()
+        type_resolution_sequences = {}
+        if diagnostic_details:
+            for delta in session.store.history_since(0):
+                for change in delta.resolution_changes:
+                    if change.address.family != TYPE_OF:
+                        continue
+                    address_id = change.address.id
+                    prior = type_resolution_sequences.get(address_id)
+                    type_resolution_sequences[address_id] = (
+                        delta.sequence if prior is None else prior[0],
+                        delta.sequence,
+                    )
         files = {str(path.relative_to(root)): [] for path in all_paths}
-        for item in session.type_observations():
+        for item in projected_type_observations:
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
             if rel is None and module is not None:
@@ -1650,13 +1801,31 @@ try:
                 continue
             files[rel].append({
                 "line": item.position.row if item.position is not None else None,
+                "definition_line": (
+                    item.definition_position.row
+                    if item.definition_position is not None else None
+                ),
                 "name": item.name,
                 "kind": item.kind,
                 "family": item.address.family,
-                "evidence_rules": sorted(
-                    evidence.rule_id for evidence in fact.evidence
-                ) if fact is not None else [],
                 "function": item.function,
+                "body_morphism_id": item.body_morphism_id,
+                **(
+                    {
+                        "address_id": item.address.id,
+                        "first_resolution_sequence": (
+                            type_resolution_sequences[item.address.id][0]
+                            if item.address.id in type_resolution_sequences
+                            else None
+                        ),
+                        "last_resolution_sequence": (
+                            type_resolution_sequences[item.address.id][1]
+                            if item.address.id in type_resolution_sequences
+                            else None
+                        ),
+                    }
+                    if diagnostic_details else {}
+                ),
                 # Retain unresolved catalog entries as explicit missing
                 # evidence.  The source adapter inserts nothing for an empty
                 # set, while diagnostic traces can now distinguish an open
@@ -1666,11 +1835,30 @@ try:
                     if fact is not None else []
                 ),
             })
-        for item, candidate in session.type_candidate_observations():
-            # Nested-path candidates constrain an element/attribute reached
-            # through the parameter, not the parameter annotation itself.
-            if candidate.path or len(candidate.types) != 1:
+        for item in projected_shape_observations:
+            module = item.module.dotted if item.module is not None else None
+            rel = module_files.get(module)
+            if rel is None and module is not None:
+                matches = [path for name, path in module_files.items()
+                           if module == name or module.endswith("." + name)]
+                rel = matches[0] if len(matches) == 1 else None
+            fact = session.store.resolved(item.address)
+            if rel is None or fact is None or fact.value.is_bottom:
                 continue
+            files[rel].append({
+                "line": item.position.row if item.position is not None else None,
+                "definition_line": (
+                    item.definition_position.row
+                    if item.definition_position is not None else None
+                ),
+                "name": item.name,
+                "kind": item.kind,
+                "family": item.address.family,
+                "function": item.function,
+                "body_morphism_id": item.body_morphism_id,
+                "shape": fact.value.canonical_data(),
+            })
+        for item, candidate in projected_candidate_observations:
             module = item.module.dotted if item.module is not None else None
             rel = module_files.get(module)
             if rel is None and module is not None:
@@ -1687,61 +1875,155 @@ try:
                 "kind": item.kind,
                 "family": item.address.family,
                 "function": item.function,
-                "types": sorted(candidate.types),
-                "precision": candidate.precision,
+                "types": [candidate.type_name],
+                "precision": (
+                    f"reviewed_open_world:{candidate.disposition.value}"
+                ),
                 "requirement_path": [],
+                "candidate_evidence": candidate.canonical_data(),
             })
+        projection_breakdown["render"] = time.monotonic() - render_started
     observation_projection_seconds = time.monotonic() - projection_started
+    if targeted_profiler is not None:
+        targeted_profiler.__exit__(None, None, None)
+        sampling_profile = targeted_profiler.jsonable(
+            top=40, include_stacks=diagnostic_details
+        )
     scheduler_telemetry = (
         dict(session.scheduler.aggregate_production_telemetry)
-        if diagnostic_details else bounded_scheduler_snapshot(session)
+        if diagnostic_details else {
+            "unique_production_count": (
+                session.scheduler.unique_production_count
+            ),
+            "production_execution_count": (
+                session.scheduler.production_execution_count
+            ),
+            "repeated_production_count": (
+                session.scheduler.repeated_production_count
+            ),
+            "component_recompute_count": (
+                session.scheduler.graph.component_recompute_count
+            ),
+            "component_recompute_seconds": (
+                session.scheduler.graph.component_recompute_seconds
+            ),
+            "component_node_visits": (
+                session.scheduler.graph.component_node_visits
+            ),
+            "component_edge_visits": (
+                session.scheduler.graph.component_edge_visits
+            ),
+            "component_incremental_refresh_count": (
+                session.scheduler.graph.component_incremental_refresh_count
+            ),
+            "component_edge_update_telemetry": dict(
+                session.scheduler.graph.component_edge_update_telemetry
+            ),
+        }
     )
+    scheduler_telemetry["convergence_regions"] = dict(
+        session.scheduler.convergence_region_diagnostics()
+    )
+    summary_registry = (
+        session.invocation_registry.callable_summaries
+        if session.invocation_registry is not None else None
+    )
+    convergence_regions = scheduler_telemetry.get("convergence_regions")
+    if isinstance(convergence_regions, dict) and summary_registry is not None:
+        region_labels = {}
+        for application_address, instance in (
+            summary_registry.contextual_instances.items()
+        ):
+            spec = summary_registry.applications.get(application_address)
+            if spec is None:
+                continue
+            body_id = spec.callable_value.body_morphism_id
+            boundary = session.callable_boundaries_by_body.get(body_id)
+            region_labels[instance.context] = {
+                "body_morphism_id": body_id,
+                "callable": (
+                    f"{boundary.module_name}:{boundary.qualified_name}"
+                    if boundary is not None else body_id
+                ),
+            }
+        for collection_name in (
+            "largest_regions", "largest_mixed_components"
+        ):
+            for row in convergence_regions.get(collection_name, ()):
+                nested = (
+                    row.get("largest_regions", ())
+                    if collection_name == "largest_mixed_components"
+                    else (row,)
+                )
+                for region_row in nested:
+                    label = region_labels.get(region_row.get("region_id"))
+                    if label is not None:
+                        region_row.update(label)
     component_hotspots = (
-        session.scheduler.component_hotspots()
+        optional_scheduler_diagnostic("component_hotspots", ())
         if diagnostic_details else ()
     )
-    region_quotient_summary = (
-        session.scheduler.region_quotient_summary()
-        if diagnostic_details else {}
-    )
-    if component_hotspots:
+    if component_hotspots and summary_registry is not None:
         callable_labels = {
             body_id: f"{boundary.module_name}:{boundary.qualified_name}"
             for body_id, boundary
             in session.callable_boundaries_by_body.items()
         }
-        native_context_labels = {
-            admission.application.callee_context: callable_labels.get(
-                admission.application.body_morphism_id,
-                admission.application.body_morphism_id,
+        application_labels = {
+            address.context: callable_labels.get(
+                spec.callable_value.body_morphism_id,
+                spec.callable_value.body_morphism_id,
             )
-            for admission in getattr(
-                session, "native_callable_cell_admissions", lambda: ()
-            )()
+            for address, spec in summary_registry.applications.items()
         }
-        native_context_labels.update({
-            f"context:uninvoked-body:{body_id}": label
-            for body_id, label in callable_labels.items()
-        })
         component_hotspots = tuple({
             **item,
-            "semantic_contexts": tuple({
-                "context": context,
-                "label": native_context_labels.get(context, context),
-                "members": members,
-            } for context, members in item.get("contexts", {}).items()),
+            "callable_application_bodies": tuple(sorted({
+                application_labels.get(context, context)
+                for context in item.get(
+                    "callable_application_contexts", ()
+                )
+            })),
         } for item in component_hotspots)
+    unresolved_summary_bodies = Counter()
+    if (
+        diagnostic_details
+        and predictions_collected
+        and summary_registry is not None
+    ):
+        callable_labels = {
+            body_id: f"{boundary.module_name}:{boundary.qualified_name}"
+            for body_id, boundary
+            in session.callable_boundaries_by_body.items()
+        }
+        for application_address, spec in summary_registry.applications.items():
+            if session.store.resolved(application_address) is not None:
+                continue
+            unresolved_summary_bodies[
+                body_labels.get(
+                    spec.callable_value.body_morphism_id,
+                    callable_labels.get(
+                        spec.callable_value.body_morphism_id,
+                        spec.callable_value.body_morphism_id,
+                    ),
+                )
+            ] += 1
     scheduler_telemetry.pop("production_executions_by_provider", None)
     out = {
         "ok": True,
         "files": files,
         "analysis_summary": {
+            "runtime_policy": {
+                "observation_scope": observation_policy,
+                "forward_seed": forward_policy,
+                "workload_roots": workload_root_policy,
+            },
             "modules": len(modules),
             "observations": len(observations),
             "targeted_addresses": len(missing),
             "requested_addresses": len(requested),
             "requested_body_roots": len(signature_roots),
-            "signature_body_roots": all_signature_root_count,
+            "signature_body_roots": len(all_signature_roots),
             "body_profiles": body_profiles,
             "timed_out_body": timed_out_body,
             "timed_out_execution": timed_out_execution,
@@ -1759,21 +2041,83 @@ try:
                 "targeted": targeted_seconds - forward_seconds,
                 "observation_projection": observation_projection_seconds,
             },
+            "observation_projection_breakdown": projection_breakdown,
             "scheduler": scheduler_telemetry,
             "component_hotspots": (
                 component_hotspots
             ),
-            "region_quotient_summary": region_quotient_summary,
             "gc": gc_profile_snapshot(),
             "production_replay_hotspots": (
-                session.scheduler.production_replay_hotspots()
+                optional_scheduler_diagnostic(
+                    "production_replay_hotspots", ()
+                )
                 if diagnostic_details else ()
             ),
             "production_replay_operation_hotspots": (
-                session.scheduler.production_replay_operation_hotspots()
+                optional_scheduler_diagnostic(
+                    "production_replay_operation_hotspots", ()
+                )
                 if diagnostic_details else ()
             ),
+            "morphism_transfer_reuse": dict(
+                optional_session_diagnostic("morphism_transfer_reuse_counts", {})
+            ) if diagnostic_details else {},
+            "morphism_transfer_reuse_by_operation": dict(
+                optional_session_diagnostic("morphism_transfer_reuse_by_operation", {})
+            ) if diagnostic_details else {},
+            "atomic_effect_gaps": dict(
+                optional_session_diagnostic("atomic_effect_gap_counts", {})
+            ) if diagnostic_details else {},
+            "morphism_fact_output_barriers": dict(
+                optional_session_diagnostic("morphism_fact_output_barriers", {})
+            ) if diagnostic_details else {},
+            "morphism_read_intersections": dict(
+                optional_session_diagnostic("morphism_read_intersections", {})
+            ) if diagnostic_details else {},
+            "invocation_contexts": dict(
+                optional_session_diagnostic("invocation_context_counts", {})
+            ),
+            "invocation_inputs": dict(
+                optional_session_diagnostic("invocation_input_growth_counts", {})
+            ),
+            "invocation_input_dimensions": list(
+                optional_session_diagnostic(
+                    "invocation_input_dimension_telemetry", ()
+                )
+            ) if diagnostic_details else [],
+            "invocation_admissions": dict(
+                optional_session_diagnostic("invocation_admission_counts", {})
+            ),
+            "invocation_application_runtime": dict(
+                optional_session_diagnostic(
+                    "invocation_application_runtime_counts", {}
+                )
+            ),
+            "invocation_summaries": list(
+                optional_session_diagnostic("invocation_summary_telemetry", ())
+            ) if diagnostic_details else [],
+            "invocation_application_hotspots": list(
+                optional_session_diagnostic("invocation_application_hotspots", ())
+            ),
+            "invocation_product_demand_hotspots": list(
+                optional_session_diagnostic("invocation_product_demand_hotspots", ())
+            ),
+            "invocation_application_runtime_hotspots": list(
+                optional_session_diagnostic(
+                    "invocation_application_runtime_hotspots", ()
+                )
+            ) if diagnostic_details else [],
+            "invocation_application_invalidation_hotspots": list(
+                optional_session_diagnostic(
+                    "invocation_application_invalidation_hotspots", ()
+                )
+            ) if diagnostic_details else [],
             "sampling_profile": sampling_profile,
+            "timed_out_projection": timed_out_projection,
+            "projection_skipped_reason": projection_skipped_reason,
+            "unresolved_summary_bodies": dict(
+                unresolved_summary_bodies.most_common(32)
+            ),
             "observation_modules": sorted({
                 item.module.dotted for item in observations
                 if item.module is not None
@@ -1797,13 +2141,6 @@ except Exception as exc:
     partial_summary = {}
     if "sampling_profile" in locals() and sampling_profile is not None:
         partial_summary["sampling_profile"] = sampling_profile
-    if (
-        "session_sampling_profile" in locals()
-        and session_sampling_profile is not None
-    ):
-        partial_summary["session_sampling_profile"] = (
-            session_sampling_profile
-        )
     if "timed_out_forward" in locals():
         partial_summary["timed_out_forward"] = timed_out_forward
     if "translation_seconds" in locals():
@@ -1852,6 +2189,10 @@ os._exit(0)
                 *(body_labels or ()),
             )))),
             str(body_timeout or 0),
+            str(
+                callable_input_exact_limit
+                if callable_input_exact_limit is not None else -1
+            ),
             str(sample_rate_hz or 0),
             sample_body_label or "",
             "timings" if record_timings else "no-timings",
@@ -1875,9 +2216,15 @@ os._exit(0)
                 if checkpoint_batch_start is not None else -1
             ),
             str(checkpoint_batch_count or 0),
+            (
+                "contextual-summaries"
+                if contextual_summary_evaluation else "composed-summaries"
+            ),
             str(progress_timeout or 0),
             json.dumps(tuple(dict.fromkeys(root_ids or ()))),
+            "sample-targeted" if sample_targeted else "no-targeted-sample",
             str(session_open_timeout or 0),
+            str(projection_timeout or 0),
         ]
         progress_stream = None
         if progress_log is not None:
@@ -1959,7 +2306,10 @@ def _run_engine_probe(
     runner: tuple[str, ...],
     timeout: int,
     per_file_timeout: int = 60,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"files": {}}
     started = time.monotonic()
@@ -1979,7 +2329,10 @@ def _run_engine_probe(
             module_name=path.stem,
             runner=runner,
             timeout=max(1, min(per_file_timeout, int(remaining))),
+            body_summary_consumption=body_summary_consumption,
+            analysis_product=analysis_product,
             analysis_observation_mode=analysis_observation_mode,
+            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -1991,7 +2344,10 @@ def _run_engine_probe_file(
     module_name: str,
     runner: tuple[str, ...],
     timeout: int,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -2000,19 +2356,65 @@ import sys
 import traceback
 from pathlib import Path
 
-from sd_core.analysis_server import analyze_source
+try:
+    from sd_core.analysis_server import _encode_finalized, analyze_source
+    from sd_core.runners.analysis_observability import AnalysisObservationConfig
+    from sd_core.runners.file_results import FileAnalysisFailure, analyze_source_file_result
+except Exception:  # pragma: no cover - compatibility with older engine pins
+    AnalysisObservationConfig = None
+    FileAnalysisFailure = None
+    _encode_finalized = None
+    analyze_source_file_result = None
+    from sd_core.analysis_server import analyze_source
 
 path = Path(sys.argv[1])
 module_name = sys.argv[2]
 try:
     source = path.read_text(encoding="utf-8")
-    analysis = analyze_source(source, module_name)
+    analysis_summary = None
+    if (
+        analyze_source_file_result is not None
+        and AnalysisObservationConfig is not None
+        and _encode_finalized is not None
+    ):
+        observation_mode = os.environ.get("ARCHWAY_ANALYSIS_OBSERVATION", "summary")
+        if observation_mode == "diagnostic":
+            observation_config = AnalysisObservationConfig.diagnostic()
+        elif observation_mode == "off":
+            observation_config = AnalysisObservationConfig.off()
+        else:
+            observation_config = AnalysisObservationConfig.summary()
+        kwargs = {
+            "module": module_name,
+            "repo_path": str(path),
+            "observation_config": observation_config,
+        }
+        body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
+        if body_summary_consumption != "off":
+            kwargs["body_summary_consumption"] = body_summary_consumption
+        analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
+        if analysis_product != "standalone":
+            kwargs["analysis_product"] = analysis_product
+        if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
+            "1", "true", "yes", "on",
+        }:
+            kwargs["type_requirements_assume_closed"] = True
+        file_result = analyze_source_file_result(source, **kwargs)
+        analysis_summary = file_result.to_jsonable().get("analysis_summary")
+        if file_result.status != "analyzed" or file_result.run is None:
+            if FileAnalysisFailure is not None:
+                raise FileAnalysisFailure(file_result)
+            raise RuntimeError(f"file analysis failed: {file_result.status}")
+        analysis = _encode_finalized(file_result.run.finalized)
+        analysis["module_name"] = module_name
+        analysis["status"] = file_result.status
+        analysis["file_result"] = file_result.to_jsonable()
+    else:
+        analysis = analyze_source(source, module_name)
     out = {
         "ok": True,
         "analysis": analysis,
-        "analysis_summary": analysis.get("file_result", {}).get(
-            "analysis_summary"
-        ),
+        "analysis_summary": analysis_summary,
     }
 except Exception as exc:
     out = {
@@ -2042,7 +2444,10 @@ print(json.dumps(out, sort_keys=True))
                 text=True,
                 env=_probe_env(
                     engine_worktree,
+                    body_summary_consumption=body_summary_consumption,
+                    analysis_product=analysis_product,
                     analysis_observation_mode=analysis_observation_mode,
+                    type_requirements_assume_closed=type_requirements_assume_closed,
                 ),
                 start_new_session=True,
             )
@@ -2078,13 +2483,20 @@ print(json.dumps(out, sort_keys=True))
 def _probe_env(
     engine_worktree: Path,
     *,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
     analysis_observation_mode: str = "summary",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, str]:
     env = os.environ.copy()
+    if body_summary_consumption:
+        env["ARCHWAY_BODY_SUMMARY_CONSUMPTION"] = body_summary_consumption
+    env["ARCHWAY_ANALYSIS_PRODUCT"] = analysis_product
     env["ARCHWAY_ANALYSIS_OBSERVATION"] = analysis_observation_mode
-    env.pop("ARCHWAY_BODY_SUMMARY_CONSUMPTION", None)
-    env.pop("ARCHWAY_ANALYSIS_PRODUCT", None)
-    env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
+    if type_requirements_assume_closed:
+        env["ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED"] = "1"
+    else:
+        env.pop("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED", None)
     existing = env.get("PYTHONPATH")
     paths = [str(engine_worktree)]
     if existing:
@@ -2177,6 +2589,9 @@ def capture_runtime_phase_profile_file(
     module_name: str,
     runner: tuple[str, ...] = ("hatch", "run", "python"),
     timeout: int = 90,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     """Measure import, translation, traced translation, and analysis separately.
 
@@ -2199,6 +2614,9 @@ def capture_runtime_phase_profile_file(
             runner=runner,
             timeout=timeout,
             phase=phase,
+            body_summary_consumption=body_summary_consumption,
+            analysis_product=analysis_product,
+            type_requirements_assume_closed=type_requirements_assume_closed,
         )
     return out
 
@@ -2211,6 +2629,9 @@ def _run_runtime_phase_probe_file(
     runner: tuple[str, ...],
     timeout: int,
     phase: str,
+    body_summary_consumption: str | None = None,
+    analysis_product: str = "standalone",
+    type_requirements_assume_closed: bool = False,
 ) -> dict[str, Any]:
     probe = r'''
 import json
@@ -2249,7 +2670,18 @@ try:
                 "span_count": len(getattr(trace, "spans", [])) if trace is not None else 0,
             }
         elif phase == "analyze_source":
-            result = analyze_source(source, module_name)
+            kwargs = {}
+            body_summary_consumption = os.environ.get("ARCHWAY_BODY_SUMMARY_CONSUMPTION", "off")
+            if body_summary_consumption != "off":
+                kwargs["body_summary_consumption"] = body_summary_consumption
+            analysis_product = os.environ.get("ARCHWAY_ANALYSIS_PRODUCT", "standalone")
+            if analysis_product != "standalone":
+                kwargs["analysis_product"] = analysis_product
+            if os.environ.get("ARCHWAY_TYPE_REQUIREMENTS_ASSUME_CLOSED") in {
+                "1", "true", "yes", "on",
+            }:
+                kwargs["type_requirements_assume_closed"] = True
+            result = analyze_source(source, module_name, **kwargs)
             out = {
                 "ok": True,
                 "phase": phase,
@@ -2279,7 +2711,12 @@ print(json.dumps(out, sort_keys=True))
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                env=_probe_env(engine_worktree),
+                env=_probe_env(
+                    engine_worktree,
+                    body_summary_consumption=body_summary_consumption,
+                    analysis_product=analysis_product,
+                    type_requirements_assume_closed=type_requirements_assume_closed,
+                ),
                 start_new_session=True,
             )
             stdout, stderr = proc.communicate(timeout=timeout)
@@ -2473,132 +2910,6 @@ class _TraceBuffer:
             self.writer.write(self.records[key])
 
 
-def _function_types(
-    analysis: dict[str, Any], trace: _TraceBuffer | None = None
-) -> dict[tuple[int, str], dict[str, Any]]:
-    out: dict[tuple[int, str], dict[str, Any]] = {}
-    functions = analysis.get("functions", []) or []
-    by_id = {f.get("fn_id"): f for f in functions}
-    for fn in functions:
-        pos = fn.get("source_position") or {}
-        row = pos.get("row")
-        name = fn.get("name")
-        if not row or not name:
-            continue
-        param_candidates: dict[str, list[str]] = {}
-        param_trace: dict[str, list[dict[str, Any]]] = {}
-        returns: list[str] = []
-        return_trace: list[dict[str, Any]] = []
-        for inst_index, inst in enumerate(fn.get("instantiations", []) or []):
-            for pname, events in (inst.get("params") or {}).items():
-                typ, candidate = _events_type(events, by_id, instantiation=inst_index)
-                param_trace.setdefault(pname, []).append(candidate)
-                if typ:
-                    param_candidates.setdefault(pname, []).append(typ)
-            ret = inst.get("ret") or {}
-            typ, reason = _render_element(ret.get("element"), by_id)
-            return_trace.append(
-                {
-                    "instantiation": inst_index,
-                    "raw_event": ret,
-                    "raw_element": ret.get("element"),
-                    "rendered_annotation": typ,
-                    "fallback_reasons": [reason] if reason else [],
-                    "top_origin_positions": _top_origin_positions([ret]),
-                }
-            )
-            if typ:
-                returns.append(typ)
-        params = {
-            pname: typ
-            for pname, candidates in param_candidates.items()
-            if (typ := _merge_types(candidates))
-        }
-        ret_type = _merge_types(returns)
-        if trace:
-            line = int(row)
-            for pname, candidates in param_trace.items():
-                trace.add_slot(
-                    line=line,
-                    function=str(name),
-                    slot=f"param:{pname}",
-                    candidates=candidates,
-                    merged_annotation=params.get(pname),
-                )
-            if return_trace:
-                trace.add_slot(
-                    line=line,
-                    function=str(name),
-                    slot="return",
-                    candidates=return_trace,
-                    merged_annotation=ret_type,
-                )
-        out[(int(row), str(name))] = {"params": params, "return": ret_type}
-    return out
-
-
-def _events_type(
-    events: Any, by_id: dict[Any, dict[str, Any]], *, instantiation: int | None = None
-) -> tuple[Optional[str], dict[str, Any]]:
-    if not events:
-        return (
-            None,
-            {
-                "instantiation": instantiation,
-                "raw_events": [],
-                "raw_elements": [],
-                "rendered_events": [],
-                "rendered_annotation": None,
-                "fallback_reasons": ["missing events"],
-                "top_origin_positions": [],
-            },
-        )
-    if isinstance(events, dict):
-        events = [events]
-    rendered_events: list[str] = []
-    raw_elements: list[Any] = []
-    reasons: list[str] = []
-    for event in events:
-        if not isinstance(event, dict):
-            reasons.append("unknown event")
-            continue
-        raw_elements.append(event.get("element"))
-        typ, reason = _render_element(event.get("element"), by_id)
-        if typ:
-            rendered_events.append(typ)
-        if reason:
-            reasons.append(reason)
-    typ = _merge_types(rendered_events)
-    return (
-        typ,
-        {
-            "instantiation": instantiation,
-            "raw_events": events,
-            "raw_elements": raw_elements,
-            "rendered_events": rendered_events,
-            "rendered_annotation": typ,
-            "fallback_reasons": reasons,
-            "top_origin_positions": _top_origin_positions(events),
-        },
-    )
-
-
-def _top_origin_positions(events: list[Any]) -> list[dict[str, Any]]:
-    positions = []
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        element = event.get("element")
-        position = event.get("source_position")
-        if (
-            isinstance(element, dict)
-            and element.get("kind") == "top"
-            and isinstance(position, dict)
-        ):
-            positions.append(position)
-    return positions
-
-
 def _merge_types(types: list[str]) -> Optional[str]:
     unique = sorted({t for t in types if t})
     if not unique:
@@ -2608,101 +2919,10 @@ def _merge_types(types: list[str]) -> Optional[str]:
     return f"Union[{', '.join(unique)}]"
 
 
-def _element_type(elt: Any, by_id: dict[Any, dict[str, Any]]) -> Optional[str]:
-    return _render_element(elt, by_id)[0]
-
-
-def _render_element(elt: Any, by_id: dict[Any, dict[str, Any]]) -> tuple[Optional[str], str | None]:
-    if not isinstance(elt, dict):
-        return None, "missing element"
-    kind = elt.get("kind")
-    if kind == "pytype":
-        name = elt.get("name")
-        typ = _clean_type_name(str(name or "Any"))
-        if typ == "ellipsis":
-            return "Any", "ellipsis pytype"
-        return typ, None if name else "missing pytype name"
-    if kind in {"top", "bottom"}:
-        return "Any", str(kind)
-    if kind == "none":
-        return "None", None
-    if kind == "list":
-        inner, reason = _render_element(elt.get("element"), by_id)
-        return f"list[{inner or 'Any'}]", _nested_reason("list.element", reason, inner)
-    if kind == "set":
-        inner, reason = _render_element(elt.get("element"), by_id)
-        return f"set[{inner or 'Any'}]", _nested_reason("set.element", reason, inner)
-    if kind == "tuple":
-        slots = elt.get("slots") or []
-        if slots:
-            rendered = [_render_element(s, by_id) for s in slots]
-            inner = ", ".join(t or "Any" for t, _ in rendered)
-            reason = _join_reasons(
-                _nested_reason(f"tuple.slot[{i}]", reason, typ)
-                for i, (typ, reason) in enumerate(rendered)
-            )
-            return f"tuple[{inner}]", reason
-        inner, reason = _render_element(elt.get("element"), by_id)
-        return f"tuple[{inner or 'Any'}, ...]", _nested_reason("tuple.element", reason, inner)
-    if kind == "dict":
-        key, key_reason = _render_element(elt.get("key"), by_id)
-        val, val_reason = _render_element(elt.get("value"), by_id)
-        return f"dict[{key or 'Any'}, {val or 'Any'}]", _join_reasons(
-            [
-                _nested_reason("dict.key", key_reason, key),
-                _nested_reason("dict.value", val_reason, val),
-            ]
-        )
-    if kind == "generator":
-        inner, reason = _render_element(elt.get("element"), by_id)
-        return f"Generator[{inner or 'Any'}, None, None]", _nested_reason(
-            "generator.element", reason, inner
-        )
-    if kind == "union":
-        rendered = [_render_element(e, by_id) for e in elt.get("elements", [])]
-        return _merge_types([t for t, _ in rendered if t]), _join_reasons(
-            _nested_reason(f"union.element[{i}]", reason, typ)
-            for i, (typ, reason) in enumerate(rendered)
-        )
-    if kind == "instance":
-        cls = elt.get("cls") or {}
-        body = cls.get("body")
-        fn = by_id.get(body)
-        if fn and fn.get("name"):
-            return str(fn["name"]), None
-        return None, "missing instance class body"
-    if kind == "class":
-        return "type", None
-    if kind == "callable":
-        return "object", "callable->object"
-    return None, f"unknown kind: {kind}"
-
-
-def _nested_reason(prefix: str, reason: str | None, rendered: str | None) -> str | None:
-    if reason:
-        return f"{prefix}: {reason}"
-    if rendered is None:
-        return f"{prefix}: missing element"
-    return None
-
-
-def _join_reasons(reasons: Any) -> str | None:
-    values = [reason for reason in reasons if reason]
-    return "; ".join(values) if values else None
-
-
-def _clean_type_name(name: str) -> str:
-    if name in _NONE_TYPE_NAMES:
-        return "None"
-    if name.startswith("builtins."):
-        return name.removeprefix("builtins.")
-    return name
-
-
 class _Annotator(ast.NodeTransformer):
     def __init__(
         self,
-        function_types: dict[tuple[int, str], dict[str, Any]],
+        function_types: dict[str, dict[str, Any]],
         variable_types: dict[tuple[int, str], str] | None = None,
         annotation_aliases: dict[str, str] | None = None,
         trace: _TraceBuffer | None = None,
@@ -2719,16 +2939,40 @@ class _Annotator(ast.NodeTransformer):
         self.needs_typing = False
         self.typing_imports: set[str] = set()
         self.trace = trace
+        self._lexical_scope: list[str] = []
+        self._trace_function_identity: str | None = None
+
+    def visit_ClassDef(self, node: ast.ClassDef) -> ast.AST:
+        self._lexical_scope.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._lexical_scope.pop()
+        return node
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
-        self.generic_visit(node)
-        self._annotate_function(node)
+        self._visit_function(node)
         return node
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> ast.AST:
-        self.generic_visit(node)
-        self._annotate_function(node)
+        self._visit_function(node)
         return node
+
+    def _visit_function(
+        self, node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> None:
+        qualified = ".".join((*self._lexical_scope, node.name))
+        previous_identity = self._trace_function_identity
+        self._trace_function_identity = qualified
+        try:
+            self._annotate_function(node, qualified)
+        finally:
+            self._trace_function_identity = previous_identity
+        self._lexical_scope.append(node.name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._lexical_scope.pop()
 
     def visit_Assign(self, node: ast.Assign) -> ast.AST:
         self.generic_visit(node)
@@ -2759,8 +3003,12 @@ class _Annotator(ast.NodeTransformer):
             node,
         )
 
-    def _annotate_function(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> None:
-        info = self.function_types.get((node.lineno, node.name))
+    def _annotate_function(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        qualified: str,
+    ) -> None:
+        info = self.function_types.get(qualified)
         if not info:
             for arg in [
                 *node.args.posonlyargs,
@@ -2866,7 +3114,7 @@ class _Annotator(ast.NodeTransformer):
         if self.trace:
             self.trace.mark_insertion(
                 line=node.lineno,
-                function=node.name,
+                function=self._trace_function_identity or node.name,
                 slot=slot,
                 inserted=inserted,
                 reason=reason,
@@ -2883,7 +3131,7 @@ class _Annotator(ast.NodeTransformer):
             return
         self.trace.add_slot(
             line=node.lineno,
-            function=node.name,
+            function=self._trace_function_identity or node.name,
             slot=slot,
             candidates=[{
                 "instantiation": None,
@@ -2957,7 +3205,7 @@ def _localize_annotation(value: str, aliases: dict[str, str]) -> str:
 
 def _annotate_source(
     source: str,
-    function_types: dict[tuple[int, str], dict[str, Any]],
+    function_types: dict[str, dict[str, Any]],
     variable_types: dict[tuple[int, str], str] | None = None,
     trace: _TraceBuffer | None = None,
 ) -> tuple[str, dict[str, int]]:

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from archway_benchmarks.typybench_residual_audit import (
     audit_rows,
+    audit_retained_residual_evidence,
     run_official_residual_probe,
 )
 
@@ -69,3 +70,23 @@ def test_official_probe_uses_one_repo_prediction_root(tmp_path: Path) -> None:
     assert captured["command"][0:2] == ["docker", "run"]
     assert "typybench-demo" in captured["command"]
     assert any(str(predictions.resolve()) in item for item in captured["command"])
+
+
+def test_retained_v2_evidence_avoids_repository_rescore(tmp_path: Path) -> None:
+    repo = tmp_path / "demo"
+    repo.mkdir()
+    (repo / "demo_scored_keys.json").write_text(json.dumps({
+        "schema": "typybench-scored-keys-v2",
+        "type_evidence_complete": True,
+        "keys": [{
+            "key": "demo.f@value", "expected": "builtins.str",
+            "predicted": "Any", "similarity": 0.0, "exact": 0,
+            "missing": False,
+        }],
+    }))
+
+    result = audit_retained_residual_evidence(
+        repo_name="demo", predictions_root=tmp_path,
+    )
+
+    assert result["class_counts"] == {"unconstrained_any": 1}

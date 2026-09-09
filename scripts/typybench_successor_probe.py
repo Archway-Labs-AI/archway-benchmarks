@@ -16,7 +16,7 @@ def main() -> None:
     parser.add_argument("--timeout", type=int, default=120)
     parser.add_argument("--demand-limit", type=int)
     parser.add_argument("--checkpoint-roots", action="store_true")
-    parser.add_argument("--checkpoint-size", type=int, default=1)
+    parser.add_argument("--checkpoint-size", type=int, default=8)
     parser.add_argument("--checkpoint-tail-start", type=int)
     parser.add_argument("--checkpoint-tail-count", type=int)
     parser.add_argument(
@@ -36,7 +36,18 @@ def main() -> None:
     parser.add_argument("--root-id", action="append", dest="root_ids")
     parser.add_argument("--body-timeout", type=int)
     parser.add_argument("--progress-timeout", type=int)
+    parser.add_argument(
+        "--projection-timeout",
+        type=int,
+        help="gracefully cut off scorer candidate analysis and retain its sample",
+    )
+    parser.add_argument("--callable-input-exact-limit", type=int)
     parser.add_argument("--sample-rate-hz", type=float)
+    parser.add_argument(
+        "--sample-targeted",
+        action="store_true",
+        help="sample targeted work and post-target candidate analysis",
+    )
     parser.add_argument("--sample-body-label")
     parser.add_argument(
         "--sample-forward",
@@ -92,6 +103,14 @@ def main() -> None:
         action="store_true",
         help="exercise the prediction projection used by the corpus emitter",
     )
+    parser.add_argument(
+        "--contextual-summary-evaluation",
+        action="store_true",
+        help=(
+            "expand callable applications into the diagnostic contextual "
+            "production graph instead of using composed summaries"
+        ),
+    )
     args = parser.parse_args()
     if (
         args.body_timeout is not None
@@ -126,13 +145,17 @@ def main() -> None:
         root_ids=tuple(args.root_ids or ()),
         body_timeout=args.body_timeout,
         progress_timeout=args.progress_timeout,
+        projection_timeout=args.projection_timeout,
+        callable_input_exact_limit=args.callable_input_exact_limit,
         sample_rate_hz=args.sample_rate_hz,
+        sample_targeted=args.sample_targeted,
         sample_body_label=args.sample_body_label,
         sample_forward=args.sample_forward,
         forward_timeout=args.forward_timeout,
         record_timings=args.record_timings,
         diagnostic_details=not args.production_light,
         collect_predictions=args.collect_predictions,
+        contextual_summary_evaluation=args.contextual_summary_evaluation,
         disable_cyclic_gc=args.disable_cyclic_gc,
         observation_kinds=frozenset((
             "parameter",
@@ -200,6 +223,8 @@ def main() -> None:
     replay_operation_hotspots = summary.get(
         "production_replay_operation_hotspots"
     ) or []
+    production_hotspots = scheduler.get("production_hotspots") or []
+    invocation_summaries = summary.get("invocation_summaries") or []
     if args.compact_diagnostics:
         replay_hotspots = [
             {
@@ -211,10 +236,15 @@ def main() -> None:
             }
             for item in replay_hotspots[:12]
         ]
+        production_hotspots = production_hotspots[:20]
+        invocation_summaries = invocation_summaries[:32]
     report = {
         "ok": result.get("ok"),
         "error": result.get("error"),
         "phase_seconds": summary.get("phase_seconds"),
+        "observation_projection_breakdown": summary.get(
+            "observation_projection_breakdown"
+        ),
         "phase_progress": summary.get("phase_progress"),
         "active_translation_file": summary.get("active_translation_file"),
         "active_body": summary.get("active_body"),
@@ -226,7 +256,6 @@ def main() -> None:
         "requested_body_roots": summary.get("requested_body_roots"),
         "signature_body_roots": summary.get("signature_body_roots"),
         "component_hotspots": summary.get("component_hotspots"),
-        "region_quotient_summary": summary.get("region_quotient_summary"),
         "morphism_transfer_reuse": (
             summary.get("morphism_transfer_reuse")
         ),
@@ -243,8 +272,15 @@ def main() -> None:
             top_counts(summary.get("morphism_read_intersections"), 30)
         ),
         "invocation_contexts": top_counts(summary.get("invocation_contexts")),
+        "invocation_summaries": invocation_summaries,
         "invocation_inputs": top_counts(summary.get("invocation_inputs")),
+        "invocation_input_dimensions": summary.get(
+            "invocation_input_dimensions"
+        ),
         "invocation_admissions": top_counts(summary.get("invocation_admissions")),
+        "invocation_application_runtime": top_counts(
+            summary.get("invocation_application_runtime")
+        ),
         "invocation_application_hotspots": summary.get(
             "invocation_application_hotspots"
         ),
@@ -266,11 +302,16 @@ def main() -> None:
             None if args.compact_diagnostics else summary.get("body_plan")
         ),
         "timed_out_body": summary.get("timed_out_body"),
+        "projection_skipped_reason": summary.get(
+            "projection_skipped_reason"
+        ),
+        "timed_out_projection": summary.get("timed_out_projection"),
         "timed_out_forward": summary.get("timed_out_forward"),
         "unique_productions": scheduler.get("unique_production_count"),
         "production_executions": scheduler.get("production_execution_count"),
         "repeated_productions": scheduler.get("repeated_production_count"),
         "production_replay_hotspots": replay_hotspots,
+        "production_hotspots": production_hotspots,
         "production_replay_operation_hotspots": replay_operation_hotspots,
         "affected_selected": worklist.get("affected_component_selected"),
         "topology_restarts": worklist.get("topology_restart"),
@@ -309,6 +350,7 @@ def main() -> None:
         "top_restart_reasons": top_restart_reasons,
         "top_restart_operation_reasons": top_restart_operation_reasons,
         "trace_tail": result.get("trace_tail"),
+        "files": result.get("files") if args.collect_predictions else None,
     }
     encoded = json.dumps(report, sort_keys=True)
     if args.output_json is None:

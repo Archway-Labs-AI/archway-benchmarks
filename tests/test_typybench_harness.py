@@ -9,11 +9,29 @@ from archway_benchmarks.typybench_harness import (
     docker_image_name,
     missing_docker_images,
     materialize_source_prediction,
+    parse_scored_keys,
     parse_result_csv,
     validate_repo_source_trees,
     score_command,
     stage_single_repo_prediction_root,
 )
+
+
+def test_parse_scored_keys_preserves_exact_evaluation_surface(tmp_path: Path) -> None:
+    path = tmp_path / "predictions" / "demo" / "demo_scored_keys.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        '{"schema":"typybench-scored-keys-v1","repo_name":"demo",'
+        '"count":2,"missing_count":1,"keys":['
+        '{"key":"demo.f@x","similarity":1.0,"exact":1,"missing":false},'
+        '{"key":"demo.f::return","similarity":0.0,"exact":0,"missing":true}]}'
+    )
+
+    result = parse_scored_keys("demo", tmp_path / "predictions")
+
+    assert result.repo_name == "demo"
+    assert len(result.keys) == 2
+    assert result.missing_count == 1
 
 
 def test_parse_result_csv_normalizes_numbers_and_na(tmp_path: Path) -> None:

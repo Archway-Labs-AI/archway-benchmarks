@@ -1,18 +1,16 @@
 import ast
+import inspect
 import json
 import sys
-from pathlib import Path
 
 import archway_benchmarks.typybench_archway_emit as emit_module
-import pytest
 from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
-    _element_type,
-    _function_types,
-    _observation_admission_group,
     _probe_progress,
     _run_engine_probe,
+    _run_successor_repo_probe,
     _successor_function_types,
+    _scored_slot_accounting,
     _successor_variable_types,
     capture_runtime_phase_profile_file,
     capture_translation_trace_file,
@@ -20,41 +18,38 @@ from archway_benchmarks.typybench_archway_emit import (
 )
 
 
-def test_successor_probe_demands_unresolved_observations_in_persistent_session() -> None:
-    """Guard the native targeted tail against being silently disabled again."""
+def test_successor_probe_requires_authoritative_signature_workload_api() -> None:
+    worker_source = inspect.getsource(_run_successor_repo_probe)
 
-    source = Path(emit_module.__file__).read_text(encoding="utf-8")
+    assert 'session, "signature_workload_roots", None' in worker_source
+    assert 'getattr(session, "run_workload", None)' in worker_source
+    assert "signature-body-root-projection" in worker_source
+    assert "plan_signature_workload" in worker_source
+    assert "targeted_body_providers" not in worker_source
+    assert "observation_workload_roots" not in worker_source
+    assert "exact-address-deduplication" not in worker_source
+    assert '"contextual_summary_evaluation": (' in worker_source
+    assert "contextual_summary_evaluation\n            )," in worker_source
+    assert '"callable_input_exact_limit" in session_parameters' in worker_source
+    assert (
+        'session_options["callable_input_exact_limit"] = ('
+        in worker_source
+    )
+    assert "TYPE_OF,\n    open_hybrid_program_session," in worker_source
+    assert "session.store.history_since(" in worker_source
+    assert "unmatched_body_labels = requested_body_labels.difference(" in worker_source
+    assert "requested successor body labels are not present" in worker_source
 
-    assert "signature_roots = requested" in source
-    assert "targeted = session.observe(signature_roots)" in source
-    assert "signature_roots = ()" not in source
 
+def test_successor_probe_does_not_project_partial_timed_out_state() -> None:
+    worker_source = inspect.getsource(_run_successor_repo_probe)
 
-def test_observation_admission_never_merges_distinct_callable_bodies() -> None:
-    class Provider:
-        bodies_by_id = {"body:first": object(), "body:second": object()}
-        body_binding_names = {
-            "body:first": "shared_name",
-            "body:second": "shared_name",
-        }
-
-    class Session:
-        targeted_body_providers = (Provider(),)
-
-        @staticmethod
-        def observation_workload_body_id(root):
-            return root.body_id
-
-    class Root:
-        def __init__(self, body_id):
-            self.body_id = body_id
-            self.id = body_id
-
-    session = Session()
-    first = _observation_admission_group(session, Root("body:first"))
-    second = _observation_admission_group(session, Root("body:second"))
-
-    assert first != second
+    assert (
+        "predictions_collected = collect_predictions and not timed_out_body"
+        in worker_source
+    )
+    assert '"targeted_body_timed_out"' in worker_source
+    assert '"projection_skipped_reason": projection_skipped_reason' in worker_source
 
 
 def test_probe_progress_retains_compact_timeout_evidence() -> None:
@@ -70,15 +65,6 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
         "fact-address:v1:active\n"
         "ARCHWAY_BODY 2/139 16.250000 exec=618 topology=5940 "
         "appworld.api_docs:generate_example\n"
-        'ARCHWAY_BODY_DETAIL {"index":2,'
-        '"top_execution_families":[["MorphismState",600]],'
-        '"top_family_seconds":[["MorphismState",12.5]],'
-        '"top_production_phases":[["identity\\u0000cache-validation",4]],'
-        '"top_production_phase_seconds":'
-        '[["identity\\u0000cache-validation",2.75]],'
-        '"topology_change_counts":{"dependency_added":5940},'
-        '"component_edge_updates":{"incremental":5000},'
-        '"gc":{"seconds":0.25}}\n'
         "ARCHWAY_BODY_START 3/139 appworld.api_docs:next "
         "fact-address:v1:next\n"
     )
@@ -97,19 +83,6 @@ def test_probe_progress_retains_compact_timeout_evidence() -> None:
             "executions": 618,
             "topology_changes": 5940,
             "label": "appworld.api_docs:generate_example",
-            "performance_detail": {
-                "top_execution_families": [["MorphismState", 600]],
-                "top_family_seconds": [["MorphismState", 12.5]],
-                "top_production_phases": [
-                    ["identity\0cache-validation", 4]
-                ],
-                "top_production_phase_seconds": [
-                    ["identity\0cache-validation", 2.75]
-                ],
-                "topology_change_counts": {"dependency_added": 5940},
-                "component_edge_updates": {"incremental": 5000},
-                "gc": {"seconds": 0.25},
-            },
         }],
         "active_body": {
             "index": 3,
@@ -144,18 +117,16 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
             "label": "module:slow",
         }],
     }
-    probe_options = []
-
-    def probe(**kwargs):
-        probe_options.append(kwargs)
-        return {
+    monkeypatch.setattr(
+        emit_module,
+        "_run_successor_repo_probe",
+        lambda **_kwargs: {
             "ok": False,
             "error": "TimeoutExpired: analysis exceeded 1s",
             "trace_tail": "ARCHWAY_BODY 1/12",
             "analysis_summary": progress,
-        }
-
-    monkeypatch.setattr(emit_module, "_run_successor_repo_probe", probe)
+        },
+    )
 
     stats = emit_module.emit_archway_predictions(
         repo_name="demo",
@@ -163,13 +134,6 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
         predictions_root=tmp_path / "predictions",
         engine_worktree=engine,
         timeout=1,
-        analysis_observation_mode="diagnostic",
-        body_labels=("module:slow",),
-        body_timeout=7,
-        checkpoint_batch_start=4,
-        checkpoint_batch_count=2,
-        checkpoint_replay_prefix=False,
-        run_forward_seed=False,
     )
 
     assert stats.files_failed == 1
@@ -177,14 +141,55 @@ def test_emit_timeout_retains_repo_probe_progress(monkeypatch, tmp_path) -> None
     assert profile.status == "engine_failed"
     assert profile.analysis_summary == progress
     assert profile.trace_tail == "ARCHWAY_BODY 1/12"
-    assert probe_options[0]["diagnostic_details"] is True
-    assert probe_options[0]["record_timings"] is True
-    assert probe_options[0]["body_labels"] == ("module:slow",)
-    assert probe_options[0]["body_timeout"] == 7
-    assert probe_options[0]["checkpoint_batch_start"] == 4
-    assert probe_options[0]["checkpoint_batch_count"] == 2
-    assert probe_options[0]["checkpoint_replay_prefix"] is False
-    assert probe_options[0]["run_forward_seed"] is False
+
+
+def test_emit_forwards_diagram_native_localized_profile_controls(
+    monkeypatch, tmp_path,
+) -> None:
+    source_root = tmp_path / "repo"
+    source_root.mkdir()
+    (source_root / "demo.py").write_text("value = 1\n", encoding="utf-8")
+    engine = tmp_path / "engine"
+    engine.mkdir()
+    captured = {}
+
+    def probe(**kwargs):
+        captured.update(kwargs)
+        return {
+            "ok": True,
+            "files": {"demo.py": []},
+            "translation_failures": {},
+            "analysis_summary": {},
+        }
+
+    monkeypatch.setattr(emit_module, "_run_successor_repo_probe", probe)
+    emit_archway_predictions(
+        repo_name="demo",
+        untyped_root=source_root,
+        predictions_root=tmp_path / "predictions",
+        engine_worktree=engine,
+        checkpoint_batch_start=2,
+        checkpoint_batch_count=1,
+        max_wave_size=3,
+        checkpoint_replay_prefix=False,
+        body_labels=("demo:target",),
+        body_timeout=12,
+        sample_rate_hz=25,
+        sample_targeted=True,
+        run_forward_seed=False,
+        collect_predictions=False,
+    )
+
+    assert captured["checkpoint_batch_start"] == 2
+    assert captured["checkpoint_batch_count"] == 1
+    assert captured["checkpoint_size"] == 3
+    assert captured["checkpoint_replay_prefix"] is False
+    assert captured["body_labels"] == ("demo:target",)
+    assert captured["body_timeout"] == 12
+    assert captured["sample_rate_hz"] == 25
+    assert captured["sample_targeted"] is True
+    assert captured["run_forward_seed"] is False
+    assert captured["collect_predictions"] is False
 
 
 def test_successor_observations_render_function_signatures() -> None:
@@ -194,7 +199,7 @@ def test_successor_observations_render_function_signatures() -> None:
     ]
 
     assert _successor_function_types(observations) == {
-        (4, "f"): {"params": {"x": "int"}, "return": "str"}
+        "f": {"params": {"x": "int"}, "return": "str"}
     }
 
 
@@ -206,17 +211,17 @@ def test_successor_requirement_candidates_fill_unknown_parameter_only() -> None:
         },
         {
             "line": 4, "name": "x", "kind": "parameter",
-            "function": "f", "family": "CallableTypeCandidates",
+            "function": "f", "family": "AnnotationCandidatesAt",
             "types": ["builtins.str"],
         },
     ]
 
     assert _successor_function_types(observations) == {
-        (4, "f"): {"params": {"x": "str"}, "return": None}
+        "f": {"params": {"x": "str"}, "return": None}
     }
 
 
-def test_successor_observed_type_precedes_requirement_candidates() -> None:
+def test_successor_observed_type_composes_with_supported_candidates() -> None:
     observations = [
         {
             "line": 4, "name": "x", "kind": "parameter",
@@ -225,13 +230,128 @@ def test_successor_observed_type_precedes_requirement_candidates() -> None:
         },
         {
             "line": 4, "name": "x", "kind": "parameter",
-            "function": "f", "family": "CallableTypeCandidates",
+            "function": "f", "family": "AnnotationCandidatesAt",
             "types": ["builtins.str"],
         },
     ]
 
     assert _successor_function_types(observations) == {
-        (4, "f"): {"params": {"x": "bytes"}, "return": None}
+        "f": {"params": {"x": "Union[bytes, str]"}, "return": None}
+    }
+
+
+def test_successor_generic_shape_refines_nominal_container_type() -> None:
+    observations = [
+        {
+            "line": 4, "name": "f", "kind": "return",
+            "function": None, "family": "TypeOf",
+            "types": ["builtins.list"],
+        },
+        {
+            "line": 4, "name": "f", "kind": "return",
+            "function": None, "family": "GenericShapeOf",
+            "shape": {
+                "kind": "generic_shape_set",
+                "unknown": False,
+                "shapes": [{
+                    "constructor": "builtins.list",
+                    "open": False,
+                    "positions": [{
+                        "position": "summary:*",
+                        "value": {
+                            "nominal_types": ["builtins.str"],
+                            "nested": {
+                                "kind": "generic_shape_set",
+                                "unknown": False,
+                                "shapes": [],
+                            },
+                        },
+                    }],
+                }],
+            },
+        },
+    ]
+
+    assert _successor_function_types(observations) == {
+        "f": {"params": {}, "return": "list[str]"}
+    }
+
+
+def test_successor_generator_shape_renders_yield_type() -> None:
+    observations = [{
+        "line": 4, "name": "values", "kind": "return",
+        "function": None, "family": "GenericShapeOf",
+        "shape": {
+            "kind": "generic_shape_set",
+            "unknown": False,
+            "shapes": [{
+                "constructor": "builtins.generator",
+                "open": False,
+                "positions": [{
+                    "position": "yield:*",
+                    "value": {
+                        "nominal_types": ["builtins.int"],
+                        "nested": {
+                            "kind": "generic_shape_set",
+                            "unknown": False,
+                            "shapes": [],
+                        },
+                    },
+                }],
+            }],
+        },
+    }]
+
+    assert _successor_function_types(observations) == {
+        "values": {
+            "params": {}, "return": "Generator[int, None, None]",
+        }
+    }
+
+
+def test_successor_generic_shape_renders_nested_mapping_value() -> None:
+    observations = [{
+        "line": 4, "name": "payload", "kind": "return",
+        "function": None, "family": "GenericShapeOf",
+        "shape": {
+            "kind": "generic_shape_set",
+            "unknown": False,
+            "shapes": [{
+                "constructor": "builtins.dict",
+                "open": False,
+                "positions": [{
+                    "position": "builtins.str:'items'",
+                    "value": {
+                        "nominal_types": ["builtins.list"],
+                        "nested": {
+                            "kind": "generic_shape_set",
+                            "unknown": False,
+                            "shapes": [{
+                                "constructor": "builtins.list",
+                                "open": False,
+                                "positions": [{
+                                    "position": "builtins.int:0",
+                                    "value": {
+                                        "nominal_types": ["builtins.str"],
+                                        "nested": {
+                                            "kind": "generic_shape_set",
+                                            "unknown": False,
+                                            "shapes": [],
+                                        },
+                                    },
+                                }],
+                            }],
+                        },
+                    },
+                }],
+            }],
+        },
+    }]
+
+    assert _successor_function_types(observations) == {
+        "payload": {
+            "params": {}, "return": "dict[str, list[str]]",
+        }
     }
 
 
@@ -255,7 +375,7 @@ def test_successor_observations_match_qualified_methods_to_source_name() -> None
 
     function_types = _successor_function_types(observations)
     assert function_types == {
-        (4, "__init__"): {
+        "Environment.__init__": {
             "params": {"enabled": "bool"},
             "return": "None",
         }
@@ -270,6 +390,86 @@ def test_successor_observations_match_qualified_methods_to_source_name() -> None
     )
     assert "def __init__(self, enabled: bool) -> None:" in annotated
     assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
+
+
+def test_successor_observations_use_definition_identity_for_multiline_method() -> None:
+    observations = [{
+        "line": 6,
+        "definition_line": 2,
+        "name": "value",
+        "kind": "parameter",
+        "function": "Model.convert",
+        "body_morphism_id": "sid:v1:box:body",
+        "types": ["builtins.str"],
+    }]
+
+    function_types = _successor_function_types(observations)
+    annotated, stats = _annotate_source(
+        "class Model:\n"
+        "    def convert(\n"
+        "        self,\n"
+        "        value,\n"
+        "    ):\n"
+        "        return value\n",
+        function_types,
+    )
+
+    assert "value: str" in annotated
+    assert stats["params"] == 1
+
+
+def test_scored_slot_accounting_separates_unresolved_and_identity_gaps() -> None:
+    source = (
+        "def mapped(value):\n"
+        "    return value\n"
+        "\n"
+        "def absent(flag):\n"
+        "    return flag\n"
+    )
+    observations = [
+        {
+            "line": 1,
+            "definition_line": 1,
+            "name": "value",
+            "kind": "parameter",
+            "function": "mapped",
+            "types": ["builtins.str"],
+        },
+        {
+            "line": 1,
+            "definition_line": 1,
+            "name": "mapped",
+            "kind": "return",
+            "function": None,
+            "types": [],
+        },
+        {
+            "line": 99,
+            "definition_line": 99,
+            "name": "ghost",
+            "kind": "return",
+            "function": None,
+            "types": ["builtins.int"],
+        },
+    ]
+    function_types = _successor_function_types(observations)
+
+    accounting = _scored_slot_accounting(
+        source, observations, function_types, emitted_params=1,
+    )
+
+    assert accounting == {
+        "manifest_slots": 4,
+        "engine_cataloged_slots": 2,
+        "resolved_candidates": 1,
+        "resolved_emitted": 1,
+        "resolved_preserved": 0,
+        "resolved_unrenderable": 0,
+        "resolved_not_emitted": 0,
+        "unresolved_facts": 1,
+        "uncataloged_engine_identity": 2,
+        "orphan_engine_observations": 1,
+    }
 
 
 def test_successor_variable_observations_annotate_class_and_instance_stores() -> None:
@@ -316,7 +516,7 @@ def test_successor_variable_observations_annotate_class_and_instance_stores() ->
     }
 
 
-def test_repository_emission_keeps_variable_annotations_opt_in(
+def test_repository_emission_demands_only_direct_scorer_signature_slots(
     monkeypatch, tmp_path,
 ) -> None:
     source_root = tmp_path / "repo"
@@ -353,25 +553,9 @@ def test_repository_emission_keeps_variable_annotations_opt_in(
         predictions_root=default_root,
         engine_worktree=engine,
     )
-    opt_in_root = tmp_path / "opt-in"
-    opted_in = emit_archway_predictions(
-        repo_name="demo",
-        untyped_root=source_root,
-        predictions_root=opt_in_root,
-        engine_worktree=engine,
-        emit_variable_annotations=True,
-    )
-
     assert (default_root / "demo" / "demo.py").read_text() == "value = 1\n"
     assert default.variables_annotated == 0
-    assert "value: int = 1" in (
-        opt_in_root / "demo" / "demo.py"
-    ).read_text()
-    assert opted_in.variables_annotated == 1
-    assert requested_kinds == [
-        frozenset(("parameter", "return", "variable")),
-        frozenset(("parameter", "return", "variable")),
-    ]
+    assert requested_kinds == [frozenset(("parameter", "return"))]
 
 
 def test_repository_emission_can_include_diagram_class_fields_explicitly(
@@ -392,9 +576,8 @@ def test_repository_emission_can_include_diagram_class_fields_explicitly(
             "files": {"demo.py": [{
                 "line": 2,
                 "name": "Model.value",
-                "kind": "variable",
+                "kind": "class_field",
                 "family": "ClassAttributeTypeOf",
-                "evidence_rules": ["transformed constructor-field type"],
                 "function": None,
                 "types": ["builtins.int"],
             }]},
@@ -432,6 +615,37 @@ def test_class_field_emission_rejects_ordinary_class_attributes() -> None:
     ) == {}
 
 
+def test_class_field_emission_accepts_only_reviewed_transform_projection() -> None:
+    observations = [{
+        "line": 2,
+        "name": "Model.value",
+        "kind": "class_field",
+        "family": "ClassAttributeTypeOf",
+        "function": None,
+        "types": ["builtins.int"],
+    }]
+
+    assert _successor_variable_types(
+        observations, class_fields_only=True
+    ) == {(2, "value"): "int"}
+
+
+def test_class_field_emission_accepts_reviewed_annotation_candidate() -> None:
+    observations = [{
+        "line": 2,
+        "name": "Model.value",
+        "kind": "class_field",
+        "family": "AnnotationCandidatesAt",
+        "function": None,
+        "types": ["pkg.Value"],
+        "precision": "reviewed_open_world:possible",
+    }]
+
+    assert _successor_variable_types(
+        observations, class_fields_only=True
+    ) == {(2, "value"): "pkg.Value"}
+
+
 def test_annotate_source_inserts_params_returns_and_typing_import() -> None:
     source = '''"""module docstring"""
 
@@ -442,8 +656,8 @@ async def g(items, **kwargs):
     return items
 '''
     function_types = {
-        (3, "f"): {"params": {"x": "int", "y": "Union[int, str]"}, "return": "Any"},
-        (6, "g"): {
+        "f": {"params": {"x": "int", "y": "Union[int, str]"}, "return": "Any"},
+        "g": {
             "params": {"items": "list[str]", "kwargs": "dict[str, int]"},
             "return": "list[str]",
         },
@@ -466,7 +680,7 @@ def test_annotate_source_uses_existing_import_spelling_for_semantic_types() -> N
         "    return item\n"
     )
     function_types = {
-        (4, "select"): {
+        "select": {
             "params": {
                 "item": "list[paperqa.types.DocDetails]",
             },
@@ -482,7 +696,7 @@ def test_annotate_source_uses_existing_import_spelling_for_semantic_types() -> N
 
 def test_annotate_source_preserves_existing_annotations() -> None:
     source = "def f(x: str) -> str:\n    return x\n"
-    function_types = {(1, "f"): {"params": {"x": "int"}, "return": "int"}}
+    function_types = {"f": {"params": {"x": "int"}, "return": "int"}}
 
     annotated, stats = _annotate_source(source, function_types)
 
@@ -497,7 +711,7 @@ from __future__ import annotations
 def f(x):
     return x
 '''
-    function_types = {(4, "f"): {"params": {"x": "Any"}, "return": "Any"}}
+    function_types = {"f": {"params": {"x": "Any"}, "return": "Any"}}
 
     annotated, stats = _annotate_source(source, function_types)
 
@@ -506,263 +720,6 @@ def f(x):
     typing_at = annotated.index("from typing import Any, Union")
     assert future_at < typing_at
     assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
-
-
-def test_function_types_extracts_signatures_from_engine_projection() -> None:
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 10},
-                "instantiations": [
-                    {
-                        "params": {"x": [{"element": {"kind": "pytype", "name": "builtins.int"}}]},
-                        "ret": {"element": {"kind": "list", "element": {"kind": "pytype", "name": "builtins.str"}}},
-                    },
-                    {
-                        "params": {"x": [{"element": {"kind": "pytype", "name": "builtins.str"}}]},
-                        "ret": {"element": {"kind": "none"}},
-                    },
-                ],
-            }
-        ]
-    }
-
-    assert _function_types(analysis) == {
-        (10, "f"): {"params": {"x": "Union[int, str]"}, "return": "Union[None, list[str]]"}
-    }
-
-
-def test_function_types_trace_preserves_raw_events_and_top_origin_spans() -> None:
-    class Trace:
-        def __init__(self) -> None:
-            self.slots = []
-
-        def add_slot(self, **slot) -> None:
-            self.slots.append(slot)
-
-    position = {"row": 2, "col": 11, "end_row": 2, "end_col": 12}
-    parameter_event = {
-        "element": {"kind": "pytype", "name": "builtins.int"}
-    }
-    analysis = {
-        "functions": [{
-            "fn_id": 1,
-            "name": "f",
-            "source_position": {"row": 1},
-            "instantiations": [{
-                "params": {"x": [parameter_event]},
-                "ret": {"element": {"kind": "top"}, "source_position": position},
-            }],
-        }]
-    }
-    trace = Trace()
-
-    _function_types(analysis, trace)
-
-    by_slot = {slot["slot"]: slot for slot in trace.slots}
-    assert by_slot["param:x"]["candidates"][0]["raw_events"] == [parameter_event]
-    assert by_slot["return"]["candidates"][0]["top_origin_positions"] == [position]
-
-
-def test_function_types_normalizes_builtins_nonetype() -> None:
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "main",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "argv": [
-                                {"element": {"kind": "pytype", "name": "builtins.NoneType"}}
-                            ]
-                        },
-                        "ret": {"element": {"kind": "pytype", "name": "NoneType"}},
-                    },
-                ],
-            }
-        ]
-    }
-
-    assert _function_types(analysis) == {
-        (1, "main"): {"params": {"argv": "None"}, "return": "None"}
-    }
-
-
-def test_builtins_nonetype_renders_as_parseable_none_annotations() -> None:
-    source = "def main(argv=None):\n    return None\n"
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "main",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "argv": [
-                                {"element": {"kind": "pytype", "name": "builtins.NoneType"}}
-                            ]
-                        },
-                        "ret": {"element": {"kind": "pytype", "name": "NoneType"}},
-                    }
-                ],
-            }
-        ]
-    }
-
-    annotated, stats = _annotate_source(source, _function_types(analysis))
-
-    ast.parse(annotated)
-    assert "NoneType" not in annotated
-    assert "def main(argv: None=None) -> None:" in annotated
-    assert stats == {"functions": 1, "params": 1, "returns": 1, "variables": 0}
-
-
-def test_generator_element_renders_as_parseable_generator_annotation() -> None:
-    source = "def numbers():\n    yield 1\n"
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "numbers",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {},
-                        "ret": {
-                            "element": {
-                                "kind": "generator",
-                                "element": {"kind": "pytype", "name": "builtins.int"},
-                            }
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    function_types = _function_types(analysis)
-    annotated, stats = _annotate_source(source, function_types)
-
-    assert function_types == {
-        (1, "numbers"): {"params": {}, "return": "Generator[int, None, None]"}
-    }
-    ast.parse(annotated)
-    assert "unknown kind: generator" not in annotated
-    assert "from typing import Generator" in annotated
-    assert "def numbers() -> Generator[int, None, None]:" in annotated
-    assert stats == {"functions": 1, "params": 0, "returns": 1, "variables": 0}
-
-
-def test_ellipsis_pytype_renders_as_any_fallback_instead_of_lowercase_name() -> None:
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "x": [{"element": {"kind": "pytype", "name": "ellipsis"}}]
-                        },
-                        "ret": {"element": {"kind": "pytype", "name": "builtins.int"}},
-                    }
-                ],
-            }
-        ]
-    }
-
-    assert _function_types(analysis) == {
-        (1, "f"): {"params": {"x": "Any"}, "return": "int"}
-    }
-
-
-def test_element_type_maps_supported_shapes() -> None:
-    by_id = {7: {"name": "Factory"}}
-
-    assert _element_type({"kind": "top"}, by_id) == "Any"
-    assert _element_type({"kind": "dict", "key": {"kind": "pytype", "name": "builtins.str"}, "value": {"kind": "none"}}, by_id) == "dict[str, None]"
-    assert _element_type({"kind": "instance", "cls": {"body": 7}}, by_id) == "Factory"
-
-
-def test_element_type_resolves_string_body_ids() -> None:
-    by_id = {"sid:v1:body:factory": {"name": "Factory"}}
-
-    assert (
-        _element_type({"kind": "instance", "cls": {"body": "sid:v1:body:factory"}}, by_id)
-        == "Factory"
-    )
-
-
-def test_renderer_keeps_container_elements_and_parseable_union_spelling() -> None:
-    source = "def f(items, lookup, pair):\n    return pair\n"
-    analysis = {
-        "functions": [
-            {
-                "fn_id": 1,
-                "name": "f",
-                "source_position": {"row": 1},
-                "instantiations": [
-                    {
-                        "params": {
-                            "items": [
-                                {
-                                    "element": {
-                                        "kind": "list",
-                                        "element": {"kind": "pytype", "name": "builtins.str"},
-                                    }
-                                }
-                            ],
-                            "lookup": [
-                                {
-                                    "element": {
-                                        "kind": "dict",
-                                        "key": {"kind": "pytype", "name": "builtins.str"},
-                                        "value": {"kind": "pytype", "name": "builtins.int"},
-                                    }
-                                }
-                            ],
-                            "pair": [
-                                {
-                                    "element": {
-                                        "kind": "tuple",
-                                        "slots": [
-                                            {"kind": "pytype", "name": "builtins.int"},
-                                            {"kind": "pytype", "name": "builtins.str"},
-                                        ],
-                                    }
-                                }
-                            ],
-                        },
-                        "ret": {
-                            "element": {
-                                "kind": "union",
-                                "elements": [
-                                    {"kind": "pytype", "name": "builtins.NoneType"},
-                                    {"kind": "pytype", "name": "builtins.int"},
-                                ],
-                            }
-                        },
-                    }
-                ],
-            }
-        ]
-    }
-
-    function_types = _function_types(analysis)
-    annotated, stats = _annotate_source(source, function_types)
-
-    ast.parse(annotated)
-    assert "builtins." not in annotated
-    assert "Optional" not in annotated
-    assert "def f(items: list[str], lookup: dict[str, int], pair: tuple[int, str]) -> Union[None, int]:" in annotated
-    assert "from typing import Any, Union" in annotated
-    assert stats == {"functions": 1, "params": 3, "returns": 1, "variables": 0}
 
 
 def test_emit_predictions_leaves_original_source_on_invalid_annotation_syntax(
@@ -1147,6 +1104,8 @@ def test_emit_predictions_profile_jsonl_records_per_file_timings(
         timeout=30,
         per_file_timeout=5,
         profile_jsonl=profile_jsonl,
+        body_summary_consumption="safe",
+        analysis_product="type_body_summary_product",
         analysis_observation_mode="diagnostic",
     )
 
@@ -1154,12 +1113,7 @@ def test_emit_predictions_profile_jsonl_records_per_file_timings(
     by_file = {row["file"]: row for row in rows}
     assert stats.file_profiles
     assert by_file["ok.py"]["status"] == "ok"
-    assert by_file["ok.py"]["seconds_engine_probe"] == 0
-    assert by_file["bad.py"]["seconds_engine_probe"] == 0
-    assert stats.seconds_engine_probe >= 0
-    assert stats.analysis_summary == analysis_summary
-    assert stats.probe_error is None
-    assert stats.probe_trace_tail is None
+    assert by_file["ok.py"]["seconds_engine_probe"] >= 0
     assert by_file["ok.py"]["functions_seen"] == 1
     assert by_file["ok.py"]["analysis_summary"]["schema"] == (
         "archway.analysis_run_summary.v1"

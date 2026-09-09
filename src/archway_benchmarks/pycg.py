@@ -33,20 +33,18 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Mapping
 
+from archway_benchmarks.successor_runtime_evidence import (
+    callable_runtime_evidence,
+)
+
 Edge = tuple[str, str]
-EdgeProvider = Literal["successor"]
+EdgeProvider = Literal["successor", "coordinated", "legacy"]
 
 
 class PyCGCaseExecutionError(RuntimeError):
-    def __init__(
-        self,
-        message: str,
-        evidence: dict[str, object],
-        partial_edges: Iterable[Edge] = (),
-    ) -> None:
+    def __init__(self, message: str, evidence: dict[str, object]) -> None:
         super().__init__(message)
         self.analysis_evidence = evidence
-        self.partial_edges = frozenset(partial_edges)
 
 
 class PyCGCaseTimeoutError(TimeoutError):
@@ -502,7 +500,11 @@ def run_archway_pycg(
     suite: str = "micro",
     limit: int | None = None,
     case_names: tuple[str, ...] = (),
+    include_diagnostic_name_hints: bool = False,
+    analysis_product: str = "standalone",
+    callable_root_activation: str = "off",
     case_timeout_seconds: float | None = None,
+    edge_provider: EdgeProvider = "successor",
     successor_record_events: bool = False,
     successor_summarize_callee_results: bool = False,
     successor_sampling_rate_hz: float | None = None,
@@ -553,7 +555,11 @@ def run_archway_pycg(
             produced = _archway_call_edges_with_timeout(
                 case,
                 engine_root=engine_root,
+                include_diagnostic_name_hints=include_diagnostic_name_hints,
+                analysis_product=analysis_product,
+                callable_root_activation=callable_root_activation,
                 case_timeout_seconds=case_timeout_seconds,
+                edge_provider=edge_provider,
                 successor_record_events=successor_record_events,
                 successor_summarize_callee_results=(
                     successor_summarize_callee_results
@@ -591,26 +597,6 @@ def run_archway_pycg(
             status = "timeout"
             error = str(exc)
             analysis_evidence = getattr(exc, "analysis_evidence", {})
-        except PyCGCaseExecutionError as exc:
-            predicted = set(exc.partial_edges)
-            semantic_predicted = set(predicted)
-            predicted, normalization_lineage = (
-                normalize_edges_for_pycg_scoring(predicted, expected)
-            )
-            status = "partial" if predicted else "error"
-            error = f"{type(exc).__name__}: {exc}"
-            analysis_evidence = getattr(exc, "analysis_evidence", {})
-            if normalization_lineage:
-                analysis_evidence = {
-                    **analysis_evidence,
-                    "pycg_scoring_normalization": normalization_lineage,
-                    "pycg_scoring_normalization_count": len(
-                        normalization_lineage
-                    ),
-                    "semantic_predicted_edges": [
-                        list(edge) for edge in sorted(semantic_predicted)
-                    ],
-                }
         except Exception as exc:
             predicted = set()
             status = "error"
@@ -648,7 +634,7 @@ def run_archway_pycg(
         suite=suite,
         corpus_root=str(corpus_root),
         engine_root=str(engine_root),
-        edge_provider="successor",
+        edge_provider=edge_provider,
         cases_total=len(cases),
         cases_attempted=len(cases),
         cases_ok=sum(1 for result in results if result.status == "ok"),
@@ -673,7 +659,11 @@ def _archway_call_edges_with_timeout(
     case: PyCGCase,
     *,
     engine_root: Path,
+    include_diagnostic_name_hints: bool,
+    analysis_product: str,
+    callable_root_activation: str,
     case_timeout_seconds: float | None,
+    edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
@@ -683,6 +673,10 @@ def _archway_call_edges_with_timeout(
         return _produce_archway_call_edges(
             case,
             engine_root=engine_root,
+            include_diagnostic_name_hints=include_diagnostic_name_hints,
+            analysis_product=analysis_product,
+            callable_root_activation=callable_root_activation,
+            edge_provider=edge_provider,
             successor_record_events=successor_record_events,
             successor_summarize_callee_results=(
                 successor_summarize_callee_results
@@ -703,6 +697,10 @@ def _archway_call_edges_with_timeout(
             result_queue,
             case,
             engine_root,
+            include_diagnostic_name_hints,
+            analysis_product,
+            callable_root_activation,
+            edge_provider,
             successor_record_events,
             successor_summarize_callee_results,
             successor_sampling_rate_hz,
@@ -749,10 +747,8 @@ def _archway_call_edges_with_timeout(
         process.join()
         if status == "ok":
             return payload
-        error, evidence, partial_edges = payload
-        raise PyCGCaseExecutionError(
-            error, evidence or latest_evidence, partial_edges
-        )
+        error, evidence = payload
+        raise PyCGCaseExecutionError(error, evidence or latest_evidence)
 
 
 def _merge_progress_evidence(
@@ -803,6 +799,10 @@ def _archway_call_edges_worker(
     result_queue: multiprocessing.queues.Queue,
     case: PyCGCase,
     engine_root: Path,
+    include_diagnostic_name_hints: bool,
+    analysis_product: str,
+    callable_root_activation: str,
+    edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
@@ -812,6 +812,10 @@ def _archway_call_edges_worker(
         predicted = _produce_archway_call_edges(
             case,
             engine_root=engine_root,
+            include_diagnostic_name_hints=include_diagnostic_name_hints,
+            analysis_product=analysis_product,
+            callable_root_activation=callable_root_activation,
+            edge_provider=edge_provider,
             successor_record_events=successor_record_events,
             successor_summarize_callee_results=(
                 successor_summarize_callee_results
@@ -828,7 +832,6 @@ def _archway_call_edges_worker(
         result_queue.put(("error", (
             f"{type(exc).__name__}: {exc}",
             getattr(exc, "analysis_evidence", {}),
-            tuple(getattr(exc, "partial_edges", ())),
         )))
     else:
         result_queue.put(("ok", predicted))
@@ -838,23 +841,39 @@ def _produce_archway_call_edges(
     case: PyCGCase,
     *,
     engine_root: Path,
+    include_diagnostic_name_hints: bool,
+    analysis_product: str,
+    callable_root_activation: str,
+    edge_provider: EdgeProvider,
     successor_record_events: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
     successor_progress: Callable[[dict[str, object]], None] | None = None,
 ) -> set[Edge] | SuccessorEdgeResult:
-    return successor_archway_call_edge_result(
-        case,
-        engine_root=engine_root,
-        record_events=successor_record_events,
-        progress=successor_progress,
-        summarize_callee_results=successor_summarize_callee_results,
-        sampling_rate_hz=successor_sampling_rate_hz,
-        partial_graph_checkpoint_seconds=(
-            successor_partial_graph_checkpoint_seconds
-        ),
-    )
+    if edge_provider == "successor":
+        return successor_archway_call_edge_result(
+            case,
+            engine_root=engine_root,
+            record_events=successor_record_events,
+            progress=successor_progress,
+            summarize_callee_results=successor_summarize_callee_results,
+            sampling_rate_hz=successor_sampling_rate_hz,
+            partial_graph_checkpoint_seconds=(
+                successor_partial_graph_checkpoint_seconds
+            ),
+        )
+    if edge_provider == "coordinated":
+        return coordinated_archway_call_edges(case, engine_root=engine_root)
+    if edge_provider == "legacy":
+        return archway_call_edges(
+            case,
+            engine_root=engine_root,
+            include_diagnostic_name_hints=include_diagnostic_name_hints,
+            analysis_product=analysis_product,
+            callable_root_activation=callable_root_activation,
+        )
+    raise ValueError(f"unknown edge provider: {edge_provider}")
 
 
 def successor_archway_call_edges(
@@ -888,10 +907,6 @@ def successor_archway_call_edge_result(
         sys.path.insert(0, engine_text)
 
     from sd_core.analysis.diagram_analysis import open_hybrid_program_session
-    from sd_core.analysis.diagram_analysis.runtime_catalog import (
-        callsite_operation_catalog,
-        source_anchor_catalog,
-    )
     from sd_core.tooling.harness import ProgramResult
     from sd_core.tooling.sampling_profile import SamplingProfiler
 
@@ -920,85 +935,24 @@ def successor_archway_call_edge_result(
     session_construction_seconds = (
         time.perf_counter() - session_construction_started
     )
-
-    def optional_session_diagnostic(name: str) -> list[object]:
-        """Read additive telemetry without making it score-critical."""
-
-        diagnostic = getattr(session, name, None)
-        return list(diagnostic()) if callable(diagnostic) else []
     topology_before = session.scheduler.graph.topology_generation
     analysis_started = time.perf_counter()
     include_callable_bodies = case.suite == "macro"
     stop_sampling = threading.Event()
-    # Address descriptions derive labels from the provider-neutral,
-    # diagram-owned callable boundary catalog.
-    root_labels: dict[str, str] = {}
-    body_labels: dict[str, str] = {}
-    callable_body_labels = getattr(session, "callable_body_labels", None)
-    if callable(callable_body_labels):
-        body_labels.update(callable_body_labels())
-    source_anchors = source_anchor_catalog(modules)
-    callsite_operations = callsite_operation_catalog(modules)
-
-    def described_root_details(
-        query_progress: Mapping[str, object],
-    ) -> dict[str, object]:
-        """Attach diagram-owned source and callable context to root evidence."""
-
-        # Callable boundaries may be materialized lazily. Refresh the public
-        # catalog so a live root does not degrade to an opaque body identity.
-        if callable(callable_body_labels):
-            body_labels.update(callable_body_labels())
-
-        described: dict[str, object] = {}
-        for root_id, raw_detail in dict(
-            query_progress.get("root_details", {})
-        ).items():
-            detail = dict(raw_detail)
-            subject = detail.get("subject", {})
-            morphism_id = (
-                subject.get("morphism_id", "")
-                if isinstance(subject, Mapping) else ""
-            )
-            owner = session.callable_owner_for(
-                str(detail.get("context", "")), morphism_id
-            )
-            if owner is not None:
-                detail["callable"] = owner.display_name
-                detail["callable_body_morphism_id"] = owner.body_morphism_id
-            else:
-                context = str(detail.get("context", ""))
-                uninvoked_prefix = "context:uninvoked-body:"
-                if context.startswith(uninvoked_prefix):
-                    body_id = context.removeprefix(uninvoked_prefix)
-                    detail["callable"] = body_labels.get(body_id)
-                    detail["callable_body_morphism_id"] = body_id
-            anchor = source_anchors.get(morphism_id)
-            operation = callsite_operations.get(morphism_id)
-            if operation is not None:
-                detail["operation"] = operation
-            if anchor is not None:
-                detail["source_anchor"] = {
-                    "module": (
-                        ".".join(anchor.module.parts)
-                        if anchor.module is not None else None
-                    ),
-                    "position": (
-                        {
-                            "row": anchor.position.row,
-                            "col": anchor.position.col,
-                            "end_row": anchor.position.end_row,
-                            "end_col": anchor.position.end_col,
-                        }
-                        if anchor.position is not None else None
-                    ),
-                }
-            described[str(root_id)] = detail
-        return described
+    module_root_addresses = dict(session.module_roots)
+    root_labels = {
+        address.id: f"module:{name}"
+        for name, address in module_root_addresses.items()
+    }
+    body_labels = {
+        body_id: boundary.display_name
+        for body_id, boundary in session.callable_boundaries_by_body.items()
+    }
     sampling_profile = None
 
     def current_evidence(*, phase: str) -> dict[str, object]:
         snapshot = session.store.snapshot()
+        callable_evidence = callable_runtime_evidence(session)
         family_counts: dict[str, int] = {}
         for address in snapshot.resolved_facts:
             family_counts[address.family] = (
@@ -1044,6 +998,7 @@ def successor_archway_call_edge_result(
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
                 "callable": callable_for(key),
+                "callable_value": None,
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "executions": executions,
@@ -1062,6 +1017,7 @@ def successor_archway_call_edge_result(
                 "family": key.address.family,
                 "subject": key.address.subject.canonical_data(),
                 "callable": callable_for(key),
+                "callable_value": None,
                 "context": key.address.context,
                 "provider_id": key.provider_id,
                 "seconds": seconds,
@@ -1198,7 +1154,7 @@ def successor_archway_call_edge_result(
             if count > 1
         )
         module_names = sorted(modules)
-        callable_body_names = sorted(body_labels.values())
+        callable_root_names = sorted(body_labels.values())
         evidence = {
             "phase": phase,
             "source_module_count": len(sources),
@@ -1210,18 +1166,13 @@ def successor_archway_call_edge_result(
                 "modules": module_names,
             },
             "root_inventory": {
-                # Module cohorts are now admitted by semantic region rather
-                # than by the legacy per-root registry. The translated module
-                # closure above is the authoritative inventory; projecting
-                # the retired registry here made valid cohort runs appear to
-                # contain no module roots.
-                "module_count": len(module_names),
-                "module_names": module_names,
-                "callable_body_count": len(callable_body_names),
-                "callable_body_names": callable_body_names,
+                "module_count": len(module_root_addresses),
+                "module_names": sorted(module_root_addresses),
+                "callable_body_count": len(callable_root_names),
+                "callable_body_names": callable_root_names,
             },
             "callable_body_root_count": (
-                len(callable_body_names) if include_callable_bodies else 0
+                len(body_labels) if include_callable_bodies else 0
             ),
             "root_policy": (
                 "all_modules_possible_entries_and_callable_bodies"
@@ -1237,11 +1188,6 @@ def successor_archway_call_edge_result(
                                 query_progress["active_root_id"])
             ),
             "active_root_seconds": query_progress["active_root_seconds"],
-            "active_root_count": query_progress.get("active_root_count", 0),
-            "active_root_ids": list(
-                query_progress.get("active_root_ids", ())
-            ),
-            "root_details": described_root_details(query_progress),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
                 "completed_root_seconds_total"
@@ -1264,14 +1210,7 @@ def successor_archway_call_edge_result(
                 for root_id, seconds
                 in query_progress["slowest_completed_roots"]
             ],
-            "native_call_graph_refusals": (
-                optional_session_diagnostic("native_call_graph_refusals")
-            ),
-            "native_call_graph_cohort_fallbacks": (
-                optional_session_diagnostic(
-                    "native_call_graph_cohort_fallbacks"
-                )
-            ),
+            **callable_evidence,
             "resolved_fact_count": len(snapshot.resolved_facts),
             "fact_family_counts": dict(sorted(family_counts.items())),
             "demand_node_count": session.scheduler.graph.node_count,
@@ -1310,61 +1249,6 @@ def successor_archway_call_edge_result(
             "worklist_schedule_counts": dict(sorted(
                 aggregate_production["worklist_schedule_counts"].items()
             )),
-            "factored_phase_counts": dict(sorted(
-                aggregate_production.get(
-                    "factored_phase_counts", {}
-                ).items()
-            )),
-            "factored_phase_seconds": dict(sorted(
-                aggregate_production.get(
-                    "factored_phase_seconds", {}
-                ).items()
-            )),
-            "factored_rebase_outcome_counts": dict(sorted(
-                aggregate_production.get(
-                    "factored_rebase_outcome_counts", {}
-                ).items()
-            )),
-            "factored_rebase_outcome_seconds": dict(sorted(
-                aggregate_production.get(
-                    "factored_rebase_outcome_seconds", {}
-                ).items()
-            )),
-            "factored_admission_size_counts": dict(sorted(
-                aggregate_production.get(
-                    "factored_admission_size_counts", {}
-                ).items()
-            )),
-            "factored_topology_refresh_size_counts": dict(sorted(
-                aggregate_production.get(
-                    "factored_topology_refresh_size_counts", {}
-                ).items()
-            )),
-            "factored_topology_refresh_delta_counts": dict(sorted(
-                aggregate_production.get(
-                    "factored_topology_refresh_delta_counts", {}
-                ).items()
-            )),
-            "factored_max_admitted_productions": (
-                aggregate_production.get(
-                    "factored_max_admitted_productions", 0
-                )
-            ),
-            "factored_max_admitted_components": (
-                aggregate_production.get(
-                    "factored_max_admitted_components", 0
-                )
-            ),
-            "factored_max_admission_profile": dict(
-                aggregate_production.get(
-                    "factored_max_admission_profile", {}
-                )
-            ),
-            "factored_boundary_regressions": list(
-                aggregate_production.get(
-                    "factored_boundary_regressions", ()
-                )
-            ),
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
             )),
@@ -1393,11 +1277,24 @@ def successor_archway_call_edge_result(
                     "production_repeats_by_family"
                 ].items()
             )),
+            "production_changes_by_family": dict(sorted(
+                aggregate_production[
+                    "production_changes_by_family"
+                ].items()
+            )),
+            "production_growth_coordinates_by_family": dict(sorted(
+                aggregate_production[
+                    "production_growth_coordinates_by_family"
+                ].items()
+            )),
             "production_seconds_by_family": dict(sorted(
                 aggregate_production[
                     "production_seconds_by_family"
                 ].items()
             )),
+            "production_hotspots": list(
+                aggregate_production["production_hotspots"]
+            ),
             "hottest_productions": hottest_productions,
             "slowest_productions": slowest_productions,
             "hottest_transfers": hottest_transfers,
@@ -1408,6 +1305,30 @@ def successor_archway_call_edge_result(
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
+            "trace_invocations": dict(sorted(
+                aggregate_production["trace_invocations"].items()
+            )),
+            "trace_iterations": dict(sorted(
+                aggregate_production["trace_iterations"].items()
+            )),
+            "trace_max_iterations": dict(sorted(
+                aggregate_production["trace_max_iterations"].items()
+            )),
+            "trace_nonconvergences": dict(sorted(
+                aggregate_production["trace_nonconvergences"].items()
+            )),
+            "morphism_transfer_reuse": dict(
+                session.morphism_transfer_reuse_counts()
+            ),
+            "morphism_transfer_reuse_by_operation": dict(
+                session.morphism_transfer_reuse_by_operation()
+            ),
+            "morphism_fact_output_barriers": dict(
+                session.morphism_fact_output_barriers()
+            ),
+            "morphism_read_intersections": dict(
+                session.morphism_read_intersections()
+            ),
             "module_export_summary_count": family_counts.get(
                 "ModuleExportSummary", 0
             ),
@@ -1422,6 +1343,11 @@ def successor_archway_call_edge_result(
                 ),
                 "module_semantic_summary_count": family_counts.get(
                     "ModuleSemanticSummary", 0
+                ),
+                "registered_invocation_summary_count": (
+                    callable_evidence["invocation_context_counts"].get(
+                        "summary_registered", 0
+                    )
                 ),
             },
             "knowledge_commit_counts": session.store.commit_counts,
@@ -1450,9 +1376,6 @@ def successor_archway_call_edge_result(
         """Project a diagnostic graph without claiming scheduler convergence."""
 
         projection_started = time.perf_counter()
-        # Capability candidates are useful diagnostics for missing receiver
-        # flow, but they are abductive method-name guesses rather than
-        # semantic call edges.  Never score them as analysis results.
         semantic_edges = session.semantic_call_edges()
         direct_edges = {
             (
@@ -1494,6 +1417,9 @@ def successor_archway_call_edge_result(
         """Return a bounded live sample without traversing retained facts."""
 
         collection_started = time.perf_counter()
+        callable_evidence = callable_runtime_evidence(
+            session, include_lifecycle=False
+        )
         production = session.scheduler.aggregate_production_telemetry
         production_execution_count = int(
             production["production_execution_count"]
@@ -1504,6 +1430,59 @@ def successor_archway_call_edge_result(
         query_progress = session.scheduler.query_progress
         production_counts = session.scheduler.production_counts
         production_seconds = session.scheduler.production_seconds
+
+        summary_admissions = session.invocation_summary_telemetry()
+        hottest_callable_applications: list[dict[str, object]] = []
+        if summary_admissions:
+            for admission in summary_admissions:
+                address_id = str(admission["address_id"])
+                address = next((
+                    candidate
+                    for candidate in session.store.snapshot().resolved_facts
+                    if candidate.id == address_id
+                ), None)
+                if address is None:
+                    continue
+                providers = session.scheduler.graph.providers(address)
+                executions = sum(
+                    production_counts.get(provider, 0)
+                    for provider in providers
+                )
+                if not executions:
+                    continue
+                prerequisites = {
+                    prerequisite
+                    for provider in providers
+                    for prerequisite in session.scheduler.graph.node(
+                        provider
+                    ).prerequisites
+                }
+                hottest_callable_applications.append({
+                    "address_id": address_id,
+                    "callable": body_labels.get(
+                        admission["body_morphism_id"]
+                    ),
+                    "body_morphism_id": (
+                        admission["body_morphism_id"]
+                    ),
+                    "input_pattern_id": admission["input_pattern_id"],
+                    "executions": executions,
+                    "seconds": sum(
+                        production_seconds.get(provider, 0.0)
+                        for provider in providers
+                    ),
+                    "prerequisite_count": len(prerequisites),
+                    "prerequisites_by_family": dict(sorted(Counter(
+                        prerequisite.family
+                        for prerequisite in prerequisites
+                    ).items())),
+                })
+            hottest_callable_applications.sort(
+                key=lambda item: (
+                    -int(item["executions"]), str(item["address_id"])
+                )
+            )
+            del hottest_callable_applications[20:]
 
         def top_counts(values: Counter[str]) -> dict[str, int | float]:
             return dict(values.most_common(20))
@@ -1540,19 +1519,6 @@ def successor_archway_call_edge_result(
                 query_progress["active_root_id"],
             ),
             "active_root_seconds": query_progress["active_root_seconds"],
-            "active_root_count": query_progress.get("active_root_count", 0),
-            "active_root_ids": list(
-                query_progress.get("active_root_ids", ())
-            ),
-            "root_details": described_root_details(query_progress),
-            "native_call_graph_refusals": (
-                optional_session_diagnostic("native_call_graph_refusals")
-            ),
-            "native_call_graph_cohort_fallbacks": (
-                optional_session_diagnostic(
-                    "native_call_graph_cohort_fallbacks"
-                )
-            ),
             "completed_root_count": query_progress["completed_root_count"],
             "completed_root_seconds_total": query_progress[
                 "completed_root_seconds_total"
@@ -1586,66 +1552,10 @@ def successor_archway_call_edge_result(
             "worklist_schedule_counts": dict(sorted(
                 production["worklist_schedule_counts"].items()
             )),
-            "factored_phase_counts": dict(sorted(
-                production.get("factored_phase_counts", {}).items()
-            )),
-            "factored_phase_seconds": dict(sorted(
-                production.get("factored_phase_seconds", {}).items()
-            )),
-            "factored_rebase_outcome_counts": dict(sorted(
-                production.get(
-                    "factored_rebase_outcome_counts", {}
-                ).items()
-            )),
-            "factored_rebase_outcome_seconds": dict(sorted(
-                production.get(
-                    "factored_rebase_outcome_seconds", {}
-                ).items()
-            )),
-            "factored_admission_size_counts": dict(sorted(
-                production.get(
-                    "factored_admission_size_counts", {}
-                ).items()
-            )),
-            "factored_topology_refresh_size_counts": dict(sorted(
-                production.get(
-                    "factored_topology_refresh_size_counts", {}
-                ).items()
-            )),
-            "factored_topology_refresh_delta_counts": dict(sorted(
-                production.get(
-                    "factored_topology_refresh_delta_counts", {}
-                ).items()
-            )),
-            "factored_max_admitted_productions": production.get(
-                "factored_max_admitted_productions", 0
-            ),
-            "factored_max_admitted_components": production.get(
-                "factored_max_admitted_components", 0
-            ),
-            "factored_max_admission_profile": dict(
-                production.get("factored_max_admission_profile", {})
-            ),
-            "factored_boundary_regressions": list(
-                production.get("factored_boundary_regressions", ())
-            ),
             **{
                 key: value
                 for key, value in production.items()
                 if key.startswith("factored_")
-                and key not in {
-                    "factored_phase_counts",
-                    "factored_phase_seconds",
-                    "factored_rebase_outcome_counts",
-                    "factored_rebase_outcome_seconds",
-                    "factored_admission_size_counts",
-                    "factored_topology_refresh_size_counts",
-                    "factored_topology_refresh_delta_counts",
-                    "factored_max_admitted_productions",
-                    "factored_max_admitted_components",
-                    "factored_max_admission_profile",
-                    "factored_boundary_regressions",
-                }
             },
             "knowledge_commit_counts": dict(sorted(
                 session.store.commit_counts.items()
@@ -1665,23 +1575,53 @@ def successor_archway_call_edge_result(
             "production_repeats_by_family": top_counts(
                 Counter(production["production_repeats_by_family"])
             ),
+            "production_changes_by_family": top_counts(
+                Counter(production["production_changes_by_family"])
+            ),
+            "production_growth_coordinates_by_family": top_counts(
+                Counter(production[
+                    "production_growth_coordinates_by_family"
+                ])
+            ),
             "production_seconds_by_family": top_counts(
                 Counter(production["production_seconds_by_family"])
             ),
+            "production_hotspots": list(production["production_hotspots"]),
             "production_executions_by_provider": top_counts(
                 Counter(production["production_executions_by_provider"])
             ),
-            "production_replay_operation_hotspots": list(
-                production.get(
-                    "production_replay_operation_hotspots", ()
-                )
-            ),
+            "hottest_callable_applications": hottest_callable_applications,
             "transfer_operation_counts": dict(sorted(
                 session.scheduler.transfer_operation_counts.items()
             )),
             "transfer_operation_seconds": dict(sorted(
                 session.scheduler.transfer_operation_seconds.items()
             )),
+            "trace_invocations": top_counts(Counter(
+                production["trace_invocations"]
+            )),
+            "trace_iterations": top_counts(Counter(
+                production["trace_iterations"]
+            )),
+            "trace_max_iterations": top_counts(Counter(
+                production["trace_max_iterations"]
+            )),
+            "trace_nonconvergences": top_counts(Counter(
+                production["trace_nonconvergences"]
+            )),
+            "morphism_transfer_reuse": dict(
+                session.morphism_transfer_reuse_counts()
+            ),
+            "morphism_transfer_reuse_by_operation": dict(
+                session.morphism_transfer_reuse_by_operation()
+            ),
+            "morphism_fact_output_barriers": dict(
+                session.morphism_fact_output_barriers()
+            ),
+            "morphism_read_intersections": dict(
+                session.morphism_read_intersections()
+            ),
+            **callable_evidence,
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
                 * (1024 if sys.platform.startswith("linux") else 1)
@@ -1728,28 +1668,14 @@ def successor_archway_call_edge_result(
     )
     try:
         with profile_context as sampling_profile:
-            run_call_graph = getattr(session, "run_semantic_call_graph", None)
-            if not callable(run_call_graph):
-                # Historical engine revisions remain independently scoreable;
-                # this adapter fallback does not create a second authority in
-                # any one engine session.
-                run_call_graph = session.run_native_semantic_call_graph
-            forward = run_call_graph()
+            forward = session.run_semantic_call_graph()
     except Exception as exc:
         evidence = current_evidence(phase="error")
-        evidence["exception_traceback"] = traceback.format_exc()
-        partial = current_partial_graph_evidence()
-        evidence.update(partial)
+        evidence["failure_traceback"] = traceback.format_exc()
         if progress is not None:
             progress(evidence)
-        partial_edges = {
-            tuple(edge)
-            for edge in partial["partial_semantic_graph"][
-                "predicted_edges"
-            ]
-        }
         raise PyCGCaseExecutionError(
-            f"{type(exc).__name__}: {exc}", evidence, partial_edges
+            f"{type(exc).__name__}: {exc}", evidence
         ) from exc
     finally:
         stop_sampling.set()
@@ -1960,6 +1886,195 @@ def _attach_source_line(
     }
 
 
+def coordinated_archway_call_edges(
+    case: PyCGCase,
+    *,
+    engine_root: Path,
+) -> set[Edge]:
+    """Project the demand-driven semantic graph into PyCG's edge vocabulary."""
+
+    if not engine_root.exists():
+        raise FileNotFoundError(f"engine root not found: {engine_root}")
+    engine_text = str(engine_root)
+    if engine_text not in sys.path:
+        sys.path.insert(0, engine_text)
+
+    from sd_core.analysis.runtime.call_targets import (
+        BoundMethod,
+        BuiltinBoundary,
+        ClassConstruction,
+        ExternalSummaryBoundary,
+        LocalFunction,
+    )
+    from sd_core.analysis.runtime.contracts import BoundarySubject, ModuleKey
+    from sd_core.analysis.runtime.semantic_call_graph import (
+        EntrySeed,
+        SemanticCallGraphRequest,
+        SemanticCallGraphRuntime,
+    )
+    from sd_core.runners.contextual_call_resolution import (
+        build_python_program_callable_indexes,
+    )
+
+    sources = _load_case_sources(case)
+    program = build_python_program_callable_indexes(sources)
+    root_modules = _coordinated_root_modules(case, sources)
+    roots = tuple(
+        EntrySeed(
+            f"module:{module_name}",
+            BoundarySubject(
+                ModuleKey("workspace:program", module_name),
+                f"{module_name}:<module>",
+            ),
+        )
+        for module_name in root_modules
+    )
+    result = SemanticCallGraphRuntime(program).build(SemanticCallGraphRequest(
+        program.revision,
+        roots,
+        requester=f"pycg:{case.suite}:{case.suite_path}",
+    ))
+    declared_initializers = {
+        boundary.declaration
+        for boundary, _parameters in program.signatures
+        if boundary.declaration.endswith(".__init__")
+    }
+    edges: set[Edge] = set()
+    for edge in result.edges:
+        caller = _coordinated_local_display_name(edge.caller.boundary.declaration)
+        target = edge.target
+        if isinstance(target, (LocalFunction, BoundMethod)):
+            callee = _coordinated_local_display_name(target.boundary.declaration)
+        elif isinstance(target, ClassConstruction):
+            initializer = f"{target.boundary.declaration}.__init__"
+            callee = (
+                _coordinated_local_display_name(initializer)
+                if initializer in declared_initializers
+                else None
+            )
+        elif isinstance(target, BuiltinBoundary):
+            qualified = target.boundary.qualified_name.removeprefix("builtins.")
+            callee = f"<builtin>.{qualified}"
+        elif isinstance(target, ExternalSummaryBoundary):
+            callee = target.boundary.qualified_name
+        else:
+            callee = None
+        if callee is not None:
+            edges.add((caller, callee))
+    return edges
+
+
+def _coordinated_root_modules(
+    case: PyCGCase,
+    sources: Mapping[str, str],
+) -> tuple[str, ...]:
+    if case.suite == "micro" and "main" in sources:
+        return ("main",)
+    return tuple(sorted(sources))
+
+
+def _coordinated_local_display_name(declaration: str) -> str:
+    module_name, local_name = declaration.split(":", 1)
+    return module_name if local_name == "<module>" else f"{module_name}.{local_name}"
+
+
+def archway_call_edges(
+    case: PyCGCase,
+    *,
+    engine_root: Path,
+    include_diagnostic_name_hints: bool = False,
+    analysis_product: str = "standalone",
+    callable_root_activation: str = "off",
+    callable_root_body_ids: frozenset[str] | None = None,
+) -> set[Edge]:
+    """Project Archway call-relation facts to PyCG edge strings.
+
+    This is intentionally thin. It imports the engine from ``engine_root`` and
+    reads Archway's call relation. It does not parse Python source directly to
+    invent edges.
+    """
+
+    if not engine_root.exists():
+        raise FileNotFoundError(f"engine root not found: {engine_root}")
+    engine_text = str(engine_root)
+    if engine_text not in sys.path:
+        sys.path.insert(0, engine_text)
+
+    from sd_core.analysis.callloops.call_relation import project_call_relation
+    from sd_core.analysis.callloops.runner import analyze_morphism
+    from sd_core.runners.types import analyze_program_result
+    from sd_core.tooling.harness import ProgramResult
+
+    sources = _load_case_sources(case)
+    program = ProgramResult.from_sources(sources)
+    edges: set[Edge] = set()
+    program_run = analyze_program_result(
+        program,
+        body_summary_consumption="safe",
+        analysis_product=analysis_product,
+        external_from_import_fallback=True,
+        callable_root_activation=callable_root_activation,
+        callable_root_body_ids=callable_root_body_ids,
+    )
+    structural_runs = {
+        module_name: analyze_morphism(
+            translation.morphism,
+            registry=program_run.modules[module_name].target.registry,
+        )
+        for module_name, translation in sorted(program.modules.items())
+        if module_name in program_run.modules
+        and program_run.modules[module_name].target.registry is not None
+    }
+    function_names: dict[str, str] = {}
+    for module_name, structural in structural_runs.items():
+        type_run = program_run.modules[module_name]
+        function_names.update(
+            _function_display_names(module_name, structural.functions, type_run.target)
+        )
+
+    for module_name, structural in sorted(structural_runs.items()):
+        type_run = program_run.modules.get(module_name)
+        if type_run is None:
+            continue
+        registry = type_run.target.registry
+        if registry is None:
+            continue
+        projection = project_call_relation(
+            structural,
+            seed_id=f"sid:v1:pycg-seed:{case.suite_path}:{module_name}",
+            context_id=f"sid:v1:pycg-context:{case.suite_path}:module-load",
+            registry=registry,
+        )
+        for edge in projection.edges:
+            if edge.precision in {"name_hint", "unresolved"}:
+                if not include_diagnostic_name_hints:
+                    continue
+                caller = (
+                    module_name
+                    if edge.caller_body_id is None
+                    else function_names.get(edge.caller_body_id)
+                )
+                if caller is None:
+                    continue
+                for callee_id in edge.callee_body_ids:
+                    callee = function_names.get(callee_id)
+                    if callee is not None:
+                        edges.add((caller, callee))
+                continue
+            caller = (
+                module_name
+                if edge.caller_body_id is None
+                else function_names.get(edge.caller_body_id)
+            )
+            if caller is None:
+                continue
+            for callee_id in edge.callee_body_ids:
+                callee = _callee_display_name(callee_id, function_names)
+                if callee is not None:
+                    edges.add((caller, callee))
+    return _inline_synthetic_frame_edges(edges)
+
+
 def _load_case_sources(case: PyCGCase) -> dict[str, str]:
     sources: dict[str, str] = {}
     for path in case.source_paths:
@@ -2135,6 +2250,82 @@ def _method_owner_name(target: object, body_id: str) -> str | None:
     return name if isinstance(name, str) and name else None
 
 
+def _function_display_names(
+    module_name: str,
+    functions: Iterable[object],
+    target: object,
+) -> dict[str, str]:
+    by_id = {
+        getattr(function, "body_id"): function
+        for function in functions
+        if isinstance(getattr(function, "body_id", None), str)
+    }
+    lambda_names: dict[str, str] = {}
+    lambda_index = 0
+    for function in functions:
+        body_id = getattr(function, "body_id", None)
+        if not isinstance(body_id, str):
+            continue
+        if getattr(function, "name", None) == "<lambda>":
+            lambda_index += 1
+            lambda_names[body_id] = f"<lambda{lambda_index}>"
+
+    resolved: dict[str, str] = {}
+    resolving: set[str] = set()
+
+    def resolve(body_id: str) -> str | None:
+        if body_id in resolved:
+            return resolved[body_id]
+        if body_id in resolving:
+            return None
+        function = by_id.get(body_id)
+        if function is None:
+            return None
+        resolving.add(body_id)
+        raw_name = getattr(function, "name", None)
+        if not isinstance(raw_name, str) or not raw_name:
+            resolving.remove(body_id)
+            return None
+        function_name = lambda_names.get(body_id, raw_name)
+        lexical_parent = getattr(function, "lexical_parent_body_id", None)
+        parent_name = (
+            resolve(lexical_parent)
+            if isinstance(lexical_parent, str)
+            else None
+        )
+        if parent_name is not None:
+            display = f"{parent_name}.{function_name}"
+        else:
+            display = _qualify_function_name(
+                module_name,
+                function_name,
+                owner_name=_method_owner_name(target, body_id),
+            )
+        resolving.remove(body_id)
+        resolved[body_id] = display
+        return display
+
+    for body_id in by_id:
+        resolve(body_id)
+    return resolved
+
+
+def _qualify_function_name(
+    module_name: str,
+    function_name: str,
+    *,
+    owner_name: str | None = None,
+) -> str:
+    if function_name.startswith(module_name + "."):
+        return function_name
+    if owner_name is not None:
+        owner = owner_name
+        if owner.startswith(module_name + "."):
+            owner = owner.removeprefix(module_name + ".")
+        return f"{module_name}.{owner}.{function_name}"
+    return f"{module_name}.{function_name}"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m archway_benchmarks.pycg")
     parser.add_argument("--corpus-root", required=True)
@@ -2155,6 +2346,43 @@ def main(argv: list[str] | None = None) -> int:
         help=(
             "Optional per-case wall-clock timeout. Timed-out cases are recorded "
             "with status=timeout and zero predicted edges; the run continues."
+        ),
+    )
+    parser.add_argument(
+        "--edge-provider",
+        choices=("successor", "coordinated", "legacy"),
+        default="successor",
+        help=(
+            "Call-edge producer. successor uses the diagram-only fact runtime; "
+            "coordinated is the quarantined source-index runtime; legacy "
+            "projects the reduced-product call relation."
+        ),
+    )
+    parser.add_argument(
+        "--analysis-product",
+        choices=("standalone", "type_requirements_product"),
+        default="standalone",
+        help=(
+            "Archway program analysis product mode. The default preserves the "
+            "legacy program-level type runner; type_requirements_product runs "
+            "the fuller reduced-product participant path."
+        ),
+    )
+    parser.add_argument(
+        "--callable-root-activation",
+        choices=("off", "all"),
+        default="off",
+        help=(
+            "Opt-in engine root policy. 'all' analyzes every uncalled "
+            "parameter-bearing source callable with conservative arguments."
+        ),
+    )
+    parser.add_argument(
+        "--include-diagnostic-name-hints",
+        action="store_true",
+        help=(
+            "Include structural name-hint edges. These are diagnostic only and "
+            "must not be treated as claim-grade semantic call targets."
         ),
     )
     parser.add_argument(
@@ -2200,7 +2428,11 @@ def main(argv: list[str] | None = None) -> int:
         suite=args.suite,
         limit=args.limit,
         case_names=tuple(args.case),
+        include_diagnostic_name_hints=args.include_diagnostic_name_hints,
+        analysis_product=args.analysis_product,
+        callable_root_activation=args.callable_root_activation,
         case_timeout_seconds=args.case_timeout_seconds,
+        edge_provider=args.edge_provider,
         successor_record_events=args.successor_record_events,
         successor_summarize_callee_results=(
             args.successor_summarize_callee_results

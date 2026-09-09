@@ -117,17 +117,29 @@ class SuccessorArchwayAnalysisEngine:
                 name: item.morphism
                 for name, item in program.modules.items()
             }
+            # The sparse lifted product is the authoritative local carrier
+            # for a type-priority workload. Native scalar cells remain the
+            # targeted projection mechanism for observations not emitted at
+            # a forward or summary boundary; they are not a replacement for
+            # coordinated local interpretation of each diagram morphism.
             session = open_hybrid_program_session(
                 modules,
                 "main",
                 record_events=self.record_events,
             )
-            forward = session.run_analysis_roots(include_callable_bodies=True)
+            # Seed only the explicit program entry. Requested type readouts
+            # below extend this same session through shared callable-body
+            # workload roots; unrequested bodies are not eager entry points.
+            forward_workload = session.run_workload(
+                session.plan_signature_workload(
+                    (), entry_modules=("main",)
+                )
+            )
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
                 session=session,
-                forward=forward,
+                forward=forward_workload.seed_run,
             )
         except Exception as exc:
             return SuccessorArchwayResult(
@@ -173,11 +185,12 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
             if address not in demanded_addresses
         ):
             demanded_addresses.update(new_addresses)
-            result.targeted_runs.append(
-                result.session.observe(tuple(sorted(
+            workload = result.session.run_workload(
+                result.session.plan_signature_workload(tuple(sorted(
                     new_addresses, key=lambda address: address.id
                 )))
             )
+            result.targeted_runs.extend(workload.targeted_runs)
             # Targeted refinement may discover a context-specific instance
             # of an observation template (most notably a callable-summary
             # application) while the fallback address that triggered the
@@ -322,9 +335,12 @@ def _observation_kind_matches(item, location: Location) -> bool:
     )
 
 
-def _observation_scope_matches(item, location: Location) -> bool:
+def _observation_scope_matches(
+    item, location: Location, *, requested_name: str | None = None
+) -> bool:
     observed = item.function
     requested = location.function
+    name = location.name if requested_name is None else requested_name
     if observed == requested:
         return True
     if (
@@ -339,7 +355,7 @@ def _observation_scope_matches(item, location: Location) -> bool:
     return bool(
         owner
         and item.name.startswith("self.")
-        and location.name
+        and name
         == f"{owner}.{item.name.removeprefix('self.')}"
     )
 
@@ -392,6 +408,24 @@ def _map_container_path(session, location: Location):
         and item.position is not None
         and item.position.row == location.line
     )
+    roots = tuple(
+        item for item in session.type_observations()
+        if _observation_name_matches(item, base)
+        and item.kind == location.kind
+        and _observation_scope_matches(
+            item, location, requested_name=base
+        )
+        and item.position is not None
+        and item.position.row == location.line
+    )
+    native = tuple(
+        item for item in session.occurrence_path_observations(roots, slots)
+        if item.position is not None
+        and item.position.row == location.line
+    )
+    return tuple(dict.fromkeys((*indexed, *native)))
+
+
 def _typeeval_name(value: str) -> str:
     if value == "builtins.callable":
         return "callable"

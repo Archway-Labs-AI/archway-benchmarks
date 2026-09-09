@@ -102,6 +102,27 @@ def audit_rows(rows: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     }
 
 
+def audit_retained_residual_evidence(
+    *, repo_name: str, predictions_root: Path,
+) -> dict[str, Any]:
+    """Audit canonical type strings retained by the official scorer."""
+
+    evidence_path = (
+        Path(predictions_root) / repo_name / f"{repo_name}_scored_keys.json"
+    )
+    if not evidence_path.is_file():
+        raise FileNotFoundError(f"retained scorer evidence does not exist: {evidence_path}")
+    payload = json.loads(evidence_path.read_text())
+    if payload.get("schema") != "typybench-scored-keys-v2":
+        raise ValueError(
+            "retained scorer evidence lacks canonical expected/predicted types; "
+            "rerun the official residual probe"
+        )
+    if not payload.get("type_evidence_complete"):
+        raise ValueError("retained scorer type evidence is incomplete")
+    return audit_rows(payload["keys"])
+
+
 def run_official_residual_probe(
     *,
     repo_name: str,
@@ -160,13 +181,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--image")
     parser.add_argument("--timeout", type=int, default=300)
-    args = parser.parse_args(argv)
-    result = run_official_residual_probe(
-        repo_name=args.repo,
-        predictions_root=args.predictions_root,
-        image=args.image,
-        timeout=args.timeout,
+    parser.add_argument(
+        "--retained-evidence",
+        action="store_true",
+        help="use complete v2 type evidence retained by this scorer output",
     )
+    args = parser.parse_args(argv)
+    if args.retained_evidence:
+        result = audit_retained_residual_evidence(
+            repo_name=args.repo, predictions_root=args.predictions_root,
+        )
+    else:
+        result = run_official_residual_probe(
+            repo_name=args.repo,
+            predictions_root=args.predictions_root,
+            image=args.image,
+            timeout=args.timeout,
+        )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
     print(json.dumps({key: value for key, value in result.items() if key != "rows"}, indent=2))
