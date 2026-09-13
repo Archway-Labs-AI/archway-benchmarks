@@ -1826,7 +1826,7 @@ def _successor_semantic_edge_evidence(edge) -> dict[str, object]:
         invocation_context.id
         if invocation_context is not None
         else (
-            f"{edge.invocation.caller_context}:"
+            f"{edge.invocation.invocation_template_context}:"
             f"{edge.invocation.callsite_morphism_id}:"
             f"{edge.invocation.policy_id}"
         )
