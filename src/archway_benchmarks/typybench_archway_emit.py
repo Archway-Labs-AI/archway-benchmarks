@@ -1582,7 +1582,7 @@ try:
                 "top_new_application_callers": (
                     Counter(
                         (
-                            spec.invocation.caller_context,
+                            spec.invocation.invocation_template_context,
                             spec.callable_value.body_morphism_id,
                         )
                         for application, spec
