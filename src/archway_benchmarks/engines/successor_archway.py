@@ -94,7 +94,7 @@ class SuccessorArchwayAnalysisEngine:
                 "SuccessorArchwayAnalysisEngine consumes ArchwayTranslation"
             )
         try:
-            from sd_core.analysis.diagram_analysis import (
+            from sd_core.analysis.diagram_analysis.hybrid_forward import (
                 open_hybrid_program_session,
             )
             from sd_core.tooling.harness import ProgramResult
