@@ -35,7 +35,8 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
         'session_options["callable_input_exact_limit"] = ('
         in worker_source
     )
-    assert "TYPE_OF,\n    open_hybrid_program_session," in worker_source
+    assert "from sd_core.analysis.diagram_analysis.route_sensitive_facts import TYPE_OF" in worker_source
+    assert "from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session" in worker_source
     assert "session.store.history_since(" in worker_source
     assert "unmatched_body_labels = requested_body_labels.difference(" in worker_source
     assert "requested successor body labels are not present" in worker_source
@@ -1223,3 +1224,39 @@ def analyze_source(source, module_name):
     assert profile["translation_trace"]["span_count"] == 3
     assert profile["analyze_source"]["ok"] is False
     assert "TimeoutExpired" in profile["analyze_source"]["error"]
+
+
+def test_failure_readback_preserves_summary_identity_and_diagnostic_errors():
+    # Execute the actual isolated worker helper without importing its engine.
+    outer = ast.parse(inspect.getsource(_run_successor_repo_probe))
+    worker = next(
+        node.value.value for node in ast.walk(outer)
+        if isinstance(node, ast.Assign)
+        and any(isinstance(t, ast.Name) and t.id == "probe" for t in node.targets)
+    )
+    helper = next(
+        node for node in ast.parse(worker).body
+        if isinstance(node, ast.FunctionDef) and node.name == "failure_runtime_evidence"
+    )
+    def unavailable_scheduler(session):
+        raise RuntimeError("scheduler unavailable")
+    namespace = {"bounded_scheduler_snapshot": unavailable_scheduler}
+    exec(compile(ast.Module(body=[helper], type_ignores=[]), "worker", "exec"), namespace)
+    read = namespace["failure_runtime_evidence"]
+
+    class Session:
+        def invocation_summary_telemetry(self):
+            return ({"application_context": "context-1", "body_display_name": "pkg.fn"},)
+
+    evidence = read(Session(), True)
+    assert evidence["invocation_summaries"][0]["body_display_name"] == "pkg.fn"
+    assert evidence["diagnostic_errors"] == {"scheduler": "RuntimeError: scheduler unavailable"}
+    assert "invocation_summaries" not in read(Session(), False)
+
+    class FailedSession:
+        def invocation_summary_telemetry(self):
+            raise ValueError("telemetry unavailable")
+
+    assert read(FailedSession(), True)["diagnostic_errors"]["invocation_summaries"] == (
+        "ValueError: telemetry unavailable"
+    )

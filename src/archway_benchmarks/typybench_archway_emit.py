@@ -1043,6 +1043,24 @@ def bounded_scheduler_snapshot(session):
         ),
     }
 
+
+def failure_runtime_evidence(session, diagnostic_details):
+    """Best-effort public readback must never replace the analysis failure."""
+    evidence = {}
+    readers = {"scheduler": lambda: bounded_scheduler_snapshot(session)}
+    if diagnostic_details:
+        readers["invocation_summaries"] = lambda: list(
+            session.invocation_summary_telemetry()
+        )
+    for name, read in readers.items():
+        try:
+            evidence[name] = read()
+        except Exception as diagnostic_error:
+            evidence.setdefault("diagnostic_errors", {})[name] = (
+                f"{type(diagnostic_error).__name__}: {diagnostic_error}"
+            )
+    return evidence
+
 try:
     phase_started = time.monotonic()
     all_paths = sorted(root.rglob("*.py"))
@@ -2131,6 +2149,7 @@ try:
         - observation_projection_seconds
     )
 except Exception as exc:
+    original_traceback = traceback.format_exc()
     print(
         f"ARCHWAY_FAILURE {type(exc).__name__}: {exc}",
         file=sys.stderr,
@@ -2150,11 +2169,11 @@ except Exception as exc:
             session_open_seconds - translation_seconds
         )
     if "session" in locals():
-        partial_summary["scheduler"] = bounded_scheduler_snapshot(session)
+        partial_summary.update(failure_runtime_evidence(session, diagnostic_details))
     out = {
         "ok": False,
         "error": f"{type(exc).__name__}: {exc}",
-        "trace_tail": traceback.format_exc()[-2400:],
+        "trace_tail": original_traceback[-2400:],
         "analysis_summary": partial_summary,
     }
 encode_started = time.monotonic()
