@@ -189,6 +189,10 @@ def _run_command_group(command: list[str], *, timeout: int) -> int:
         raise
 
 
+class ContainerCleanupError(RuntimeError):
+    """Stop the scoring pass when container termination is unconfirmed."""
+
+
 def _run_podman_score(
     repo: str, image: str, predictions: Path, logs: Path, *, timeout: int,
 ) -> int:
@@ -221,19 +225,26 @@ def _run_podman_score(
             return process.wait(timeout=timeout + 15)
         finally:
             # Killing the client alone does not establish container termination.
-            cleanup = subprocess.run(
-                ["podman", "rm", "--force", "--ignore", name],
-                capture_output=True, text=True, timeout=30,
-            )
-            _write_json(logs / f"{repo}-cleanup.json", {
-                "container": name, "returncode": cleanup.returncode,
-                "stdout": cleanup.stdout, "stderr": cleanup.stderr,
-            })
-            if process.poll() is None:
-                process.kill()
-                process.wait()
-            if cleanup.returncode:
-                raise RuntimeError(f"container cleanup failed: {name}; stop before retrying")
+            try:
+                cleanup = subprocess.run(
+                    ["podman", "rm", "--force", "--ignore", name],
+                    capture_output=True, text=True, timeout=30,
+                )
+                _write_json(logs / f"{repo}-cleanup.json", {
+                    "container": name, "returncode": cleanup.returncode,
+                    "stdout": cleanup.stdout, "stderr": cleanup.stderr,
+                })
+                if cleanup.returncode:
+                    raise ContainerCleanupError(f"container cleanup failed: {name}")
+            except subprocess.TimeoutExpired as error:
+                _write_json(logs / f"{repo}-cleanup.json", {
+                    "container": name, "status": "timed_out",
+                })
+                raise ContainerCleanupError(f"container cleanup timed out: {name}") from error
+            finally:
+                if process.poll() is None:
+                    process.kill()
+                    process.wait()
 
 
 def main() -> None:
@@ -413,6 +424,15 @@ def main() -> None:
                 "elapsed_seconds": time.monotonic() - started,
                 "score": score,
             }
+        except ContainerCleanupError as exc:
+            score_records[repo_name] = {
+                "status": "failed", "error": str(exc),
+                "finished_unix": time.time(),
+            }
+            manifest["run_status"] = "cleanup_failed"
+            _update_aggregates(manifest, score_records)
+            _write_json(score_manifest_path, manifest)
+            raise
         except Exception as exc:
             record = {
                 "status": "failed",

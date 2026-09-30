@@ -15,7 +15,8 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
 
 
-def test_podman_timeout_removes_exact_container_and_kills_remaining_client(tmp_path, monkeypatch):
+@pytest.mark.parametrize("cleanup_status", [0, 1, "timeout"])
+def test_podman_timeout_removes_exact_container_and_kills_remaining_client(tmp_path, monkeypatch, cleanup_status):
     predictions = tmp_path / "predictions"
     (predictions / "repo").mkdir(parents=True)
     calls = []
@@ -36,8 +37,15 @@ def test_podman_timeout_removes_exact_container_and_kills_remaining_client(tmp_p
 
     process = Process()
     monkeypatch.setattr(_MODULE.subprocess, "Popen", lambda command, **kwargs: (calls.append(command), process)[1])
-    monkeypatch.setattr(_MODULE.subprocess, "run", lambda command, **kwargs: (calls.append(command), SimpleNamespace(returncode=0, stdout="", stderr=""))[1])
-    with pytest.raises(subprocess.TimeoutExpired):
+    def cleanup(command, **kwargs):
+        calls.append(command)
+        if cleanup_status == "timeout":
+            raise subprocess.TimeoutExpired(command, 30)
+        return SimpleNamespace(returncode=cleanup_status, stdout="", stderr="")
+
+    monkeypatch.setattr(_MODULE.subprocess, "run", cleanup)
+    expected = subprocess.TimeoutExpired if cleanup_status == 0 else _MODULE.ContainerCleanupError
+    with pytest.raises(expected):
         _MODULE._run_podman_score("repo", "a" * 64, predictions, tmp_path / "logs", timeout=1)
     assert process.killed
     run, cleanup = calls
