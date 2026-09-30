@@ -115,6 +115,10 @@ def main() -> None:
     parser.add_argument("engine_worktree", type=Path)
     parser.add_argument("--repo", action="append", dest="repos")
     parser.add_argument(
+        "--python-executable", type=Path,
+        help="Explicit worker interpreter; otherwise use the engine Hatch environment.",
+    )
+    parser.add_argument(
         "--partition",
         choices=("all", "development", "holdout"),
         default="all",
@@ -141,6 +145,17 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
+    if args.python_executable is not None and not args.python_executable.is_file():
+        parser.error("--python-executable must name an existing interpreter")
+    runner = (
+        (str(args.python_executable.absolute()),)
+        if args.python_executable is not None else ("hatch", "run", "python")
+    )
+    execution_configuration = {
+        "runner": list(runner),
+        "timeout_per_repo": args.timeout_per_repo,
+        "progress_timeout_seconds": args.body_timeout,
+    }
 
     def interrupt_run(_signum, _frame):
         raise KeyboardInterrupt
@@ -193,6 +208,7 @@ def main() -> None:
             "harness_revision": harness_revision,
             "partition": args.partition,
             "selected_repositories": repos,
+            "execution_configuration": execution_configuration,
         }
         mismatches = {
             name: (manifest.get(name), expected)
@@ -221,6 +237,7 @@ def main() -> None:
             # change between checkpoint attempts; revision pins alone cannot
             # prove that a resumed aggregate represents the same run.
             "selected_repositories": repos,
+            "execution_configuration": execution_configuration,
             "repositories": {},
         }
 
@@ -279,6 +296,7 @@ def main() -> None:
                 untyped_root=source_root,
                 predictions_root=predictions_root,
                 engine_worktree=args.engine_worktree,
+                runner=runner,
                 timeout=max(
                     1, min(args.timeout_per_repo, int(remaining_total))
                 ),
