@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
 import signal
 import time
 from pathlib import Path
@@ -106,6 +107,35 @@ def test_expected_edges_from_callgraph():
     assert expected_edges_from_callgraph({"main": ["main.f"], "main.f": []}) == {
         ("main", "main.f")
     }
+
+
+def test_successor_lambda_ordinals_are_local_to_each_function(tmp_path: Path):
+    engine_root = Path(os.environ.get(
+        "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")
+    ))
+    if not engine_root.exists():
+        pytest.skip("Set ARCHWAY_ENGINE_ROOT to run engine integration checks")
+    case_root = _write_case(tmp_path, "lambdas", "scopes", {})
+    (case_root / "main.py").write_text(
+        "def target():\n    return 1\n"
+        "def first():\n    return (lambda: target())()\n"
+        "def second():\n    return (lambda: target())()\n"
+        "first()\nsecond()\n", encoding="utf-8"
+    )
+    (case,) = load_cases(tmp_path)
+    result = successor_archway_call_edge_result(case, engine_root=engine_root)
+    assert result.edges == frozenset({
+        ("main", "main.first"),
+        ("main", "main.second"),
+        ("main.first", "main.first.<lambda1>"),
+        ("main.second", "main.second.<lambda1>"),
+        ("main.first.<lambda1>", "main.target"),
+        ("main.second.<lambda1>", "main.target"),
+    })
+    evidence = result.evidence["semantic_call_edge_evidence"]
+    assert any(row["projected_edge"] == [
+        "main.second.<lambda1>", "main.target"
+    ] for row in evidence)
 
 
 def test_score_edges():
@@ -714,3 +744,14 @@ def test_lambda_display_numbering_is_per_lexical_scope():
         "g2": "module.g.<lambda2>", "nested": "module.g.<lambda1>.<lambda1>",
         "m1": "module.<lambda1>", "m2": "module.<lambda2>",
     }
+
+
+def test_successor_lambda_projection_uses_full_callable_inventory():
+    from archway_benchmarks.pycg import _pycg_callable_name_map
+    names = ["m.f.<lambda1>", "m.g.<lambda2>", "m.g.<lambda4>",
+             "m.g.<lambda2>.<lambda3>", "m.g"]
+    projected = _pycg_callable_name_map(reversed(names))
+    assert projected["m.g.<lambda2>"] == "m.g.<lambda1>"
+    assert projected["m.g.<lambda4>"] == "m.g.<lambda2>"
+    assert projected["m.g.<lambda2>.<lambda3>"] == "m.g.<lambda1>.<lambda1>"
+    assert projected["m.g"] == "m.g"
