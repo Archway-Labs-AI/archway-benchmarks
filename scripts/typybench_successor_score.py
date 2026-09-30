@@ -140,7 +140,20 @@ def _partitioned_aggregates(
 def _update_aggregates(
     manifest: dict[str, object], records: dict[str, object]
 ) -> None:
-    aggregates = _partitioned_aggregates(records)
+    selection = manifest.get("selection", {})
+    eligible = selection.get("eligible_repositories", list(records))
+    selected_records = {name: records[name] for name in eligible if name in records}
+    aggregates = _partitioned_aggregates(selected_records)
+    manifest["coverage"] = {
+        "eligible_repositories": len(eligible),
+        "scored_repositories": aggregates["all"]["repositories_scored"],
+        "unscored_repositories": {
+            name: records.get(name, {}).get("status", "pending")
+            for name in eligible
+            if records.get(name, {}).get("status") != "complete"
+            or not isinstance(records.get(name, {}).get("score"), dict)
+        },
+    }
     manifest["aggregate"] = aggregates["all"]
     manifest["aggregates"] = aggregates
     manifest["holdout_version"] = HOLDOUT_VERSION
@@ -337,9 +350,13 @@ def main() -> None:
             flush=True,
         )
 
-    manifest["run_status"] = "complete"
     manifest["updated_unix"] = time.time()
     _update_aggregates(manifest, score_records)
+    manifest["run_status"] = (
+        "no_eligible_repositories" if not repositories
+        else "finished_with_incomplete_repositories"
+        if manifest["coverage"]["unscored_repositories"] else "complete"
+    )
     _write_json(score_manifest_path, manifest)
 
 

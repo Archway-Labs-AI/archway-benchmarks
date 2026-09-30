@@ -161,3 +161,46 @@ def test_full_terminal_selection_includes_failure_fallbacks_but_not_live_runs():
     assert _MODULE._eligible_repositories(
         manifest, selected=None, include_partial=True,
     ) == ["complete", "partial"]
+
+
+def test_resumed_subset_excludes_old_scores_and_exposes_unscored_selection():
+    manifest = {"selection": {"eligible_repositories": ["rich", "paper-qa", "flake8"]}}
+    records = {
+        "rich": {"status": "complete", "score": {"total_vars": 10, "overall_score_exact": 0.2}},
+        "black": {"status": "complete", "score": {"total_vars": 990, "overall_score_exact": 1.0}},
+        "paper-qa": {"status": "unavailable", "reason": "docker_image_missing"},
+    }
+    _MODULE._update_aggregates(manifest, records)
+    assert manifest["aggregate"]["total_vars"] == 10
+    assert manifest["aggregate"]["overall_score_exact"] == 0.2
+    assert manifest["coverage"] == {
+        "eligible_repositories": 3,
+        "scored_repositories": 1,
+        "unscored_repositories": {"paper-qa": "unavailable", "flake8": "pending"},
+    }
+    assert "black" in records  # Historical result is retained, excluded from this selection.
+
+
+def test_missing_images_produce_accountable_incomplete_score_manifest(tmp_path, monkeypatch):
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "manifest.json").write_text(_MODULE.json.dumps({"repositories": {
+        "rich": {"status": "failed", "files_failed": 12},
+        "paper-qa": {"status": "complete", "files_failed": 0},
+        "black": {"status": "running"},
+    }}))
+    monkeypatch.setattr(_MODULE, "local_docker_images", lambda: set())
+    monkeypatch.setattr(sys, "argv", [
+        "score", str(run), str(tmp_path / "corpus"), str(tmp_path / "scorer"),
+        "--include-incomplete", "--no-resume",
+    ])
+    _MODULE.main()
+    manifest = _MODULE.json.loads((run / "score-manifest.json").read_text())
+    assert manifest["run_status"] == "finished_with_incomplete_repositories"
+    assert manifest["coverage"]["eligible_repositories"] == 2
+    assert manifest["coverage"]["scored_repositories"] == 0
+    assert manifest["coverage"]["unscored_repositories"] == {
+        "rich": "unavailable", "paper-qa": "unavailable",
+    }
+    assert manifest["selection"]["excluded_repositories"] == {"black": "running"}
+    assert manifest["analysis_outcomes"]["rich"]["files_failed"] == 12
