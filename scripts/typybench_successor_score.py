@@ -259,7 +259,12 @@ def main() -> None:
         "--include-incomplete", action="store_true",
         help="score retained outputs from all terminal attempts, including unannotated failure fallbacks",
     )
-    parser.add_argument("--no-resume", action="store_true")
+    resume_policy = parser.add_mutually_exclusive_group()
+    resume_policy.add_argument("--no-resume", action="store_true")
+    resume_policy.add_argument(
+        "--resume-unattempted", action="store_true",
+        help="preserve recorded outcomes and score only repositories without a score record",
+    )
     parser.add_argument(
         "--podman-image-map", type=Path,
         help="JSON mapping repository names to immutable local image IDs; use rootless Podman",
@@ -342,6 +347,11 @@ def main() -> None:
     for index, repo_name in enumerate(repositories, 1):
         existing = score_records.get(repo_name)
         csv_path = result_csv_path(repo_name, predictions_root)
+        if args.resume_unattempted and existing is not None:
+            if existing.get("status") not in {"complete", "failed", "unavailable"}:
+                raise RuntimeError(f"cannot preserve unresolved scoring outcome: {repo_name}")
+            print(f"ARCHWAY_TYPYBENCH_SCORE preserve {index}/{len(repositories)} {repo_name}", flush=True)
+            continue
         if (
             not args.no_resume
             and isinstance(existing, dict)

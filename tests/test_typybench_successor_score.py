@@ -253,3 +253,32 @@ def test_missing_images_produce_accountable_incomplete_score_manifest(tmp_path, 
     }
     assert manifest["selection"]["excluded_repositories"] == {"black": "running"}
     assert manifest["analysis_outcomes"]["rich"]["files_failed"] == 12
+
+
+@pytest.mark.parametrize("previous_status", ["failed", "unavailable", "running"])
+def test_resume_unattempted_preserves_failures_and_rejects_unresolved_outcomes(tmp_path, monkeypatch, previous_status):
+    run = tmp_path / "run"
+    run.mkdir()
+    (run / "manifest.json").write_text(_MODULE.json.dumps({"repositories": {
+        "old": {"status": "complete"}, "new": {"status": "complete"},
+    }}))
+    previous = {"status": previous_status, "error": "retained original evidence"}
+    (run / "score-manifest.json").write_text(_MODULE.json.dumps({
+        "predictions_root": str((run / "predictions").resolve()),
+        "repositories": {"old": previous},
+    }))
+    monkeypatch.setattr(_MODULE, "local_docker_images", lambda: set())
+    monkeypatch.setattr(sys, "argv", [
+        "score", str(run), str(tmp_path / "corpus"), str(tmp_path / "scorer"),
+        "--resume-unattempted",
+    ])
+    if previous_status == "running":
+        with pytest.raises(RuntimeError, match="unresolved scoring outcome"):
+            _MODULE.main()
+    else:
+        _MODULE.main()
+        manifest = _MODULE.json.loads((run / "score-manifest.json").read_text())
+        assert manifest["repositories"]["old"] == previous
+        assert manifest["repositories"]["new"]["status"] == "unavailable"
+        assert manifest["coverage"]["eligible_repositories"] == 2
+        assert manifest["run_status"] == "finished_with_incomplete_repositories"
