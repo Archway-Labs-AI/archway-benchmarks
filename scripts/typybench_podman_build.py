@@ -22,7 +22,7 @@ RECIPE = '''ARG BASE_IMAGE
 FROM ${BASE_IMAGE}
 ENV UV_PYTHON_DOWNLOADS=never
 COPY uv /usr/local/bin/uv
-RUN apt-get update && apt-get install -y --no-install-recommends build-essential git curl pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential git curl pkg-config libssl-dev zlib1g-dev && rm -rf /var/lib/apt/lists/*
 COPY scorer /typybench
 WORKDIR /typybench
 RUN uv pip install --system .
@@ -66,6 +66,7 @@ def main() -> None:
     parser.add_argument('bases', type=Path, help='JSON: Python family -> immutable image reference')
     parser.add_argument('uv', type=Path)
     parser.add_argument('--timeout', type=int, default=900)
+    parser.add_argument('--repo', action='append', help='explicit subset for a separate retry attempt')
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error('timeout must be positive')
@@ -92,6 +93,11 @@ def main() -> None:
     shutil.copy2(args.uv, context / 'uv')
     (context / 'Dockerfile').write_text(RECIPE)
     repos = sorted(json.loads(args.analysis_manifest.read_text())['repositories'])
+    if args.repo:
+        unknown = set(args.repo) - set(repos)
+        if unknown:
+            raise ValueError(f'repositories absent from analysis selection: {sorted(unknown)}')
+        repos = sorted(set(args.repo))
     manifest = {
         'schema': 'archway.typybench-image-builds.v1', 'status': 'running',
         'scorer_sha': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=args.scorer, text=True).strip(),
