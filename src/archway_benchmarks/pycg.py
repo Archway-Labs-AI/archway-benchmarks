@@ -906,7 +906,7 @@ def successor_archway_call_edge_result(
     if engine_text not in sys.path:
         sys.path.insert(0, engine_text)
 
-    from sd_core.analysis.diagram_analysis import open_hybrid_program_session
+    from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session
     from sd_core.tooling.harness import ProgramResult
     from sd_core.tooling.sampling_profile import SamplingProfiler
 
