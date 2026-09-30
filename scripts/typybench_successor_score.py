@@ -69,6 +69,7 @@ def _eligible_repositories(
     *,
     selected: set[str] | None,
     include_partial: bool,
+    include_incomplete: bool = False,
 ) -> list[str]:
     records = analysis_manifest.get("repositories", {})
     if not isinstance(records, dict):
@@ -76,6 +77,8 @@ def _eligible_repositories(
     accepted = {"complete"}
     if include_partial:
         accepted.add("partial")
+    if include_incomplete:
+        accepted.update({"partial", "timed_out", "failed"})
     return sorted(
         name
         for name, record in records.items()
@@ -180,6 +183,10 @@ def main() -> None:
     parser.add_argument("--repo", action="append", dest="repos")
     parser.add_argument("--timeout-per-repo", type=int, default=900)
     parser.add_argument("--include-partial", action="store_true")
+    parser.add_argument(
+        "--include-incomplete", action="store_true",
+        help="score retained outputs from all terminal attempts, including unannotated failure fallbacks",
+    )
     parser.add_argument("--no-resume", action="store_true")
     args = parser.parse_args()
 
@@ -196,6 +203,7 @@ def main() -> None:
         analysis_manifest,
         selected=set(args.repos) if args.repos else None,
         include_partial=args.include_partial,
+        include_incomplete=args.include_incomplete,
     )
 
     if score_manifest_path.exists() and not args.no_resume:
@@ -211,6 +219,22 @@ def main() -> None:
             "repositories": {},
         }
 
+    manifest["selection"] = {
+        "include_partial": args.include_partial,
+        "include_incomplete": args.include_incomplete,
+        "eligible_repositories": repositories,
+        "excluded_repositories": {
+            name: record.get("status")
+            for name, record in analysis_manifest["repositories"].items()
+            if name not in repositories
+        },
+    }
+    manifest["analysis_outcomes"] = {
+        name: {key: record.get(key) for key in (
+            "status", "files_total", "files_analyzed", "files_failed", "failure_count",
+        )}
+        for name, record in analysis_manifest["repositories"].items()
+    }
     score_records = manifest.setdefault("repositories", {})
     assert isinstance(score_records, dict)
     local_images = local_docker_images()

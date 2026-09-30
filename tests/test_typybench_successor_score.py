@@ -1,4 +1,5 @@
 import importlib.util
+import os
 from pathlib import Path
 import sys
 
@@ -68,7 +69,8 @@ def test_existing_result_is_current_only_when_it_postdates_predictions(tmp_path)
 
     assert _MODULE._result_is_current(result, prediction.parent)
 
-    prediction.touch()
+    newer = result.stat().st_mtime_ns + 1_000_000_000
+    os.utime(prediction, ns=(newer, newer))
     assert not _MODULE._result_is_current(result, prediction.parent)
 
 
@@ -137,3 +139,25 @@ def test_command_group_returns_child_exit_status() -> None:
     assert _MODULE._run_command_group(
         [sys.executable, "-c", "raise SystemExit(7)"], timeout=5
     ) == 7
+
+
+def test_full_terminal_selection_includes_failure_fallbacks_but_not_live_runs():
+    manifest = {"repositories": {
+        "complete": {"status": "complete"},
+        "partial": {"status": "partial"},
+        "timeout": {"status": "timed_out"},
+        "failure": {"status": "failed"},
+        "live": {"status": "running"},
+        "unknown": {"status": "unrecognized"},
+    }}
+    assert _MODULE._eligible_repositories(
+        manifest, selected=None, include_partial=False, include_incomplete=True,
+    ) == ["complete", "failure", "partial", "timeout"]
+    assert _MODULE._eligible_repositories(
+        manifest, selected={"timeout", "live"}, include_partial=False,
+        include_incomplete=True,
+    ) == ["timeout"]
+    # Existing opt-in partial scoring still excludes timeouts and failures.
+    assert _MODULE._eligible_repositories(
+        manifest, selected=None, include_partial=True,
+    ) == ["complete", "partial"]
