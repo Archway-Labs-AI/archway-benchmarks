@@ -694,3 +694,23 @@ def test_root_package_init_receives_nonempty_module_name(tmp_path: Path):
     init.write_text("", encoding="utf-8")
 
     assert _module_name_for_path(init, package_root) == "relative_case"
+
+
+def test_lambda_display_numbering_is_per_lexical_scope():
+    from types import SimpleNamespace
+    from archway_benchmarks.pycg import _function_display_names
+    def function(body, name, parent=None):
+        return SimpleNamespace(body_id=body, name=name, lexical_parent_body_id=parent)
+    functions = iter([
+        function("f", "f"), function("f1", "<lambda>", "f"),
+        function("g", "g"), function("g1", "<lambda>", "g"),
+        function("g2", "<lambda>", "g"), function("nested", "<lambda>", "g1"),
+        function("m1", "<lambda>"), function("m2", "<lambda>"),
+    ])
+    names = _function_display_names("module", functions, SimpleNamespace(method_owners={}))
+    assert names == {
+        "f": "module.f", "f1": "module.f.<lambda1>",
+        "g": "module.g", "g1": "module.g.<lambda1>",
+        "g2": "module.g.<lambda2>", "nested": "module.g.<lambda1>.<lambda1>",
+        "m1": "module.<lambda1>", "m2": "module.<lambda2>",
+    }

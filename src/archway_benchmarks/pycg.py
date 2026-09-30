@@ -2255,20 +2255,25 @@ def _function_display_names(
     functions: Iterable[object],
     target: object,
 ) -> dict[str, str]:
+    functions = tuple(functions)
     by_id = {
         getattr(function, "body_id"): function
         for function in functions
         if isinstance(getattr(function, "body_id", None), str)
     }
     lambda_names: dict[str, str] = {}
-    lambda_index = 0
+    lambda_indices: dict[tuple[str | None, str | None], int] = {}
     for function in functions:
         body_id = getattr(function, "body_id", None)
         if not isinstance(body_id, str):
             continue
         if getattr(function, "name", None) == "<lambda>":
-            lambda_index += 1
-            lambda_names[body_id] = f"<lambda{lambda_index}>"
+            # PyCG numbers lambdas within their lexical scope, not globally
+            # across a module. The engine supplies the parent identity.
+            parent = getattr(function, "lexical_parent_body_id", None)
+            scope = (parent, _method_owner_name(target, body_id))
+            lambda_indices[scope] = lambda_indices.get(scope, 0) + 1
+            lambda_names[body_id] = f"<lambda{lambda_indices[scope]}>"
 
     resolved: dict[str, str] = {}
     resolving: set[str] = set()
