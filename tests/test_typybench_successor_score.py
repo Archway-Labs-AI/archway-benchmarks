@@ -2,6 +2,8 @@ import importlib.util
 import os
 from pathlib import Path
 import sys
+import subprocess
+from types import SimpleNamespace
 
 import pytest
 
@@ -11,6 +13,45 @@ _SPEC = importlib.util.spec_from_file_location("typybench_successor_score", _SCR
 assert _SPEC is not None and _SPEC.loader is not None
 _MODULE = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(_MODULE)
+
+
+def test_podman_timeout_removes_exact_container_and_kills_remaining_client(tmp_path, monkeypatch):
+    predictions = tmp_path / "predictions"
+    (predictions / "repo").mkdir(parents=True)
+    calls = []
+
+    class Process:
+        killed = False
+
+        def wait(self, timeout=None):
+            if timeout is not None:
+                raise subprocess.TimeoutExpired("podman", timeout)
+            return -9
+
+        def poll(self):
+            return None
+
+        def kill(self):
+            self.killed = True
+
+    process = Process()
+    monkeypatch.setattr(_MODULE.subprocess, "Popen", lambda command, **kwargs: (calls.append(command), process)[1])
+    monkeypatch.setattr(_MODULE.subprocess, "run", lambda command, **kwargs: (calls.append(command), SimpleNamespace(returncode=0, stdout="", stderr=""))[1])
+    with pytest.raises(subprocess.TimeoutExpired):
+        _MODULE._run_podman_score("repo", "a" * 64, predictions, tmp_path / "logs", timeout=1)
+    assert process.killed
+    run, cleanup = calls
+    assert cleanup == ["podman", "rm", "--force", "--ignore", run[run.index("--name") + 1]]
+    assert "--userns=keep-id" in run and "--network=none" in run
+    assert "type=bind,source=" + str(predictions / "repo") + ",target=/mnt/repo" in run
+
+
+def test_podman_refuses_previous_scorer_cache(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "repo_result_dict.pkl").write_bytes(b"old environment")
+    with pytest.raises(ValueError, match="without scorer caches"):
+        _MODULE._run_podman_score("repo", "a" * 64, tmp_path, tmp_path / "logs", timeout=1)
 
 
 def test_eligible_repositories_defaults_to_complete_and_supports_selection() -> None:

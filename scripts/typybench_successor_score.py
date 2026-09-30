@@ -15,6 +15,7 @@ import os
 import signal
 import subprocess
 import time
+import uuid
 from pathlib import Path
 
 from archway_benchmarks.typybench_harness import (
@@ -188,6 +189,53 @@ def _run_command_group(command: list[str], *, timeout: int) -> int:
         raise
 
 
+def _run_podman_score(
+    repo: str, image: str, predictions: Path, logs: Path, *, timeout: int,
+) -> int:
+    """Run unchanged scorer code in a pinned image with an exact cleanup target."""
+    name = f"archway-score-{uuid.uuid4().hex}"
+    source = (predictions / repo).resolve()
+    if not source.is_dir() or not source.is_relative_to(predictions.resolve()):
+        raise ValueError("scoring input must be a repository directory inside predictions")
+    # Upstream reads its pickle cache independently of our resume flag. Never
+    # let a nominal fresh execution silently adopt a previous scoring environment.
+    if (source / f"{repo}_result_dict.pkl").exists():
+        raise ValueError("fresh scoring requires a copied prediction tree without scorer caches")
+    logs.mkdir(parents=True, exist_ok=True)
+    command = [
+        "podman", "run", "--rm", "--pull=never", "--name", name,
+        "--userns=keep-id", "--user", f"{os.getuid()}:{os.getgid()}",
+        "--network=none", "--cap-drop=all", "--security-opt=no-new-privileges",
+        "--memory=8g", "--pids-limit=256", "--timeout", str(timeout),
+        "--env", "PYTHONPYCACHEPREFIX=/tmp/python-cache",
+        "--env", "MYPY_CACHE_DIR=/tmp/mypy-cache",
+        "--mount", f"type=bind,source={source},target=/mnt/{repo}",
+        "--entrypoint", "python", image,
+        "/typybench/scripts/evaluation.py", "-n", repo,
+        "-d", "/typybenchdata", "-p", "/mnt",
+    ]
+    _write_json(logs / f"{repo}-command.json", {"command": command})
+    with (logs / f"{repo}.log").open("w") as output:
+        process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT)
+        try:
+            return process.wait(timeout=timeout + 15)
+        finally:
+            # Killing the client alone does not establish container termination.
+            cleanup = subprocess.run(
+                ["podman", "rm", "--force", "--ignore", name],
+                capture_output=True, text=True, timeout=30,
+            )
+            _write_json(logs / f"{repo}-cleanup.json", {
+                "container": name, "returncode": cleanup.returncode,
+                "stdout": cleanup.stdout, "stderr": cleanup.stderr,
+            })
+            if process.poll() is None:
+                process.kill()
+                process.wait()
+            if cleanup.returncode:
+                raise RuntimeError(f"container cleanup failed: {name}; stop before retrying")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("run_root", type=Path)
@@ -201,6 +249,10 @@ def main() -> None:
         help="score retained outputs from all terminal attempts, including unannotated failure fallbacks",
     )
     parser.add_argument("--no-resume", action="store_true")
+    parser.add_argument(
+        "--podman-image-map", type=Path,
+        help="JSON mapping repository names to immutable local image IDs; use rootless Podman",
+    )
     args = parser.parse_args()
 
     if args.timeout_per_repo <= 0:
@@ -250,7 +302,28 @@ def main() -> None:
     }
     score_records = manifest.setdefault("repositories", {})
     assert isinstance(score_records, dict)
-    local_images = local_docker_images()
+    podman_images = None
+    if args.podman_image_map is not None:
+        podman_images = json.loads(args.podman_image_map.read_text())
+        if not isinstance(podman_images, dict) or any(
+            not isinstance(key, str) or not isinstance(value, str)
+            or len(value.removeprefix("sha256:")) != 64
+            or any(char not in "0123456789abcdef" for char in value.removeprefix("sha256:"))
+            for key, value in podman_images.items()
+        ):
+            parser.error("Podman image map must contain repository names and full image IDs")
+        runtime = json.loads(subprocess.check_output(["podman", "info", "--format", "json"], text=True))
+        if runtime["host"]["security"]["rootless"] is not True:
+            raise RuntimeError("Podman scoring requires a rootless runtime")
+        runtime_record = {
+            "kind": "podman", "rootless": True,
+            "version": runtime["version"]["Version"], "images": podman_images,
+            "memory": "8g", "pids_limit": 256, "network": "none",
+        }
+        if not args.no_resume and score_records and manifest.get("runtime") != runtime_record:
+            raise RuntimeError("cannot resume scores under a different runtime or image map")
+        manifest["runtime"] = runtime_record
+    local_images = local_docker_images() if podman_images is None else set()
     staging_root = args.run_root / ".scoring-stage"
     progress_path = args.run_root / "scoring-progress.jsonl"
     log_root = args.run_root / "scoring-logs"
@@ -285,10 +358,11 @@ def main() -> None:
                 flush=True,
             )
             continue
-        if docker_image_name(repo_name) not in local_images:
+        if (repo_name not in podman_images if podman_images is not None
+                else docker_image_name(repo_name) not in local_images):
             score_records[repo_name] = {
                 "status": "unavailable",
-                "reason": "docker_image_missing",
+                "reason": "image_missing",
                 "docker_image": docker_image_name(repo_name),
             }
             manifest["updated_unix"] = time.time()
@@ -314,7 +388,13 @@ def main() -> None:
         _write_json(score_manifest_path, manifest)
         print(f"ARCHWAY_TYPYBENCH_SCORE start {index}/{len(repositories)} {repo_name}", flush=True)
         try:
-            return_code = _run_command_group(
+            if podman_images is not None:
+                return_code = _run_podman_score(
+                    repo_name, podman_images[repo_name], predictions_root,
+                    log_root, timeout=args.timeout_per_repo,
+                )
+            else:
+                return_code = _run_command_group(
                 score_command(
                     typybench_root=args.typybench_root,
                     data_path=args.data_root,
@@ -324,7 +404,7 @@ def main() -> None:
                     log_dir=log_root,
                 ),
                 timeout=args.timeout_per_repo,
-            )
+                )
             if return_code != 0:
                 raise RuntimeError(f"official scorer exited {return_code}")
             score = _score_values(csv_path)
