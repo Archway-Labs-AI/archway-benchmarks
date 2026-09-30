@@ -30,8 +30,9 @@ against established benchmarks, scores it with each benchmark's own scorer, and 
 competitor baselines on the current ground truth so the comparison is like-for-like rather than
 against a stale published table.
 
-The Archway translation and analysis engines are not in this repository. The harness calls them
-through a hosted API, and ships stub backends so the full pipeline runs locally without them.
+The Archway translation and analysis engines are not in this repository. The harness supports hosted API backends and an in-process successor analysis
+backend selected from an explicit engine checkout. Stub backends exercise the pipeline
+without the engine.
 
 ## Why baselines get regenerated
 
@@ -56,7 +57,8 @@ point.
 | Benchmark | Status |
 |-----------|--------|
 | [TypeEvalPy](https://github.com/secure-software-engineering/TypeEvalPy) (micro + autogen) | Supported |
-| TypyBench, PyCG, and others | On the roadmap |
+| PyCG micro + macro | Runner implemented in `archway_benchmarks.pycg`; requires an explicit corpus and engine checkout |
+| TypyBench | Prediction/scoring support implemented; requires corpus/runtime setup and scorer dependencies |
 
 ## Quickstart
 
@@ -89,10 +91,15 @@ archway-bench regenerate-baselines --tools headergen jedi scalpel --benchmarks m
 archway-bench baselines-report
 ```
 
-Plugging in the real Archway analysis engine is a one-file change: implement an
-`AnalysisResultAdapter` for the engine's output shape (see `src/archway_benchmarks/benchmarks/`)
-and the harness takes it from there. The stub backend already exercises the full
-adapter → scorer → store → dashboard path so the integration seam is testable today.
+The in-process backend is implemented in
+`src/archway_benchmarks/engines/successor_archway.py`; the public PyCG runner and
+TypyBench emission modules provide their benchmark-specific integrations. Internal
+run orchestration, artifact catalogs and publication live in `archway-bench-internal`.
+
+Initialize the pinned TypeEvalPy submodule before invoking either CLI: its scorer
+is currently imported during CLI startup. Other corpora and scorer environments
+need separate setup. A successful stub run or CLI import does not establish
+real-engine benchmark compatibility.
 
 ## Attribution
 
