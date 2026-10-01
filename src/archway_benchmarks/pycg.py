@@ -908,6 +908,7 @@ def successor_archway_call_edge_result(
         sys.path.insert(0, engine_text)
 
     from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session
+    from sd_core.analysis.diagram_analysis.program import PythonModuleEnvironment
     from sd_core.tooling.harness import ProgramResult
     from sd_core.tooling.sampling_profile import SamplingProfiler
 
@@ -928,6 +929,10 @@ def successor_archway_call_edge_result(
         modules,
         entry_module,
         record_events=record_events,
+        module_environments={
+            _module_name_for_path(path, case.package_root): PythonModuleEnvironment(str(path))
+            for path in case.source_paths
+        },
         catalog_observations=False,
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None

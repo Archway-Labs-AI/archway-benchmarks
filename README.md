@@ -34,6 +34,20 @@ The Archway translation and analysis engines are not in this repository. The har
 backend selected from an explicit engine checkout. Stub backends exercise the pipeline
 without the engine.
 
+### Python loader metadata
+
+The engine owns the immutable `PythonModuleEnvironment` input and initialization
+semantics. This harness owns filesystem discovery: its in-process adapters pass
+the filename actually used to load each source as `file`, including dependencies.
+Synthetic namespace-package parents have no filename and receive no `__file__`
+binding. Metadata is supplied separately from translated/portable diagrams.
+
+These adapters require an engine exposing `module_environments` on its program
+session API. Pin both engine and harness revisions in comparisons; older run
+receipts predate this loader input and must not be described as identical
+execution configurations. Scores, artifacts, tracing and telemetry retain their
+existing run-directory ownership and publication policy.
+
 ## Why baselines get regenerated
 
 Published leaderboards drift: ground truth gets corrected, scoring semantics change, and tool and

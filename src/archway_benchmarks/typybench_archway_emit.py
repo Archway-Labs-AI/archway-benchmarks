@@ -897,6 +897,7 @@ from collections import Counter
 from pathlib import Path
 
 from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session
+from sd_core.analysis.diagram_analysis.program import PythonModuleEnvironment
 from sd_core.analysis.diagram_analysis.route_sensitive_facts import TYPE_OF
 from sd_core.tooling.analysis_arena import AnalysisAllocationArena
 from sd_core.tooling.harness import TranslationResult
@@ -1100,6 +1101,7 @@ try:
             open_hybrid_program_session
         ).parameters
         session_options = {
+            "module_environments": {name: PythonModuleEnvironment(str(by_module[name])) for name in modules},
             "record_events": False,
             "record_timings": record_timings,
             "record_telemetry": diagnostic_details,

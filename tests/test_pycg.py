@@ -143,6 +143,20 @@ def test_namespace_package_import_reaches_child_callable(tmp_path: Path):
     assert result.evidence['namespace_package_modules'] == ['pkg']
 
 
+def test_loader_filename_does_not_leak_to_synthetic_namespace_parent(tmp_path: Path):
+    engine_root = Path(os.environ.get('ARCHWAY_ENGINE_ROOT', str(Path(__file__).parents[2] / 'engine')))
+    if not engine_root.exists():
+        pytest.skip('Set ARCHWAY_ENGINE_ROOT to run engine integration checks')
+    root = _write_case(tmp_path, 'imports', 'loader_environment', {})
+    (root / 'pkg').mkdir()
+    (root / 'pkg' / 'child.py').write_text('filename = __file__\ndef target():\n    return 1\n')
+    (root / 'main.py').write_text('filename = __file__\nfrom pkg import child\nimport pkg\ntry:\n    pkg.__file__\nexcept AttributeError:\n    child.target()\n')
+    (case,) = load_cases(tmp_path)
+    result = successor_archway_call_edge_result(case, engine_root=engine_root)
+    assert result.edges == frozenset({('main', 'pkg.child.target')})
+    assert result.evidence['namespace_package_modules'] == ['pkg']
+
+
 def test_successor_lambda_ordinals_are_local_to_each_function(tmp_path: Path):
     engine_root = Path(os.environ.get(
         "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")

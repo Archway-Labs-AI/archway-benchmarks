@@ -65,6 +65,22 @@ def test_successor_frontend_closes_explicit_dependency_roots(tmp_path):
     assert result.targeted_runs == []
 
 
+def test_successor_loader_supplies_root_and_dependency_filenames(tmp_path):
+    snippet = _snippet(
+        tmp_path,
+        "from library import path\nfilename = __file__\nresult = path\n",
+        '[{"file":"main.py","line_number":2,"col_offset":1,"variable":"filename","type":["str"]},'
+        '{"file":"main.py","line_number":3,"col_offset":1,"variable":"result","type":["str"]}]',
+    )
+    dependencies = tmp_path / "dependencies"
+    dependencies.mkdir()
+    (dependencies / "library.py").write_text("path = __file__\n")
+    translation = ArchwayTranslationEngine(dependency_roots=(dependencies,)).translate(snippet.source, snippet.file_path)
+    result = SuccessorArchwayAnalysisEngine().analyze(translation)
+    assert result.error is None
+    assert SuccessorTypeEvalPyAdapter().to_annotations(result, snippet) == list(snippet.annotations)
+
+
 def test_successor_adapter_reads_contextual_return_observation_without_fallback(
     tmp_path,
 ):

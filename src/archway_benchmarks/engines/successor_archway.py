@@ -98,16 +98,18 @@ class SuccessorArchwayAnalysisEngine:
                 open_hybrid_program_session,
             )
             from sd_core.tooling.harness import ProgramResult
+            from sd_core.analysis.diagram_analysis.program import PythonModuleEnvironment
 
             sources = {
                 item.module_name: item.source
                 for item in translation.modules
             }
+            module_paths = {item.module_name: item.path for item in translation.modules}
             program = (
                 ProgramResult.from_module_resolver(
                     sources,
                     _filesystem_module_resolver(
-                        translation.dependency_roots
+                        translation.dependency_roots, module_paths=module_paths,
                     ),
                 )
                 if translation.dependency_roots
@@ -126,6 +128,7 @@ class SuccessorArchwayAnalysisEngine:
                 modules,
                 "main",
                 record_events=self.record_events,
+                module_environments={name: PythonModuleEnvironment(path) for name, path in module_paths.items()},
             )
             # Seed only the explicit program entry. Requested type readouts
             # below extend this same session through shared callable-body
@@ -560,6 +563,7 @@ def _suite_family(suite_path: str) -> str:
 
 def _filesystem_module_resolver(
     roots: tuple[str, ...],
+    *, module_paths: dict[str, str] | None = None,
 ) -> Callable[[str], str | None]:
     """Build frontend-only dotted-module resolution for explicit roots."""
 
@@ -573,6 +577,8 @@ def _filesystem_module_resolver(
                 root / relative / "__init__.py",
             ):
                 if candidate.is_file():
+                    if module_paths is not None:
+                        module_paths[name] = str(candidate)
                     return candidate.read_text()
         return None
 
