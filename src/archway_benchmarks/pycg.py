@@ -1159,6 +1159,12 @@ def successor_archway_call_edge_result(
         evidence = {
             "phase": phase,
             "source_module_count": len(sources),
+            "namespace_package_modules": sorted(
+                set(sources) - {
+                    _module_name_for_path(path, case.package_root)
+                    for path in case.source_paths
+                }
+            ),
             "translated_module_count": len(modules),
             "module_roots": module_names,
             "module_closure": {
@@ -2128,6 +2134,17 @@ def _load_case_sources(case: PyCGCase) -> dict[str, str]:
         if path.name == "__init__.py" and not source.strip():
             source = "pass\n"
         sources[module_name] = source
+    # Filesystem discovery owns namespace-package evidence. A directory without
+    # __init__.py is still an importable parent; passing only its child files
+    # would give the engine an incomplete program registry. Never replace an
+    # existing regular package, or invent an empty body for an omitted initializer.
+    for path in case.source_paths:
+        parent_parts = path.relative_to(case.package_root).parent.parts
+        for depth in range(1, len(parent_parts) + 1):
+            parts = parent_parts[:depth]
+            directory = case.package_root.joinpath(*parts)
+            if directory.is_dir() and not (directory / '__init__.py').exists():
+                sources.setdefault('.'.join(parts), 'pass\n')
     return sources
 
 

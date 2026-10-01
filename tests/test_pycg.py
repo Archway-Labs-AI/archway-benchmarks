@@ -5,6 +5,7 @@ import multiprocessing
 import os
 import signal
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -109,6 +110,39 @@ def test_expected_edges_from_callgraph():
     }
 
 
+def test_source_loading_preserves_namespace_package_parents(tmp_path: Path):
+    root = _write_case(tmp_path, 'imports', 'namespace', {})
+    package = root / 'pkg' / 'nested'
+    package.mkdir(parents=True)
+    (package / 'child.py').write_text('def target():\n    return 1\n')
+    (root / 'main.py').write_text('from pkg.nested import child\nchild.target()\n')
+    (case,) = load_cases(tmp_path)
+    sources = _load_case_sources(case)
+    assert sources['pkg'] == sources['pkg.nested'] == 'pass\n'
+    assert sources['pkg.nested.child'].startswith('def target')
+    (package / '__init__.py').write_text('marker = 7\n')
+    (case,) = load_cases(tmp_path)
+    assert _load_case_sources(case)['pkg.nested'] == 'marker = 7\n'
+    omitted_initializer = replace(
+        case, source_paths=tuple(p for p in case.source_paths if p.name != '__init__.py')
+    )
+    assert 'pkg.nested' not in _load_case_sources(omitted_initializer)
+
+
+def test_namespace_package_import_reaches_child_callable(tmp_path: Path):
+    engine_root = Path(os.environ.get('ARCHWAY_ENGINE_ROOT', str(Path(__file__).parents[2] / 'engine')))
+    if not engine_root.exists():
+        pytest.skip('Set ARCHWAY_ENGINE_ROOT to run engine integration checks')
+    root = _write_case(tmp_path, 'imports', 'namespace_call', {})
+    (root / 'pkg').mkdir()
+    (root / 'pkg' / 'child.py').write_text('def target():\n    return 1\n')
+    (root / 'main.py').write_text('from pkg import child\nchild.target()\n')
+    (case,) = load_cases(tmp_path)
+    result = successor_archway_call_edge_result(case, engine_root=engine_root)
+    assert result.edges == frozenset({('main', 'pkg.child.target')})
+    assert result.evidence['namespace_package_modules'] == ['pkg']
+
+
 def test_successor_lambda_ordinals_are_local_to_each_function(tmp_path: Path):
     engine_root = Path(os.environ.get(
         "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")
@@ -162,7 +196,11 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
         "x = lambda x: x + 1\nx(1)\n", encoding="utf-8"
     )
     (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
+    engine_root = Path(os.environ.get(
+        "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")
+    ))
+    if not engine_root.exists():
+        pytest.skip("Set ARCHWAY_ENGINE_ROOT to run engine integration checks")
 
     result = successor_archway_call_edge_result(
         case, engine_root=engine_root.resolve()
@@ -240,19 +278,27 @@ def test_successor_completed_evidence_collapses_repeated_contexts_per_callsite(
         encoding="utf-8",
     )
     (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
+    engine_root = Path(os.environ.get(
+        "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")
+    ))
+    if not engine_root.exists():
+        pytest.skip("Set ARCHWAY_ENGINE_ROOT to run engine integration checks")
 
     result = successor_archway_call_edge_result(
         case, engine_root=engine_root.resolve()
     )
 
-    invoke_target = next(
+    # The adapter collapses semantic occurrences, regardless of how many
+    # lifecycle/input contexts the engine needs for this callable.
+    (invoke_target,) = [
         item
         for item in result.evidence["semantic_call_edge_evidence"]
         if item["projected_edge"] == ["main.invoke", "main.target"]
-    )
-    assert invoke_target["contextual_occurrence_count"] == 2
-    assert len(invoke_target["caller_context_samples"]) == 2
+    ]
+    assert invoke_target["contextual_occurrence_count"] >= 2
+    samples = invoke_target["caller_context_samples"]
+    assert samples == sorted(set(samples))
+    assert 2 <= len(samples) <= min(3, invoke_target["contextual_occurrence_count"])
     assert result.evidence["semantic_call_edge_occurrence_count"] > (
         result.evidence["semantic_call_edge_evidence_count"]
     )

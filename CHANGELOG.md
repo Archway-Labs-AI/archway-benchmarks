@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Team-internal benchmark workflow extracted to the private `Archway-Labs-AI/archway-bench-internal` package: `iterate` / `progress` / `report` subcommands, `engine_pin.py` (verified-pin worktree machinery), `reports.py` (per-run detail markdown writer), `test_engine_pin.py`, and the nine `scripts/bugsinpy_*.py` investigation probes. The public CLI now focuses on its actual purpose: score benchmarks, reproduce baselines, browse runs. Internal users install the sibling package: `pip install -e ../archway-bench-internal` → `archway-bench-i iterate ...`.
 
 ### Changed
+- PyCG source discovery now includes namespace-package parent directories with empty bodies, preserving regular initializers. Per-case evidence records these parents as `namespace_package_modules`; comparisons must pin this harness change as well as the engine.
 - Public CLI surface is now: `run` / `score` / `runs` / `export` / `serve` / `manifest` / `regenerate-baselines` / `baselines-report` / `bugsinpy-*` (manifest|detect|repair|progress|bucket|adjudicate|bucket-report|flagger).
 - Submodule renamed from `vendor/TypeEvalPy/` to `extras/TypeEvalPy/` and retargeted to the `Archway-Labs-AI/TypeEvalPy` fork (our own modifications live on feature branches there; `main` tracks upstream).
 - CONTRIBUTING.md rewritten to describe the actual benchmark layout (`extras/<name>/` + adapter under `benchmarks/<name>.py`); the unused `suites/` scaffold removed.
