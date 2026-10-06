@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import time
+import math
 from types import SimpleNamespace
 from typing import Callable, Protocol
 import uuid
@@ -14,7 +15,7 @@ class SessionClient(Protocol):
     def translate_analysis_artifact(self, sources, entry_module, *, request_id): ...
     def open_analysis_session(self, artifact_id, *, request_id, options=None): ...
     def submit_analysis_command(self, session_id, *, request_id, revision_id, checkpoint_id, command): ...
-    def analysis_operation(self, operation_id): ...
+    def analysis_operation(self, operation_id, *, on_retry=None): ...
 
 
 @dataclass
@@ -28,8 +29,11 @@ class HostedSessionEngine:
     name = "archway-portable-session-diagnostic"
 
     def __init__(self, client: SessionClient, *, record: Callable[[dict], None],
-                 deadline_seconds: float = 180, verify_resume: bool = True):
+                 deadline_seconds: float = 180, verify_resume: bool = True, poll_seconds: float = 0.5):
         self.client, self.record = client, record
+        if not math.isfinite(poll_seconds) or poll_seconds <= 0:
+            raise ValueError("polling interval must be positive and finite")
+        self.poll_seconds = poll_seconds
         if deadline_seconds <= 0:
             raise ValueError("polling deadline must be positive")
         self.deadline_seconds, self.verify_resume = deadline_seconds, verify_resume
@@ -44,9 +48,13 @@ class HostedSessionEngine:
             while operation["state"] in {"pending", "running"}:
                 if time.monotonic() >= deadline:
                     raise TimeoutError("benchmark operation polling deadline exceeded")
-                time.sleep(0.05)
+                time.sleep(min(self.poll_seconds, max(0, deadline - time.monotonic())))
+                if time.monotonic() >= deadline:
+                    raise TimeoutError("benchmark operation polling deadline exceeded")
                 poll_started = time.monotonic()
-                operation = self.client.analysis_operation(operation["operation_id"])
+                operation = self.client.analysis_operation(operation["operation_id"],
+                    on_retry=lambda event: self.record({"event": "status_read_retry",
+                        "phase": phase, "path": path, **event}))
                 poll_seconds += time.monotonic() - poll_started
                 polls += 1
         except Exception as exc:

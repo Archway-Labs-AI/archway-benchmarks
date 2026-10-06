@@ -35,7 +35,7 @@ def test_polling_failure_preserves_operation_id_without_exception_detail():
     events = []
 
     class Client:
-        def analysis_operation(self, operation_id):
+        def analysis_operation(self, operation_id, *, on_retry=None):
             raise TimeoutError("sensitive transport detail")
 
     engine = HostedSessionEngine(Client(), record=events.append)
@@ -56,3 +56,16 @@ def test_resumed_command_must_keep_session_and_revision():
     result = HostedSessionResult(engine, "main.py", {"session_id": "session", "revision_id": "revision", "checkpoint_id": "checkpoint"})
     with pytest.raises(RuntimeError, match="attribution"):
         engine.command(result, {"kind": "complete_module", "module": "main"})
+
+
+
+def test_status_read_retry_evidence_retains_phase_and_operation(monkeypatch):
+    events = []
+    class Client:
+        def analysis_operation(self, operation_id, *, on_retry=None):
+            on_retry({"operation_id": operation_id, "attempt": 1, "status": 503, "delay_seconds": 0.25})
+            return {"operation_id": operation_id, "state": "succeeded", "result": {"ok": True}}
+    engine = HostedSessionEngine(Client(), record=events.append, poll_seconds=0.001)
+    assert engine._complete({"operation_id": "stable", "state": "running"}, "open", "case") == {"ok": True}
+    assert [e["event"] for e in events] == ["accepted", "status_read_retry", "completed"]
+    assert events[1]["operation_id"] == "stable" and events[1]["phase"] == "open"
