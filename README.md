@@ -113,3 +113,18 @@ licenses; see [NOTICE](NOTICE). This project builds on
 *AI writes your code. Archway proves it's correct.*
 
 </div>
+
+### Portable session service diagnostic
+
+`archway_benchmarks.engines.hosted_sessions` consumes the public engine client:
+portable translation artifact → saved session → module completion → source-attributed
+type observations. `HostedSessionEngine` verifies that re-demanding the completed
+module in a new worker executes zero productions. `HostedSessionTypeEvalPyAdapter`
+reuses benchmark-owned location/type mapping and can demand unresolved catalogued
+type observations. It does not import or run `sd_core`.
+
+This initial profile is a single-module diagnostic, not a replacement for all
+successor benchmark adapters: container-path/generic-shape queries are not yet
+supported. Missing predictions remain in the original scoring denominator.
+The internal runner owns corpus selection, credentials and retained operation
+records. Tests: `tests/test_hosted_sessions.py`.
