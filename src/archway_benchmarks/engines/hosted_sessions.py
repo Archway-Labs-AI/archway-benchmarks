@@ -34,33 +34,43 @@ class HostedSessionEngine:
             raise ValueError("polling deadline must be positive")
         self.deadline_seconds, self.verify_resume = deadline_seconds, verify_resume
 
-    def _complete(self, operation: dict, phase: str, path: str) -> dict:
-        deadline = time.monotonic() + self.deadline_seconds
-        self.record({"event": "accepted", "phase": phase, "path": path, "operation": operation})
+    def _complete(self, operation: dict, phase: str, path: str, *, submitted_at: float | None = None) -> dict:
+        started = time.monotonic()
+        polls, poll_seconds = 0, 0.0
+        deadline = started + self.deadline_seconds
+        self.record({"event": "accepted", "phase": phase, "path": path, "operation": operation,
+                     "submission_seconds": started - submitted_at if submitted_at is not None else None})
         try:
             while operation["state"] in {"pending", "running"}:
                 if time.monotonic() >= deadline:
                     raise TimeoutError("benchmark operation polling deadline exceeded")
                 time.sleep(0.05)
+                poll_started = time.monotonic()
                 operation = self.client.analysis_operation(operation["operation_id"])
+                poll_seconds += time.monotonic() - poll_started
+                polls += 1
         except Exception as exc:
             self.record({"event": "polling_failed", "phase": phase, "path": path,
                          "operation": operation, "error_type": type(exc).__name__})
             raise
-        self.record({"event": "completed", "phase": phase, "path": path, "operation": operation})
+        self.record({"event": "completed", "phase": phase, "path": path, "operation": operation,
+                     "wait_seconds": time.monotonic() - started, "poll_count": polls,
+                     "poll_request_seconds": poll_seconds})
         if operation["state"] != "succeeded":
             raise RuntimeError("hosted benchmark operation failed")
         return operation["result"]
 
     def translate(self, source: str, path: str) -> tuple[str, dict]:
+        started = time.monotonic()
         artifact = self._complete(self.client.translate_analysis_artifact(
-            {"main": source}, "main", request_id=uuid.uuid4().hex), "translate", path)
+            {"main": source}, "main", request_id=uuid.uuid4().hex), "translate", path, submitted_at=started)
         return path, artifact
 
     def analyze(self, translation: tuple[str, dict]) -> HostedSessionResult:
         path, artifact = translation
+        started = time.monotonic()
         head = self._complete(self.client.open_analysis_session(
-            artifact["artifact_id"], request_id=uuid.uuid4().hex), "open", path)
+            artifact["artifact_id"], request_id=uuid.uuid4().hex), "open", path, submitted_at=started)
         result = HostedSessionResult(self, path, head)
         self.command(result, {"kind": "complete_module", "module": "main"})
         if self.verify_resume:
@@ -72,9 +82,10 @@ class HostedSessionEngine:
 
     def command(self, result: HostedSessionResult, command: dict) -> None:
         head = result.head
+        started = time.monotonic()
         updated = self._complete(self.client.submit_analysis_command(head["session_id"],
             request_id=uuid.uuid4().hex, revision_id=head["revision_id"],
-            checkpoint_id=head["checkpoint_id"], command=command), command["kind"], result.path)
+            checkpoint_id=head["checkpoint_id"], command=command), command["kind"], result.path, submitted_at=started)
         if (updated["session_id"], updated["revision_id"]) != (head["session_id"], head["revision_id"]):
             raise RuntimeError("hosted operation changed session/revision attribution")
         result.head = updated
