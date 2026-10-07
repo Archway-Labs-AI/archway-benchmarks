@@ -69,3 +69,56 @@ def test_status_read_retry_evidence_retains_phase_and_operation(monkeypatch):
     assert engine._complete({"operation_id": "stable", "state": "running"}, "open", "case") == {"ok": True}
     assert [e["event"] for e in events] == ["accepted", "status_read_retry", "completed"]
     assert events[1]["operation_id"] == "stable" and events[1]["phase"] == "open"
+
+
+def test_journal_reuses_lost_submission_and_completed_result(tmp_path):
+    from archway_benchmarks.engines.hosted_sessions import SessionRunJournal
+    import pytest
+
+    calls = []
+    class Client:
+        def translate_analysis_artifact(self, sources, entry_module, *, request_id):
+            calls.append(request_id)
+            if len(calls) == 1:
+                raise ConnectionError('response lost after remote acceptance')
+            return {'state': 'succeeded', 'result': {'artifact_id': 'saved'}}
+
+    path = tmp_path / 'journal.db'
+    journal = SessionRunJournal(path, metadata={'engine': 'pin', 'corpus': 'pin'})
+    engine = HostedSessionEngine(Client(), record=lambda _: None, journal=journal)
+    with pytest.raises(ConnectionError):
+        engine.translate('x = 1', 'main.py')
+    journal.close()
+    journal = SessionRunJournal(path, metadata={'engine': 'pin', 'corpus': 'pin'})
+    engine = HostedSessionEngine(Client(), record=lambda _: None, journal=journal)
+    assert engine.translate('x = 1', 'main.py')[1] == {'artifact_id': 'saved'}
+    assert calls[0] == calls[1]
+    assert engine.translate('x = 1', 'main.py')[1] == {'artifact_id': 'saved'}
+    assert len(calls) == 2
+    journal.close()
+    with pytest.raises(ValueError, match='identity changed'):
+        SessionRunJournal(path, metadata={'engine': 'different', 'corpus': 'pin'})
+
+
+def test_journal_replays_after_completed_response_before_local_commit(tmp_path):
+    from archway_benchmarks.engines.hosted_sessions import SessionRunJournal
+    import pytest
+
+    journal = SessionRunJournal(tmp_path / 'journal.db', metadata={'engine': 'pin'})
+    requests = []
+    def submit(request_id):
+        requests.append(request_id)
+        return {'state': 'succeeded', 'result': {'artifact_id': 'saved'}}
+    def broken_record(event):
+        if event['event'] == 'completed':
+            raise OSError('local disk interrupted')
+    engine = HostedSessionEngine(None, record=broken_record, journal=journal)
+    with pytest.raises(OSError):
+        engine._step('translate', 'case', {'source': 'x'}, submit)
+    engine.record = lambda _: None
+    assert engine._step('translate', 'case', {'source': 'x'}, submit) == {'artifact_id': 'saved'}
+    assert requests[0] == requests[1]
+    key, _, _ = journal.intent('translate', 'case', {'source': 'x'})
+    with pytest.raises(ValueError, match='conflicts'):
+        journal.complete(key, {'artifact_id': 'other'})
+    journal.close()
