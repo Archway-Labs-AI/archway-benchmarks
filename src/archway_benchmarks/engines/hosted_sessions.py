@@ -130,6 +130,18 @@ class HostedSessionEngine:
                 {"main": source}, "main", request_id=request_id))
         return path, artifact
 
+    def open_program(self, sources: dict[str, str], entry_module: str, *, path: str,
+                     options: dict | None = None) -> HostedSessionResult:
+        """Translate and open an explicit module graph without implicit demands."""
+        options = {} if options is None else options
+        artifact = self._step("translate", path, {"sources": sources, "entry_module": entry_module},
+            lambda request_id: self.client.translate_analysis_artifact(
+                sources, entry_module, request_id=request_id))
+        head = self._step("open", path, {"artifact_id": artifact["artifact_id"], "options": options},
+            lambda request_id: self.client.open_analysis_session(
+                artifact["artifact_id"], request_id=request_id, options=options))
+        return HostedSessionResult(self, path, head)
+
     def analyze(self, translation: tuple[str, dict]) -> HostedSessionResult:
         path, artifact = translation
         head = self._step("open", path, {"artifact_id": artifact["artifact_id"]},

@@ -35,7 +35,8 @@ def test_successor_probe_requires_authoritative_signature_workload_api() -> None
         'session_options["callable_input_exact_limit"] = ('
         in worker_source
     )
-    assert "TYPE_OF,\n    open_hybrid_program_session," in worker_source
+    assert "from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session" in worker_source
+    assert "from sd_core.analysis.diagram_analysis.route_sensitive_facts import TYPE_OF" in worker_source
     assert "session.store.history_since(" in worker_source
     assert "unmatched_body_labels = requested_body_labels.difference(" in worker_source
     assert "requested successor body labels are not present" in worker_source
@@ -1223,3 +1224,31 @@ def analyze_source(source, module_name):
     assert profile["translation_trace"]["span_count"] == 3
     assert profile["analyze_source"]["ok"] is False
     assert "TimeoutExpired" in profile["analyze_source"]["error"]
+
+
+def test_hosted_unsupported_options_reject_before_replacing_predictions(tmp_path):
+    predictions = tmp_path / 'predictions' / 'fixture'
+    predictions.mkdir(parents=True)
+    retained = predictions / 'existing.py'
+    retained.write_text('existing output\n')
+    try:
+        emit_archway_predictions(repo_name='fixture', untyped_root=tmp_path / 'missing',
+            predictions_root=predictions.parent, session_engine=object(), body_labels=('selected',))
+    except ValueError as exc:
+        assert 'body_labels' in str(exc)
+    else:
+        raise AssertionError('hosted diagnostics must reject')
+    assert retained.read_text() == 'existing output\n'
+
+
+def test_shared_repository_layout_retains_packages_and_excludes_unrelated_trees(tmp_path):
+    package = tmp_path / 'library'
+    package.mkdir()
+    (package / '__init__.py').write_text('')
+    (package / 'values.py').write_text('x = 1\n')
+    unrelated = tmp_path / 'tools'
+    unrelated.mkdir()
+    (unrelated / 'generate.py').write_text('x = 2\n')
+    assert {emit_module._module_name(tmp_path, path) for path in emit_module._analysis_paths(tmp_path)} == {
+        'library', 'library.values',
+    }

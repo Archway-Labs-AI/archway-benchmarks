@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
+from archway_benchmarks.engines.hosted_sessions import HostedSessionEngine
 from archway_benchmarks.typybench_harness import require_python_source_files
 from archway_benchmarks.typybench_scored_slots import scored_slots
 
@@ -193,7 +194,8 @@ def emit_archway_predictions(
     repo_name: str,
     untyped_root: Path,
     predictions_root: Path,
-    engine_worktree: Path,
+    engine_worktree: Path | None = None,
+    session_engine: HostedSessionEngine | None = None,
     engine_sha: str | None = None,
     overwrite: bool = True,
     runner: tuple[str, ...] = ("hatch", "run", "python"),
@@ -233,6 +235,34 @@ def emit_archway_predictions(
     of being fabricated.
     """
 
+    if session_engine is not None:
+        unsupported = {
+            "body_summary_consumption": body_summary_consumption != "off",
+            "analysis_product": analysis_product != "standalone",
+            "analysis_observation_mode": analysis_observation_mode != "summary",
+            "type_requirements_assume_closed": type_requirements_assume_closed,
+            "checkpoint_roots": not checkpoint_roots,
+            "max_wave_size": max_wave_size != 8,
+            "checkpoint_batch_start": checkpoint_batch_start is not None,
+            "checkpoint_batch_count": checkpoint_batch_count is not None,
+            "checkpoint_replay_prefix": not checkpoint_replay_prefix,
+            "body_labels": bool(body_labels),
+            "body_timeout": body_timeout is not None,
+            "progress_timeout": progress_timeout is not None,
+            "projection_timeout": projection_timeout is not None,
+            "sample_rate_hz": sample_rate_hz is not None,
+            "sampling": sample_targeted or sample_forward or sample_session_open,
+            "session_open_timeout": session_open_timeout is not None,
+            "forward_timeout": forward_timeout is not None,
+            "collect_predictions": not collect_predictions,
+            "progress_log": progress_log is not None,
+            "timeout": timeout != 900 or per_file_timeout != 60,
+        }
+        if rejected := sorted(key for key, value in unsupported.items() if value):
+            raise ValueError("hosted TypyBench does not support: " + ", ".join(rejected))
+    elif engine_worktree is None:
+        raise ValueError("local TypyBench requires an engine worktree")
+
     untyped_root = Path(untyped_root)
     files = require_python_source_files(
         untyped_root,
@@ -266,36 +296,43 @@ def emit_archway_predictions(
 
     try:
         probe_started = time.monotonic()
-        repo_record = _run_successor_repo_probe(
-            engine_worktree=Path(engine_worktree),
-            source_root=untyped_root,
-            runner=runner,
-            timeout=timeout,
-            progress_log=progress_log,
-            checkpoint_roots=checkpoint_roots,
-            checkpoint_size=max_wave_size,
-            checkpoint_batch_start=checkpoint_batch_start,
-            checkpoint_batch_count=checkpoint_batch_count,
-            checkpoint_replay_prefix=checkpoint_replay_prefix,
-            body_labels=body_labels,
-            body_timeout=body_timeout,
-            progress_timeout=progress_timeout,
-            projection_timeout=projection_timeout,
-            sample_rate_hz=sample_rate_hz,
-            sample_targeted=sample_targeted,
-            sample_forward=sample_forward,
-            sample_session_open=sample_session_open,
-            session_open_timeout=session_open_timeout,
-            forward_timeout=forward_timeout,
-            run_forward_seed=run_forward_seed,
-            collect_predictions=collect_predictions,
-            diagnostic_details=(analysis_observation_mode == "diagnostic"),
-            contextual_summary_evaluation=contextual_summary_evaluation,
-            observation_kinds=frozenset((
-                "parameter",
-                "return",
-            )),
-        )
+        if session_engine is not None:
+            repo_record = _run_hosted_repo_probe(
+                source_root=untyped_root, session_engine=session_engine,
+                run_forward_seed=run_forward_seed,
+                contextual_summary_evaluation=contextual_summary_evaluation,
+            )
+        else:
+            repo_record = _run_successor_repo_probe(
+                engine_worktree=Path(engine_worktree),
+                source_root=untyped_root,
+                runner=runner,
+                timeout=timeout,
+                progress_log=progress_log,
+                checkpoint_roots=checkpoint_roots,
+                checkpoint_size=max_wave_size,
+                checkpoint_batch_start=checkpoint_batch_start,
+                checkpoint_batch_count=checkpoint_batch_count,
+                checkpoint_replay_prefix=checkpoint_replay_prefix,
+                body_labels=body_labels,
+                body_timeout=body_timeout,
+                progress_timeout=progress_timeout,
+                projection_timeout=projection_timeout,
+                sample_rate_hz=sample_rate_hz,
+                sample_targeted=sample_targeted,
+                sample_forward=sample_forward,
+                sample_session_open=sample_session_open,
+                session_open_timeout=session_open_timeout,
+                forward_timeout=forward_timeout,
+                run_forward_seed=run_forward_seed,
+                collect_predictions=collect_predictions,
+                diagnostic_details=(analysis_observation_mode == "diagnostic"),
+                contextual_summary_evaluation=contextual_summary_evaluation,
+                observation_kinds=frozenset((
+                    "parameter",
+                    "return",
+                )),
+            )
         seconds_repo_probe = time.monotonic() - probe_started
         for src in files:
             file_started = time.monotonic()
@@ -791,6 +828,130 @@ def _successor_shape_annotation(value: object) -> str | None:
     return _merge_types(rendered)
 
 
+def _analysis_source_roots(root: Path):
+    # Respect Python's conventional src layout.  Repository-wide prediction
+    # output still copies every Python file, but the persistent program
+    # session must model importable application modules rather than unrelated
+    # profiling fixtures, examples, and release scripts.  When no src layout
+    # exists, retain root modules and top-level package trees.
+    src = root / "src"
+    if src.is_dir() and any(src.rglob("*.py")):
+        # Root-level importable modules (for example ``setup.py``) and the
+        # conventional ``src`` tree are both analysis surfaces. Keep both
+        # roots and let module-name resolution select the most specific one.
+        return (root, src)
+    package_roots = tuple(sorted(
+        path for path in root.iterdir()
+        if path.is_dir() and (path / "__init__.py").is_file()
+    ))
+    return (root,) if not package_roots else (root, *package_roots)
+
+def _analysis_paths(root: Path):
+    roots = _analysis_source_roots(root)
+    if roots == (root,):
+        return tuple(sorted(root.rglob("*.py")))
+    paths = set(root.glob("*.py"))
+    for source_root in roots:
+        if source_root != root:
+            paths.update(source_root.rglob("*.py"))
+    return tuple(sorted(paths))
+
+def _module_name(root: Path, path: Path):
+    # Traversal roots are not necessarily Python import roots.  A top-level
+    # package such as ``root/capa`` is traversed directly to exclude unrelated
+    # repository trees, but its import name must remain ``capa.*``.  Only a
+    # conventional ``src`` directory is removed from the import identity.
+    src_root = root / "src"
+    source_root = (
+        src_root
+        if src_root.is_dir() and path.is_relative_to(src_root)
+        else root
+    )
+    rel = path.relative_to(source_root).with_suffix("")
+    parts = list(rel.parts)
+    if parts and parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts) or "__init__"
+
+def _run_hosted_repo_probe(
+    *, source_root: Path, session_engine: HostedSessionEngine,
+    run_forward_seed: bool = True, contextual_summary_evaluation: bool = False,
+) -> dict[str, Any]:
+    """Project durable service observations into the existing emission contract.
+
+    Translation is atomic in this service profile: a translation failure aborts
+    the repository rather than silently analyzing a reduced source graph.
+    """
+    paths = _analysis_paths(source_root)
+    module_files = {_module_name(source_root, path): str(path.relative_to(source_root)) for path in paths}
+    if len(module_files) != len(paths):
+        raise ValueError("repository has ambiguous Python module names")
+    sources = {name: (source_root / relative).read_text(encoding="utf-8")
+               for name, relative in module_files.items()}
+    if not sources:
+        raise ValueError("repository contains no analysis modules")
+    entry = next((name for name in ("main", "__main__") if name in sources),
+                 min(sources, key=lambda name: (name.count("."), len(name), name)))
+    result = session_engine.open_program(sources, entry, path=str(source_root.resolve()), options={
+        "possible_entry_modules": [], "class_field_observations": True,
+        "signature_observations_only": True,
+        "contextual_summary_evaluation": contextual_summary_evaluation,
+    })
+    if run_forward_seed:
+        session_engine.command(result, {"kind": "seed_module", "module": entry})
+    session_engine.command(result, {"kind": "catalog_shapes"})
+    ids = sorted({row["address_id"] for row in result.head["shape_observations"]
+                  if row["kind"] in {"parameter", "return"}})
+    if ids:
+        session_engine.command(result, {"kind": "observe_shapes", "address_ids": ids, "max_wave_size": 8})
+    else:
+        ids = sorted({row["address_id"] for row in result.head["observations"]
+                      if row["kind"] in {"parameter", "return"} and not row["types"]})
+        if ids:
+            session_engine.command(result, {"kind": "observe_types", "address_ids": ids, "max_wave_size": 8})
+        session_engine.command(result, {"kind": "catalog_shapes"})
+    # Match the local runner's catalog-before-candidates, resolve-after ordering.
+    # Candidate demands can refine facts without changing the emission catalog.
+    shape_ids = {row["address_id"] for row in result.head["shape_observations"]}
+    type_ids = {row["address_id"] for row in result.head["observations"]}
+    session_engine.command(result, {"kind": "observe_candidates"})
+    candidates = result.head["candidate_observations"]
+    session_engine.command(result, {"kind": "catalog_shapes"})
+    shapes = [row for row in result.head["shape_observations"] if row["address_id"] in shape_ids]
+    types = [row for row in result.head["observations"] if row["address_id"] in type_ids]
+    files = {str(path.relative_to(source_root)): [] for path in sorted(source_root.rglob("*.py"))}
+    for category, rows in (("types", types), ("shape", shapes),
+                           ("candidate", candidates)):
+        for item in rows:
+            if category == "shape" and (not item["shape"] or item["kind"] not in {"parameter", "return"}):
+                continue
+            module = item["module"]
+            relative = module_files.get(module)
+            if relative is None and module is not None:
+                matches = [path for name, path in module_files.items()
+                           if module == name or module.endswith("." + name)]
+                relative = matches[0] if len(matches) == 1 else None
+            if relative is None:
+                continue
+            row = {key: item[key] for key in ("name", "kind", "family", "function")}
+            row["line"] = (item["position"] or {}).get("row")
+            if category == "candidate":
+                row.update(types=item["types"], precision=item["precision"],
+                           requirement_path=[], candidate_evidence=item["candidate_evidence"])
+            else:
+                row.update(definition_line=(item["definition_position"] or {}).get("row"),
+                           body_morphism_id=item["body_morphism_id"])
+                row[category] = item[category] or []
+            files[relative].append(row)
+    return {"ok": True, "files": files, "analysis_summary": {
+        "execution": "hosted-session", "translation_policy": "atomic-program",
+        "observation_policy": "signature-observations-only",
+        "forward_policy": "explicit-entry-forward" if run_forward_seed else "disabled",
+        "translation_failures": {}, "session_id": result.head["session_id"],
+        "revision_id": result.head["revision_id"], "checkpoint_id": result.head["checkpoint_id"],
+    }}
+
+
 def _run_successor_repo_probe(
     *,
     engine_worktree: Path,
@@ -896,10 +1057,8 @@ import traceback
 from collections import Counter
 from pathlib import Path
 
-from sd_core.analysis.diagram_analysis import (
-    TYPE_OF,
-    open_hybrid_program_session,
-)
+from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session
+from sd_core.analysis.diagram_analysis.route_sensitive_facts import TYPE_OF
 from sd_core.tooling.analysis_arena import AnalysisAllocationArena
 from sd_core.tooling.harness import TranslationResult
 
@@ -982,53 +1141,6 @@ def gc_profile_delta(before, after):
         for previous, current in zip(before, after)
     ]
 
-def analysis_source_roots():
-    # Respect Python's conventional src layout.  Repository-wide prediction
-    # output still copies every Python file, but the persistent program
-    # session must model importable application modules rather than unrelated
-    # profiling fixtures, examples, and release scripts.  When no src layout
-    # exists, retain root modules and top-level package trees.
-    src = root / "src"
-    if src.is_dir() and any(src.rglob("*.py")):
-        # Root-level importable modules (for example ``setup.py``) and the
-        # conventional ``src`` tree are both analysis surfaces. Keep both
-        # roots and let module-name resolution select the most specific one.
-        return (root, src)
-    package_roots = tuple(sorted(
-        path for path in root.iterdir()
-        if path.is_dir() and (path / "__init__.py").is_file()
-    ))
-    return (root,) if not package_roots else (root, *package_roots)
-
-def analysis_paths():
-    roots = analysis_source_roots()
-    if roots == (root,):
-        return tuple(sorted(root.rglob("*.py")))
-    paths = set(root.glob("*.py"))
-    for source_root in roots:
-        if source_root != root:
-            paths.update(source_root.rglob("*.py"))
-    return tuple(sorted(paths))
-
-source_roots = analysis_source_roots()
-
-def module_name(path):
-    # Traversal roots are not necessarily Python import roots.  A top-level
-    # package such as ``root/capa`` is traversed directly to exclude unrelated
-    # repository trees, but its import name must remain ``capa.*``.  Only a
-    # conventional ``src`` directory is removed from the import identity.
-    src_root = root / "src"
-    source_root = (
-        src_root
-        if src_root.is_dir() and path.is_relative_to(src_root)
-        else root
-    )
-    rel = path.relative_to(source_root).with_suffix("")
-    parts = list(rel.parts)
-    if parts and parts[-1] == "__init__":
-        parts.pop()
-    return ".".join(parts) or "__init__"
-
 def bounded_scheduler_snapshot(session):
     """Retain monotone progress counters even when a diagnostic cutoff fires."""
     scheduler = session.scheduler
@@ -1048,8 +1160,9 @@ def bounded_scheduler_snapshot(session):
 try:
     phase_started = time.monotonic()
     all_paths = sorted(root.rglob("*.py"))
-    paths = analysis_paths()
-    by_module = {module_name(path): path for path in paths}
+    module_files = json.loads(sys.argv[30])
+    by_module = {name: root / relative for name, relative in module_files.items()}
+    paths = tuple(by_module.values())
     module_files = {name: str(path.relative_to(root)) for name, path in by_module.items()}
     sources = {name: path.read_text(encoding="utf-8") for name, path in by_module.items()}
     modules = {}
@@ -2225,6 +2338,8 @@ os._exit(0)
             "sample-targeted" if sample_targeted else "no-targeted-sample",
             str(session_open_timeout or 0),
             str(projection_timeout or 0),
+            json.dumps({_module_name(source_root, path): str(path.relative_to(source_root))
+                        for path in _analysis_paths(source_root)}),
         ]
         progress_stream = None
         if progress_log is not None:
