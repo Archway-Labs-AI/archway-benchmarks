@@ -6,6 +6,9 @@ import math
 from types import SimpleNamespace
 from typing import Callable, Protocol
 import uuid
+import hashlib
+import json
+import sqlite3
 
 from archway_benchmarks.engines.successor_archway import _map_observations, _typeeval_name
 from archway_benchmarks.types import Annotation
@@ -16,6 +19,46 @@ class SessionClient(Protocol):
     def open_analysis_session(self, artifact_id, *, request_id, options=None): ...
     def submit_analysis_command(self, session_id, *, request_id, revision_id, checkpoint_id, command): ...
     def analysis_operation(self, operation_id, *, on_retry=None): ...
+
+
+class SessionRunJournal:
+    """Private durable request intents and results for one pinned run.
+
+    Intent commits before submission, so a lost response reuses the same request
+    ID. Completed results are read locally. Callers pin corpus/configuration and
+    service identity in metadata; credentials must never be included.
+    """
+
+    def __init__(self, path, *, metadata: dict):
+        self.db = sqlite3.connect(path)
+        self.db.execute("PRAGMA synchronous=FULL")
+        self.db.execute("CREATE TABLE IF NOT EXISTS identity (singleton INTEGER PRIMARY KEY CHECK(singleton=1), metadata TEXT NOT NULL)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS steps (key TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, result TEXT)")
+        encoded = json.dumps(metadata, sort_keys=True, separators=(",", ":"))
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO identity VALUES(1,?)", (encoded,))
+        if self.db.execute("SELECT metadata FROM identity WHERE singleton=1").fetchone()[0] != encoded:
+            self.db.close()
+            raise ValueError("run identity changed; refusing resume")
+
+    def intent(self, phase: str, path: str, payload: dict):
+        key = hashlib.sha256(json.dumps([phase, path, payload], sort_keys=True,
+            separators=(",", ":")).encode()).hexdigest()
+        with self.db:
+            self.db.execute("INSERT OR IGNORE INTO steps VALUES(?,?,NULL)", (key, uuid.uuid4().hex))
+        request_id, result = self.db.execute("SELECT request_id,result FROM steps WHERE key=?", (key,)).fetchone()
+        return key, request_id, json.loads(result) if result is not None else None
+
+    def complete(self, key: str, result: dict):
+        encoded = json.dumps(result, sort_keys=True)
+        with self.db:
+            current = self.db.execute("SELECT result FROM steps WHERE key=?", (key,)).fetchone()
+            if current is None or (current[0] is not None and current[0] != encoded):
+                raise ValueError("journal result conflicts with committed step")
+            self.db.execute("UPDATE steps SET result=? WHERE key=?", (encoded, key))
+
+    def close(self):
+        self.db.close()
 
 
 @dataclass
@@ -29,8 +72,9 @@ class HostedSessionEngine:
     name = "archway-portable-session-diagnostic"
 
     def __init__(self, client: SessionClient, *, record: Callable[[dict], None],
-                 deadline_seconds: float = 180, verify_resume: bool = True, poll_seconds: float = 0.5):
-        self.client, self.record = client, record
+                 deadline_seconds: float = 180, verify_resume: bool = True, poll_seconds: float = 0.5,
+                 journal: SessionRunJournal | None = None):
+        self.client, self.record, self.journal = client, record, journal
         if not math.isfinite(poll_seconds) or poll_seconds <= 0:
             raise ValueError("polling interval must be positive and finite")
         self.poll_seconds = poll_seconds
@@ -68,17 +112,28 @@ class HostedSessionEngine:
             raise RuntimeError("hosted benchmark operation failed")
         return operation["result"]
 
-    def translate(self, source: str, path: str) -> tuple[str, dict]:
+    def _step(self, phase: str, path: str, payload: dict, submit):
+        key, request_id, cached = (self.journal.intent(phase, path, payload) if self.journal
+                                  else (None, uuid.uuid4().hex, None))
+        if cached is not None:
+            self.record({"event": "reused", "phase": phase, "path": path})
+            return cached
         started = time.monotonic()
-        artifact = self._complete(self.client.translate_analysis_artifact(
-            {"main": source}, "main", request_id=uuid.uuid4().hex), "translate", path, submitted_at=started)
+        result = self._complete(submit(request_id), phase, path, submitted_at=started)
+        if self.journal:
+            self.journal.complete(key, result)
+        return result
+
+    def translate(self, source: str, path: str) -> tuple[str, dict]:
+        artifact = self._step("translate", path, {"sources": {"main": source}, "entry_module": "main"},
+            lambda request_id: self.client.translate_analysis_artifact(
+                {"main": source}, "main", request_id=request_id))
         return path, artifact
 
     def analyze(self, translation: tuple[str, dict]) -> HostedSessionResult:
         path, artifact = translation
-        started = time.monotonic()
-        head = self._complete(self.client.open_analysis_session(
-            artifact["artifact_id"], request_id=uuid.uuid4().hex), "open", path, submitted_at=started)
+        head = self._step("open", path, {"artifact_id": artifact["artifact_id"]},
+            lambda request_id: self.client.open_analysis_session(artifact["artifact_id"], request_id=request_id))
         result = HostedSessionResult(self, path, head)
         self.command(result, {"kind": "complete_module", "module": "main"})
         if self.verify_resume:
@@ -90,10 +145,10 @@ class HostedSessionEngine:
 
     def command(self, result: HostedSessionResult, command: dict) -> None:
         head = result.head
-        started = time.monotonic()
-        updated = self._complete(self.client.submit_analysis_command(head["session_id"],
-            request_id=uuid.uuid4().hex, revision_id=head["revision_id"],
-            checkpoint_id=head["checkpoint_id"], command=command), command["kind"], result.path, submitted_at=started)
+        payload = {"session_id": head["session_id"], "revision_id": head["revision_id"],
+                   "checkpoint_id": head["checkpoint_id"], "command": command}
+        updated = self._step(command["kind"], result.path, payload,
+            lambda request_id: self.client.submit_analysis_command(request_id=request_id, **payload))
         if (updated["session_id"], updated["revision_id"]) != (head["session_id"], head["revision_id"]):
             raise RuntimeError("hosted operation changed session/revision attribution")
         result.head = updated
