@@ -123,8 +123,23 @@ module in a new worker executes zero productions. `HostedSessionTypeEvalPyAdapte
 reuses benchmark-owned location/type mapping and can demand unresolved catalogued
 type observations. It does not import or run `sd_core`.
 
-This initial profile is a single-module diagnostic, not a replacement for all
-successor benchmark adapters: container-path/generic-shape queries are not yet
-supported. Missing predictions remain in the original scoring denominator.
-The internal runner owns corpus selection, credentials and retained operation
-records. Tests: `tests/test_hosted_sessions.py`.
+The TypeEvalPy adapter remains a single-module diagnostic with nominal type
+queries; missing predictions remain in the original scoring denominator.
+`run_archway_pycg(..., session_engine=...)` consumes contextual semantic edges
+through the same benchmark-owned name/frame projection and scorer as local PyCG.
+`emit_archway_predictions(..., session_engine=...)` consumes nominal, generic-shape
+and candidate observations through the existing TypyBench source emitter. It uses
+the shared repository source discovery, library entry policy and signature workload.
+Neither hosted adapter needs a local engine worktree or imports `sd_core`.
+
+These extensions require an engine release containing the generic observation
+commands; they have been validated against a local HTTP service, not deployed.
+TypyBench fixtures including nested containers, multiline definitions, class fields
+and open-world receiver capabilities agree with local emission under both forward
+seeding policies. These are bounded differential fixtures, not a corpus-wide result.
+Unsupported local diagnostic/timeout settings reject explicitly. Translation is
+atomic per program in this profile: a failed module aborts that repository instead
+of using the local TypyBench runner's partial translation behavior. The semantic
+graph response is limited to 10,000 edges, and each demand to 10,000 addresses.
+The internal runner owns corpus selection, credentials, infrastructure provenance
+and retained operation records. TypyBench scoring remains a separate existing step.

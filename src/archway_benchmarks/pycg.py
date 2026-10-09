@@ -160,7 +160,7 @@ class PyCGCaseResult:
 class PyCGRunResult:
     suite: str
     corpus_root: str
-    engine_root: str
+    engine_root: str | None
     edge_provider: EdgeProvider
     cases_total: int
     cases_attempted: int
@@ -496,7 +496,7 @@ def _macro_file_is_included(path: Path, spec: MacroProjectSpec) -> bool:
 def run_archway_pycg(
     *,
     corpus_root: Path,
-    engine_root: Path,
+    engine_root: Path | None = None,
     suite: str = "micro",
     limit: int | None = None,
     case_names: tuple[str, ...] = (),
@@ -509,7 +509,17 @@ def run_archway_pycg(
     successor_summarize_callee_results: bool = False,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
+    session_engine=None,
 ) -> PyCGRunResult:
+    if session_engine is None and engine_root is None:
+        raise ValueError("local PyCG requires an engine root")
+    if session_engine is not None and (edge_provider != "successor" or include_diagnostic_name_hints
+            or successor_record_events or successor_summarize_callee_results
+            or successor_sampling_rate_hz is not None or successor_partial_graph_checkpoint_seconds is not None
+            or analysis_product != "standalone" or callable_root_activation != "off"):
+        raise ValueError("session execution supports the semantic successor workload without local diagnostics")
+    if session_engine is not None and case_timeout_seconds is not None:
+        raise ValueError("session execution uses operation deadlines; local case timeouts are unsupported")
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
     if (
@@ -552,23 +562,26 @@ def run_archway_pycg(
         expected = set(case.expected_edges)
         expected_total += case.expected_edge_occurrence_count
         try:
-            produced = _archway_call_edges_with_timeout(
-                case,
-                engine_root=engine_root,
-                include_diagnostic_name_hints=include_diagnostic_name_hints,
-                analysis_product=analysis_product,
-                callable_root_activation=callable_root_activation,
-                case_timeout_seconds=case_timeout_seconds,
-                edge_provider=edge_provider,
-                successor_record_events=successor_record_events,
-                successor_summarize_callee_results=(
-                    successor_summarize_callee_results
-                ),
-                successor_sampling_rate_hz=successor_sampling_rate_hz,
-                successor_partial_graph_checkpoint_seconds=(
-                    successor_partial_graph_checkpoint_seconds
-                ),
-            )
+            if session_engine is not None:
+                produced = hosted_successor_call_edges(case, session_engine=session_engine)
+            else:
+                produced = _archway_call_edges_with_timeout(
+                    case,
+                    engine_root=engine_root,
+                    include_diagnostic_name_hints=include_diagnostic_name_hints,
+                    analysis_product=analysis_product,
+                    callable_root_activation=callable_root_activation,
+                    case_timeout_seconds=case_timeout_seconds,
+                    edge_provider=edge_provider,
+                    successor_record_events=successor_record_events,
+                    successor_summarize_callee_results=(
+                        successor_summarize_callee_results
+                    ),
+                    successor_sampling_rate_hz=successor_sampling_rate_hz,
+                    successor_partial_graph_checkpoint_seconds=(
+                        successor_partial_graph_checkpoint_seconds
+                    ),
+                )
             if isinstance(produced, SuccessorEdgeResult):
                 predicted = set(produced.edges)
                 analysis_evidence = produced.evidence
@@ -633,7 +646,7 @@ def run_archway_pycg(
     return PyCGRunResult(
         suite=suite,
         corpus_root=str(corpus_root),
-        engine_root=str(engine_root),
+        engine_root=str(engine_root) if engine_root is not None else None,
         edge_provider=edge_provider,
         cases_total=len(cases),
         cases_attempted=len(cases),
@@ -876,6 +889,32 @@ def _produce_archway_call_edges(
     raise ValueError(f"unknown edge provider: {edge_provider}")
 
 
+def hosted_successor_call_edges(case: PyCGCase, *, session_engine) -> set[Edge]:
+    """Use the successor workload through its supported durable session API.
+
+    Corpus/module preparation and semantic-to-PyCG projection are shared with
+    the local successor runner. No source heuristics or fallback engine runs.
+    """
+    sources = _load_case_sources(case)
+    entry = "main" if "main" in sources else min(sources)
+    result = session_engine.open_program(sources, entry, path=case.suite_path,
+        options={"catalog_observations": False,
+                 "possible_entry_modules": sorted(sources) if case.suite == "macro" else None})
+    session_engine.command(result, {"kind": "semantic_call_graph"})
+    graph = result.head.get("semantic_call_graph")
+    if not isinstance(graph, dict) or graph.get("schema") != "archway.semantic-call-graph.v1":
+        raise ValueError("service does not expose the semantic call graph contract")
+    if graph.get("includes_capability_candidates") is not False:
+        raise ValueError("candidate call edges are not benchmark predictions")
+    edges = set()
+    for edge in graph["edges"]:
+        if edge["evidence_grade"] != "semantic":
+            raise ValueError("non-semantic edge in semantic call graph")
+        if edge["caller"] is not None:
+            edges.add((edge["caller"], _successor_pycg_target_name(edge["target"])))
+    return _inline_synthetic_frame_edges(edges)
+
+
 def successor_archway_call_edges(
     case: PyCGCase,
     *,
@@ -906,7 +945,7 @@ def successor_archway_call_edge_result(
     if engine_text not in sys.path:
         sys.path.insert(0, engine_text)
 
-    from sd_core.analysis.diagram_analysis import open_hybrid_program_session
+    from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session
     from sd_core.tooling.harness import ProgramResult
     from sd_core.tooling.sampling_profile import SamplingProfiler
 

@@ -122,3 +122,26 @@ def test_journal_replays_after_completed_response_before_local_commit(tmp_path):
     with pytest.raises(ValueError, match='conflicts'):
         journal.complete(key, {'artifact_id': 'other'})
     journal.close()
+
+
+def test_pycg_hosted_projection_uses_existing_name_and_frame_rules(tmp_path):
+    from archway_benchmarks.pycg import PyCGCase, hosted_successor_call_edges
+    from types import SimpleNamespace
+
+    main = tmp_path / 'main.py'
+    main.write_text('x = [str(i) for i in range(2)]\n')
+    case = PyCGCase('macro', 'repo', tmp_path, tmp_path, main, (main,), {})
+    class Engine:
+        def open_program(self, sources, entry_module, *, path, options):
+            assert sources == {'main': main.read_text()}
+            assert entry_module == 'main'
+            assert options == {'catalog_observations': False, 'possible_entry_modules': ['main']}
+            return SimpleNamespace(head={})
+        def command(self, result, command):
+            assert command == {'kind': 'semantic_call_graph'}
+            result.head = {'semantic_call_graph': {'schema': 'archway.semantic-call-graph.v1',
+                'includes_capability_candidates': False, 'edges': [
+                    {'caller': 'main', 'target': 'main.<listcomp>', 'evidence_grade': 'semantic'},
+                    {'caller': 'main.<listcomp>', 'target': '<builtin>.str', 'evidence_grade': 'semantic'},
+                ]}}
+    assert hosted_successor_call_edges(case, session_engine=Engine()) == {('main', '<builtin>.str')}
