@@ -1,10 +1,11 @@
 """Portable session benchmark consumer; never imports the analysis engine."""
 
 from dataclasses import dataclass
+from pathlib import Path
 import time
 import math
 from types import SimpleNamespace
-from typing import Callable, Protocol
+from typing import Callable, Iterable, Protocol
 import uuid
 import hashlib
 import json
@@ -12,6 +13,22 @@ import sqlite3
 
 from archway_benchmarks.engines.successor_archway import _map_observations, _typeeval_name
 from archway_benchmarks.types import Annotation
+
+
+def contained_source_paths(root: Path, paths: Iterable[Path]) -> dict[Path, Path]:
+    """Validate the entire selection before reading or uploading source.
+
+    Internal symlinks are allowed, including a symlink naming the selected root.
+    Return resolved read paths while preserving lexical paths for module names.
+    """
+    boundary = root.resolve(strict=True)
+    resolved = {}
+    for path in paths:
+        target = path.resolve(strict=True)
+        if not target.is_relative_to(boundary):
+            raise ValueError(f"source path escapes selected root: {path}")
+        resolved[path] = target
+    return resolved
 
 
 class SessionClient(Protocol):

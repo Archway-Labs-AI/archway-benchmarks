@@ -3,6 +3,8 @@ import inspect
 import json
 import sys
 
+import pytest
+
 import archway_benchmarks.typybench_archway_emit as emit_module
 from archway_benchmarks.typybench_archway_emit import (
     _annotate_source,
@@ -1252,3 +1254,58 @@ def test_shared_repository_layout_retains_packages_and_excludes_unrelated_trees(
     assert {emit_module._module_name(tmp_path, path) for path in emit_module._analysis_paths(tmp_path)} == {
         'library', 'library.values',
     }
+
+
+@pytest.mark.parametrize("link_kind", ["file", "directory"])
+def test_hosted_escaping_source_preserves_existing_predictions(tmp_path, link_kind):
+
+    root = tmp_path / 'repository'
+    root.mkdir()
+    outside = tmp_path / 'private'
+    outside.mkdir()
+    secret = outside / 'outside.py'
+    secret.write_text('PRIVATE_MARKER = 42\n')
+    (root / 'setup.py').write_text('pass\n')
+    if link_kind == 'file':
+        (root / 'linked.py').symlink_to(secret)
+    else:
+        (root / 'src').symlink_to(outside, target_is_directory=True)
+    predictions = tmp_path / 'predictions' / 'fixture'
+    predictions.mkdir(parents=True)
+    retained = predictions / 'existing.py'
+    retained.write_text('existing output\n')
+    with pytest.raises(ValueError, match='source path escapes selected root'):
+        emit_archway_predictions(repo_name='fixture', untyped_root=root,
+            predictions_root=predictions.parent, session_engine=object())
+    assert retained.read_text() == 'existing output\n'
+    assert not (predictions / 'linked.py').exists()
+
+
+def test_large_module_manifest_reaches_worker_without_using_argv(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    # A large synthetic selection, without generating or analyzing source files.
+    paths = tuple(tmp_path / ('module_' + str(i).zfill(4) + '_' + 'x' * 40 + '.py')
+                  for i in range(1700))
+    expected = {path.stem: path.name for path in paths}
+    assert len(json.dumps(expected).encode()) > 128 * 1024
+    monkeypatch.setattr(emit_module, '_analysis_paths', lambda root: paths)
+    launch = emit_module.subprocess.Popen
+    manifests = []
+
+    def reader_process(cmd, **kwargs):
+        # Exercise the real process handoff; substitute only the expensive engine.
+        Path(cmd[1]).write_text(
+            'import json, sys\n'
+            'from pathlib import Path\n'
+            'manifest = json.loads(Path(sys.argv[30]).read_text(encoding="utf-8"))\n'
+            'print(json.dumps({"ok": True, "manifest": manifest}))\n'
+        )
+        manifests.append(Path(cmd[-1]))
+        return launch(cmd, **kwargs)
+
+    monkeypatch.setattr(emit_module.subprocess, 'Popen', reader_process)
+    result = _run_successor_repo_probe(engine_worktree=tmp_path, source_root=tmp_path,
+        runner=(sys.executable,), timeout=10)
+    assert result == {'ok': True, 'manifest': expected}
+    assert len(manifests) == 1 and not manifests[0].exists()

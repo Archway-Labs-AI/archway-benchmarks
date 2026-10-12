@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from archway_benchmarks.engines.hosted_sessions import HostedSessionEngine
+from archway_benchmarks.engines.hosted_sessions import HostedSessionEngine, contained_source_paths
 from archway_benchmarks.typybench_harness import require_python_source_files
 from archway_benchmarks.typybench_scored_slots import scored_slots
 
@@ -269,6 +269,9 @@ def emit_archway_predictions(
         label=f"TypyBench repo {repo_name!r} repo_without_types",
         suffixes=(".py",),
     )
+    if session_engine is not None:
+        # Reject escaping sources before copying files or replacing prior predictions.
+        contained_source_paths(untyped_root, (*files, *_analysis_paths(untyped_root)))
     dest_root = Path(predictions_root) / repo_name
     if overwrite and dest_root.exists():
         shutil.rmtree(dest_root)
@@ -883,10 +886,11 @@ def _run_hosted_repo_probe(
     the repository rather than silently analyzing a reduced source graph.
     """
     paths = _analysis_paths(source_root)
+    read_paths = contained_source_paths(source_root, paths)
     module_files = {_module_name(source_root, path): str(path.relative_to(source_root)) for path in paths}
     if len(module_files) != len(paths):
         raise ValueError("repository has ambiguous Python module names")
-    sources = {name: (source_root / relative).read_text(encoding="utf-8")
+    sources = {name: read_paths[source_root / relative].read_text(encoding="utf-8")
                for name, relative in module_files.items()}
     if not sources:
         raise ValueError("repository contains no analysis modules")
@@ -1160,7 +1164,7 @@ def bounded_scheduler_snapshot(session):
 try:
     phase_started = time.monotonic()
     all_paths = sorted(root.rglob("*.py"))
-    module_files = json.loads(sys.argv[30])
+    module_files = json.loads(Path(sys.argv[30]).read_text(encoding="utf-8"))
     by_module = {name: root / relative for name, relative in module_files.items()}
     paths = tuple(by_module.values())
     module_files = {name: str(path.relative_to(root)) for name, path in by_module.items()}
@@ -2288,7 +2292,14 @@ sys.stdout.flush()
 # reclaim that graph at the process boundary instead.
 os._exit(0)
 '''
-    with tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f:
+    with (
+        tempfile.NamedTemporaryFile("w", suffix=".py", delete=True) as f,
+        tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=True) as manifest,
+    ):
+        # Only the manifest's path crosses exec; repository size must not consume argv.
+        json.dump({_module_name(source_root, path): str(path.relative_to(source_root))
+                   for path in _analysis_paths(source_root)}, manifest)
+        manifest.flush()
         f.write(probe)
         f.flush()
         cmd = [
@@ -2338,8 +2349,7 @@ os._exit(0)
             "sample-targeted" if sample_targeted else "no-targeted-sample",
             str(session_open_timeout or 0),
             str(projection_timeout or 0),
-            json.dumps({_module_name(source_root, path): str(path.relative_to(source_root))
-                        for path in _analysis_paths(source_root)}),
+            manifest.name,
         ]
         progress_stream = None
         if progress_log is not None:

@@ -145,3 +145,56 @@ def test_pycg_hosted_projection_uses_existing_name_and_frame_rules(tmp_path):
                     {'caller': 'main.<listcomp>', 'target': '<builtin>.str', 'evidence_grade': 'semantic'},
                 ]}}
     assert hosted_successor_call_edges(case, session_engine=Engine()) == {('main', '<builtin>.str')}
+
+
+@pytest.mark.parametrize('adapter', ['pycg', 'typybench'])
+@pytest.mark.parametrize('link_kind', ['file', 'directory'])
+def test_hosted_sources_reject_escaping_symlinks_before_read_or_upload(tmp_path, monkeypatch, adapter, link_kind):
+    from pathlib import Path
+    from archway_benchmarks.pycg import PyCGCase, hosted_successor_call_edges
+    from archway_benchmarks.typybench_archway_emit import _run_hosted_repo_probe
+
+    root = tmp_path / 'repository'
+    root.mkdir()
+    outside = tmp_path / 'private'
+    outside.mkdir()
+    secret = outside / 'main.py'
+    secret.write_text('PRIVATE_MARKER = 42\n')
+    if link_kind == 'file':
+        source = root / 'main.py'
+        source.symlink_to(secret)
+    else:
+        (root / 'src').symlink_to(outside, target_is_directory=True)
+        source = root / 'src' / 'main.py'
+    original_read = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        assert path.resolve() != secret, 'out-of-root source was read'
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded_read)
+
+    class Engine:
+        def open_program(self, *args, **kwargs):
+            pytest.fail('source validation must precede any hosted request')
+
+    with pytest.raises(ValueError, match='source path escapes selected root'):
+        if adapter == 'pycg':
+            case = PyCGCase('micro', 'fixture', root, root, source, (source,), {})
+            hosted_successor_call_edges(case, session_engine=Engine())
+        else:
+            _run_hosted_repo_probe(source_root=root, session_engine=Engine())
+
+
+def test_containment_preserves_internal_links_and_explicit_root_alias(tmp_path):
+    from archway_benchmarks.engines.hosted_sessions import contained_source_paths
+
+    root = tmp_path / 'repository'
+    root.mkdir()
+    source = root / 'values.py'
+    source.write_text('x = 1\n')
+    (root / 'linked.py').symlink_to(source)
+    alias = tmp_path / 'selected-root'
+    alias.symlink_to(root, target_is_directory=True)
+    selected = alias / 'linked.py'
+    assert contained_source_paths(alias, [selected]) == {selected: source}

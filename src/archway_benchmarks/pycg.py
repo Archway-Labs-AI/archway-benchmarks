@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Mapping
 
+from archway_benchmarks.engines.hosted_sessions import contained_source_paths
 from archway_benchmarks.successor_runtime_evidence import (
     callable_runtime_evidence,
 )
@@ -895,7 +896,7 @@ def hosted_successor_call_edges(case: PyCGCase, *, session_engine) -> set[Edge]:
     Corpus/module preparation and semantic-to-PyCG projection are shared with
     the local successor runner. No source heuristics or fallback engine runs.
     """
-    sources = _load_case_sources(case)
+    sources = _load_case_sources(case, require_containment=True)
     entry = "main" if "main" in sources else min(sources)
     result = session_engine.open_program(sources, entry, path=case.suite_path,
         options={"catalog_observations": False,
@@ -2114,11 +2115,13 @@ def archway_call_edges(
     return _inline_synthetic_frame_edges(edges)
 
 
-def _load_case_sources(case: PyCGCase) -> dict[str, str]:
+def _load_case_sources(case: PyCGCase, *, require_containment: bool = False) -> dict[str, str]:
+    read_paths = (contained_source_paths(case.package_root, case.source_paths)
+                  if require_containment else {path: path for path in case.source_paths})
     sources: dict[str, str] = {}
-    for path in case.source_paths:
+    for path, read_path in read_paths.items():
         module_name = _module_name_for_path(path, case.package_root)
-        source = path.read_text(encoding="utf-8-sig")
+        source = read_path.read_text(encoding="utf-8-sig")
         if path.name == "__init__.py" and not source.strip():
             source = "pass\n"
         sources[module_name] = source

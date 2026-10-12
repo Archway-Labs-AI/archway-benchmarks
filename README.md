@@ -163,7 +163,8 @@ interfaces. That repository supplies our team's orchestration, not an access byp
 The adapter does not acquire credentials or contain service secrets.
 
 Hosted execution uploads selected source to the service and creates durable analysis
-artifacts. Local journals and detailed results may also contain sensitive information.
+artifacts. Hosted PyCG and TypyBench reject source paths that resolve outside the
+selected source root, including escaping symlinks; links within that root are allowed. Local journals and detailed results may also contain sensitive information.
 No adapter automatically publishes these files. Keep source, checkpoints, journals
 and detailed results private unless deliberately approved for publication. A future
 public results page will publish selected scores and reproducibility metadata through
