@@ -133,7 +133,8 @@ the shared repository source discovery, library entry policy and signature workl
 Neither hosted adapter needs a local engine worktree or imports `sd_core`.
 
 These extensions require an engine release containing the generic observation
-commands; they have been validated against a local HTTP service, not deployed.
+commands. Bounded local HTTP fixtures validate the adapter contract; deployment
+and access to a compatible hosted service are separate requirements.
 TypyBench fixtures including nested containers, multiline definitions, class fields
 and open-world receiver capabilities agree with local emission under both forward
 seeding policies. These are bounded differential fixtures, not a corpus-wide result.
@@ -143,3 +144,27 @@ of using the local TypyBench runner's partial translation behavior. The semantic
 graph response is limited to 10,000 edges, and each demand to 10,000 addresses.
 The internal runner owns corpus selection, credentials, infrastructure provenance
 and retained operation records. TypyBench scoring remains a separate existing step.
+
+
+### Access and run data
+
+Running the public benchmark harness does not require an Archway account. Local
+backends require the relevant tool to be installed and available separately.
+Using Archway's hosted engine requires both an authenticated identity and permission
+from the service; copying this repository or registering an account grants neither.
+Hosted access is currently team-only, with no public self-service access promised.
+
+The session adapter accepts a caller-supplied client implementing `SessionClient`.
+An application constructs the supported engine client with its endpoint, pinned
+engine revision and credential provider, then passes it to `HostedSessionEngine`.
+The application and adapter run in the same client process; only engine execution
+is remote. You do not need the private `bench-internal` repository to call these
+interfaces. That repository supplies our team's orchestration, not an access bypass.
+The adapter does not acquire credentials or contain service secrets.
+
+Hosted execution uploads selected source to the service and creates durable analysis
+artifacts. Local journals and detailed results may also contain sensitive information.
+No adapter automatically publishes these files. Keep source, checkpoints, journals
+and detailed results private unless deliberately approved for publication. A future
+public results page will publish selected scores and reproducibility metadata through
+an explicit publication process, independently of executing or saving a run.
