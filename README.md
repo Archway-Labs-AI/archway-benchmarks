@@ -164,7 +164,11 @@ The adapter does not acquire credentials or contain service secrets.
 
 Hosted execution uploads selected source to the service and creates durable analysis
 artifacts. Hosted PyCG and TypyBench reject source paths that resolve outside the
-selected source root, including escaping symlinks; links within that root are allowed. Local journals and detailed results may also contain sensitive information.
+selected source root, including escaping symlinks; links within that root are allowed.
+Hosted PyCG also checks derived case/package directories and ground-truth files against
+the caller-selected corpus root. A symlink used to select the corpus itself is allowed;
+nested symlinks cannot expand that boundary. Local journals and detailed results may
+also contain sensitive information.
 No adapter automatically publishes these files. Keep source, checkpoints, journals
 and detailed results private unless deliberately approved for publication. A future
 public results page will publish selected scores and reproducibility metadata through

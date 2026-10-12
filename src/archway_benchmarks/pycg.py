@@ -389,16 +389,21 @@ def load_cases(
     *,
     suite: str = "micro",
     limit: int | None = None,
+    containment_root: Path | None = None,
 ) -> tuple[PyCGCase, ...]:
     if suite == "micro":
-        return load_micro_cases(corpus_root, limit=limit)
+        return load_micro_cases(corpus_root, limit=limit, containment_root=containment_root)
     if suite == "macro":
-        return load_macro_cases(corpus_root, limit=limit)
+        return load_macro_cases(corpus_root, limit=limit, containment_root=containment_root)
     raise ValueError(f"unknown PyCG suite: {suite}")
 
 
-def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase, ...]:
+def load_micro_cases(
+    corpus_root: Path, *, limit: int | None = None, containment_root: Path | None = None,
+) -> tuple[PyCGCase, ...]:
     snippet_root = corpus_root / "micro-benchmark" / "snippets"
+    if containment_root is not None:
+        contained_source_paths(containment_root, (snippet_root,))
     if not snippet_root.is_dir():
         raise FileNotFoundError(
             "PyCG corpus root must contain micro-benchmark/snippets: "
@@ -406,10 +411,15 @@ def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
         )
     cases: list[PyCGCase] = []
     for case_root in sorted(path for path in snippet_root.glob("*/*") if path.is_dir()):
+        if containment_root is not None:
+            contained_source_paths(containment_root, (case_root,))
         main_path = case_root / "main.py"
         callgraph_path = case_root / "callgraph.json"
         if not main_path.is_file() or not callgraph_path.is_file():
             continue
+        source_paths = tuple(sorted(case_root.rglob("*.py")))
+        if containment_root is not None:
+            contained_source_paths(containment_root, (callgraph_path, *source_paths))
         expected_json = json.loads(callgraph_path.read_text(encoding="utf-8"))
         expected = {
             str(caller): tuple(str(callee) for callee in callees)
@@ -422,7 +432,7 @@ def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
                 root=case_root,
                 package_root=case_root,
                 main_path=main_path,
-                source_paths=tuple(sorted(case_root.rglob("*.py"))),
+                source_paths=source_paths,
                 expected=expected,
             )
         )
@@ -431,10 +441,14 @@ def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
     return tuple(cases)
 
 
-def load_macro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase, ...]:
+def load_macro_cases(
+    corpus_root: Path, *, limit: int | None = None, containment_root: Path | None = None,
+) -> tuple[PyCGCase, ...]:
     macro_root = _resolve_macro_root(corpus_root)
     projects_root = macro_root / "projects"
     ground_truth_root = macro_root / "ground-truth-cgs"
+    if containment_root is not None:
+        contained_source_paths(containment_root, (macro_root, projects_root, ground_truth_root))
     if not projects_root.is_dir() or not ground_truth_root.is_dir():
         raise FileNotFoundError(
             "PyCG macro corpus root must contain projects/ and ground-truth-cgs/: "
@@ -446,6 +460,11 @@ def load_macro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
         package_root = projects_root.joinpath(*spec.package_root_parts)
         file_root = projects_root.joinpath(*spec.file_root_parts)
         ground_truth_path = ground_truth_root / f"{spec.name}.json"
+        if containment_root is not None:
+            contained_source_paths(
+                containment_root,
+                (projects_root / spec.name, package_root, file_root, ground_truth_path),
+            )
         if not package_root.is_dir():
             raise FileNotFoundError(f"PyCG macro package root not found: {package_root}")
         if not file_root.is_dir():
@@ -463,6 +482,8 @@ def load_macro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
             for path in sorted(file_root.rglob("*.py"))
             if _macro_file_is_included(path, spec)
         )
+        if containment_root is not None:
+            contained_source_paths(containment_root, source_paths)
         cases.append(
             PyCGCase(
                 suite="macro",
@@ -537,7 +558,10 @@ def run_archway_pycg(
         )
     if case_names and limit is not None:
         raise ValueError("--case and --limit are mutually exclusive")
-    cases = load_cases(corpus_root, suite=suite, limit=limit)
+    # The caller's selection establishes authority. Nested corpus paths must
+    # never become new trust roots merely because they resolve through a symlink.
+    containment_root = corpus_root.resolve(strict=True) if session_engine is not None else None
+    cases = load_cases(corpus_root, suite=suite, limit=limit, containment_root=containment_root)
     if case_names:
         requested = set(case_names)
         cases = tuple(
@@ -564,7 +588,9 @@ def run_archway_pycg(
         expected_total += case.expected_edge_occurrence_count
         try:
             if session_engine is not None:
-                produced = hosted_successor_call_edges(case, session_engine=session_engine)
+                produced = hosted_successor_call_edges(
+                    case, session_engine=session_engine, containment_root=containment_root,
+                )
             else:
                 produced = _archway_call_edges_with_timeout(
                     case,
@@ -890,12 +916,20 @@ def _produce_archway_call_edges(
     raise ValueError(f"unknown edge provider: {edge_provider}")
 
 
-def hosted_successor_call_edges(case: PyCGCase, *, session_engine) -> set[Edge]:
+def hosted_successor_call_edges(
+    case: PyCGCase, *, session_engine, containment_root: Path | None = None,
+) -> set[Edge]:
     """Use the successor workload through its supported durable session API.
 
     Corpus/module preparation and semantic-to-PyCG projection are shared with
     the local successor runner. No source heuristics or fallback engine runs.
     """
+    # Standalone callers explicitly select case.root; the corpus runner supplies
+    # its original boundary instead of trusting loader-derived directories.
+    contained_source_paths(
+        containment_root if containment_root is not None else case.root,
+        (case.root, case.package_root, *case.source_paths),
+    )
     sources = _load_case_sources(case, require_containment=True)
     entry = "main" if "main" in sources else min(sources)
     result = session_engine.open_program(sources, entry, path=case.suite_path,

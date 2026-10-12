@@ -198,3 +198,59 @@ def test_containment_preserves_internal_links_and_explicit_root_alias(tmp_path):
     alias.symlink_to(root, target_is_directory=True)
     selected = alias / 'linked.py'
     assert contained_source_paths(alias, [selected]) == {selected: source}
+
+
+@pytest.mark.parametrize('suite', ['micro', 'macro'])
+@pytest.mark.parametrize('escaping', [True, False])
+def test_pycg_runner_keeps_caller_selected_corpus_boundary(tmp_path, monkeypatch, suite, escaping):
+    from pathlib import Path
+    from types import SimpleNamespace
+    from archway_benchmarks.pycg import run_archway_pycg
+
+    corpus = tmp_path / 'corpus'
+    corpus.mkdir()
+    payload = (tmp_path / 'outside') if escaping else (corpus / 'shared')
+    payload.mkdir()
+    (payload / 'main.py').write_text('x = 42\n')
+    (payload / 'callgraph.json').write_text('{}')
+    if suite == 'micro':
+        parent = corpus / 'micro-benchmark' / 'snippets' / 'category'
+        parent.mkdir(parents=True)
+        (parent / 'case').symlink_to(payload, target_is_directory=True)
+    else:
+        parent = corpus / 'projects' / 'autojump'
+        parent.mkdir(parents=True)
+        (parent / 'bin').symlink_to(payload, target_is_directory=True)
+        truth = corpus / 'ground-truth-cgs'
+        truth.mkdir()
+        (truth / 'autojump.json').write_text('{}')
+    alias = tmp_path / 'selected-corpus'
+    alias.symlink_to(corpus, target_is_directory=True)
+    original_read = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        assert path.resolve().is_relative_to(corpus), 'out-of-corpus file was read'
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded_read)
+    uploads = []
+
+    class Engine:
+        def open_program(self, sources, entry_module, **kwargs):
+            assert not escaping, 'validation must precede hosted requests'
+            uploads.append(sources)
+            return SimpleNamespace(head={})
+
+        def command(self, result, command):
+            result.head = {'semantic_call_graph': {
+                'schema': 'archway.semantic-call-graph.v1',
+                'includes_capability_candidates': False, 'edges': []}}
+
+    if escaping:
+        with pytest.raises(ValueError, match='source path escapes selected root'):
+            run_archway_pycg(corpus_root=alias, suite=suite, limit=1, session_engine=Engine())
+        assert uploads == []
+    else:
+        result = run_archway_pycg(corpus_root=alias, suite=suite, limit=1, session_engine=Engine())
+        assert result.cases_error == 0
+        assert uploads == [{'main': 'x = 42\n'}]
