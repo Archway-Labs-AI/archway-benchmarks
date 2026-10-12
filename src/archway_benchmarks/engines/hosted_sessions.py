@@ -1,10 +1,11 @@
 """Portable session benchmark consumer; never imports the analysis engine."""
 
 from dataclasses import dataclass
+from pathlib import Path
 import time
 import math
 from types import SimpleNamespace
-from typing import Callable, Protocol
+from typing import Callable, Iterable, Protocol
 import uuid
 import hashlib
 import json
@@ -12,6 +13,22 @@ import sqlite3
 
 from archway_benchmarks.engines.successor_archway import _map_observations, _typeeval_name
 from archway_benchmarks.types import Annotation
+
+
+def contained_source_paths(root: Path, paths: Iterable[Path]) -> dict[Path, Path]:
+    """Validate the entire selection before reading or uploading source.
+
+    Internal symlinks are allowed, including a symlink naming the selected root.
+    Return resolved read paths while preserving lexical paths for module names.
+    """
+    boundary = root.resolve(strict=True)
+    resolved = {}
+    for path in paths:
+        target = path.resolve(strict=True)
+        if not target.is_relative_to(boundary):
+            raise ValueError(f"source path escapes selected root: {path}")
+        resolved[path] = target
+    return resolved
 
 
 class SessionClient(Protocol):
@@ -129,6 +146,18 @@ class HostedSessionEngine:
             lambda request_id: self.client.translate_analysis_artifact(
                 {"main": source}, "main", request_id=request_id))
         return path, artifact
+
+    def open_program(self, sources: dict[str, str], entry_module: str, *, path: str,
+                     options: dict | None = None) -> HostedSessionResult:
+        """Translate and open an explicit module graph without implicit demands."""
+        options = {} if options is None else options
+        artifact = self._step("translate", path, {"sources": sources, "entry_module": entry_module},
+            lambda request_id: self.client.translate_analysis_artifact(
+                sources, entry_module, request_id=request_id))
+        head = self._step("open", path, {"artifact_id": artifact["artifact_id"], "options": options},
+            lambda request_id: self.client.open_analysis_session(
+                artifact["artifact_id"], request_id=request_id, options=options))
+        return HostedSessionResult(self, path, head)
 
     def analyze(self, translation: tuple[str, dict]) -> HostedSessionResult:
         path, artifact = translation

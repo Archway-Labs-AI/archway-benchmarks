@@ -221,8 +221,13 @@ def test_successor_completed_evidence_collapses_repeated_contexts_per_callsite(
         for item in result.evidence["semantic_call_edge_evidence"]
         if item["projected_edge"] == ["main.invoke", "main.target"]
     )
-    assert invoke_target["contextual_occurrence_count"] == 2
-    assert len(invoke_target["caller_context_samples"]) == 2
+    # The shared effect body and the two callsite summary applications each
+    # retain semantic evidence, collapsed into one callsite/target record.
+    assert invoke_target["contextual_occurrence_count"] == 3
+    contexts = invoke_target["caller_context_samples"]
+    assert len(contexts) == 3
+    assert sum(context.startswith("context:callable-effect:") for context in contexts) == 1
+    assert sum(context.startswith("context:callable-summary-application:") for context in contexts) == 2
     assert result.evidence["semantic_call_edge_occurrence_count"] > (
         result.evidence["semantic_call_edge_evidence_count"]
     )

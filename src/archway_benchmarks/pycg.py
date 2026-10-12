@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Literal, Mapping
 
+from archway_benchmarks.engines.hosted_sessions import contained_source_paths
 from archway_benchmarks.successor_runtime_evidence import (
     callable_runtime_evidence,
 )
@@ -160,7 +161,7 @@ class PyCGCaseResult:
 class PyCGRunResult:
     suite: str
     corpus_root: str
-    engine_root: str
+    engine_root: str | None
     edge_provider: EdgeProvider
     cases_total: int
     cases_attempted: int
@@ -388,16 +389,21 @@ def load_cases(
     *,
     suite: str = "micro",
     limit: int | None = None,
+    containment_root: Path | None = None,
 ) -> tuple[PyCGCase, ...]:
     if suite == "micro":
-        return load_micro_cases(corpus_root, limit=limit)
+        return load_micro_cases(corpus_root, limit=limit, containment_root=containment_root)
     if suite == "macro":
-        return load_macro_cases(corpus_root, limit=limit)
+        return load_macro_cases(corpus_root, limit=limit, containment_root=containment_root)
     raise ValueError(f"unknown PyCG suite: {suite}")
 
 
-def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase, ...]:
+def load_micro_cases(
+    corpus_root: Path, *, limit: int | None = None, containment_root: Path | None = None,
+) -> tuple[PyCGCase, ...]:
     snippet_root = corpus_root / "micro-benchmark" / "snippets"
+    if containment_root is not None:
+        contained_source_paths(containment_root, (snippet_root,))
     if not snippet_root.is_dir():
         raise FileNotFoundError(
             "PyCG corpus root must contain micro-benchmark/snippets: "
@@ -405,10 +411,15 @@ def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
         )
     cases: list[PyCGCase] = []
     for case_root in sorted(path for path in snippet_root.glob("*/*") if path.is_dir()):
+        if containment_root is not None:
+            contained_source_paths(containment_root, (case_root,))
         main_path = case_root / "main.py"
         callgraph_path = case_root / "callgraph.json"
         if not main_path.is_file() or not callgraph_path.is_file():
             continue
+        source_paths = tuple(sorted(case_root.rglob("*.py")))
+        if containment_root is not None:
+            contained_source_paths(containment_root, (callgraph_path, *source_paths))
         expected_json = json.loads(callgraph_path.read_text(encoding="utf-8"))
         expected = {
             str(caller): tuple(str(callee) for callee in callees)
@@ -421,7 +432,7 @@ def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
                 root=case_root,
                 package_root=case_root,
                 main_path=main_path,
-                source_paths=tuple(sorted(case_root.rglob("*.py"))),
+                source_paths=source_paths,
                 expected=expected,
             )
         )
@@ -430,10 +441,14 @@ def load_micro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
     return tuple(cases)
 
 
-def load_macro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[PyCGCase, ...]:
+def load_macro_cases(
+    corpus_root: Path, *, limit: int | None = None, containment_root: Path | None = None,
+) -> tuple[PyCGCase, ...]:
     macro_root = _resolve_macro_root(corpus_root)
     projects_root = macro_root / "projects"
     ground_truth_root = macro_root / "ground-truth-cgs"
+    if containment_root is not None:
+        contained_source_paths(containment_root, (macro_root, projects_root, ground_truth_root))
     if not projects_root.is_dir() or not ground_truth_root.is_dir():
         raise FileNotFoundError(
             "PyCG macro corpus root must contain projects/ and ground-truth-cgs/: "
@@ -445,6 +460,11 @@ def load_macro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
         package_root = projects_root.joinpath(*spec.package_root_parts)
         file_root = projects_root.joinpath(*spec.file_root_parts)
         ground_truth_path = ground_truth_root / f"{spec.name}.json"
+        if containment_root is not None:
+            contained_source_paths(
+                containment_root,
+                (projects_root / spec.name, package_root, file_root, ground_truth_path),
+            )
         if not package_root.is_dir():
             raise FileNotFoundError(f"PyCG macro package root not found: {package_root}")
         if not file_root.is_dir():
@@ -462,6 +482,8 @@ def load_macro_cases(corpus_root: Path, *, limit: int | None = None) -> tuple[Py
             for path in sorted(file_root.rglob("*.py"))
             if _macro_file_is_included(path, spec)
         )
+        if containment_root is not None:
+            contained_source_paths(containment_root, source_paths)
         cases.append(
             PyCGCase(
                 suite="macro",
@@ -496,7 +518,7 @@ def _macro_file_is_included(path: Path, spec: MacroProjectSpec) -> bool:
 def run_archway_pycg(
     *,
     corpus_root: Path,
-    engine_root: Path,
+    engine_root: Path | None = None,
     suite: str = "micro",
     limit: int | None = None,
     case_names: tuple[str, ...] = (),
@@ -509,7 +531,17 @@ def run_archway_pycg(
     successor_summarize_callee_results: bool = False,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
+    session_engine=None,
 ) -> PyCGRunResult:
+    if session_engine is None and engine_root is None:
+        raise ValueError("local PyCG requires an engine root")
+    if session_engine is not None and (edge_provider != "successor" or include_diagnostic_name_hints
+            or successor_record_events or successor_summarize_callee_results
+            or successor_sampling_rate_hz is not None or successor_partial_graph_checkpoint_seconds is not None
+            or analysis_product != "standalone" or callable_root_activation != "off"):
+        raise ValueError("session execution supports the semantic successor workload without local diagnostics")
+    if session_engine is not None and case_timeout_seconds is not None:
+        raise ValueError("session execution uses operation deadlines; local case timeouts are unsupported")
     if case_timeout_seconds is not None and case_timeout_seconds <= 0:
         raise ValueError("--case-timeout-seconds must be positive")
     if (
@@ -526,7 +558,10 @@ def run_archway_pycg(
         )
     if case_names and limit is not None:
         raise ValueError("--case and --limit are mutually exclusive")
-    cases = load_cases(corpus_root, suite=suite, limit=limit)
+    # The caller's selection establishes authority. Nested corpus paths must
+    # never become new trust roots merely because they resolve through a symlink.
+    containment_root = corpus_root.resolve(strict=True) if session_engine is not None else None
+    cases = load_cases(corpus_root, suite=suite, limit=limit, containment_root=containment_root)
     if case_names:
         requested = set(case_names)
         cases = tuple(
@@ -552,23 +587,28 @@ def run_archway_pycg(
         expected = set(case.expected_edges)
         expected_total += case.expected_edge_occurrence_count
         try:
-            produced = _archway_call_edges_with_timeout(
-                case,
-                engine_root=engine_root,
-                include_diagnostic_name_hints=include_diagnostic_name_hints,
-                analysis_product=analysis_product,
-                callable_root_activation=callable_root_activation,
-                case_timeout_seconds=case_timeout_seconds,
-                edge_provider=edge_provider,
-                successor_record_events=successor_record_events,
-                successor_summarize_callee_results=(
-                    successor_summarize_callee_results
-                ),
-                successor_sampling_rate_hz=successor_sampling_rate_hz,
-                successor_partial_graph_checkpoint_seconds=(
-                    successor_partial_graph_checkpoint_seconds
-                ),
-            )
+            if session_engine is not None:
+                produced = hosted_successor_call_edges(
+                    case, session_engine=session_engine, containment_root=containment_root,
+                )
+            else:
+                produced = _archway_call_edges_with_timeout(
+                    case,
+                    engine_root=engine_root,
+                    include_diagnostic_name_hints=include_diagnostic_name_hints,
+                    analysis_product=analysis_product,
+                    callable_root_activation=callable_root_activation,
+                    case_timeout_seconds=case_timeout_seconds,
+                    edge_provider=edge_provider,
+                    successor_record_events=successor_record_events,
+                    successor_summarize_callee_results=(
+                        successor_summarize_callee_results
+                    ),
+                    successor_sampling_rate_hz=successor_sampling_rate_hz,
+                    successor_partial_graph_checkpoint_seconds=(
+                        successor_partial_graph_checkpoint_seconds
+                    ),
+                )
             if isinstance(produced, SuccessorEdgeResult):
                 predicted = set(produced.edges)
                 analysis_evidence = produced.evidence
@@ -633,7 +673,7 @@ def run_archway_pycg(
     return PyCGRunResult(
         suite=suite,
         corpus_root=str(corpus_root),
-        engine_root=str(engine_root),
+        engine_root=str(engine_root) if engine_root is not None else None,
         edge_provider=edge_provider,
         cases_total=len(cases),
         cases_attempted=len(cases),
@@ -876,6 +916,40 @@ def _produce_archway_call_edges(
     raise ValueError(f"unknown edge provider: {edge_provider}")
 
 
+def hosted_successor_call_edges(
+    case: PyCGCase, *, session_engine, containment_root: Path | None = None,
+) -> set[Edge]:
+    """Use the successor workload through its supported durable session API.
+
+    Corpus/module preparation and semantic-to-PyCG projection are shared with
+    the local successor runner. No source heuristics or fallback engine runs.
+    """
+    # Standalone callers explicitly select case.root; the corpus runner supplies
+    # its original boundary instead of trusting loader-derived directories.
+    contained_source_paths(
+        containment_root if containment_root is not None else case.root,
+        (case.root, case.package_root, *case.source_paths),
+    )
+    sources = _load_case_sources(case, require_containment=True)
+    entry = "main" if "main" in sources else min(sources)
+    result = session_engine.open_program(sources, entry, path=case.suite_path,
+        options={"catalog_observations": False,
+                 "possible_entry_modules": sorted(sources) if case.suite == "macro" else None})
+    session_engine.command(result, {"kind": "semantic_call_graph"})
+    graph = result.head.get("semantic_call_graph")
+    if not isinstance(graph, dict) or graph.get("schema") != "archway.semantic-call-graph.v1":
+        raise ValueError("service does not expose the semantic call graph contract")
+    if graph.get("includes_capability_candidates") is not False:
+        raise ValueError("candidate call edges are not benchmark predictions")
+    edges = set()
+    for edge in graph["edges"]:
+        if edge["evidence_grade"] != "semantic":
+            raise ValueError("non-semantic edge in semantic call graph")
+        if edge["caller"] is not None:
+            edges.add((edge["caller"], _successor_pycg_target_name(edge["target"])))
+    return _inline_synthetic_frame_edges(edges)
+
+
 def successor_archway_call_edges(
     case: PyCGCase,
     *,
@@ -906,7 +980,7 @@ def successor_archway_call_edge_result(
     if engine_text not in sys.path:
         sys.path.insert(0, engine_text)
 
-    from sd_core.analysis.diagram_analysis import open_hybrid_program_session
+    from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session
     from sd_core.tooling.harness import ProgramResult
     from sd_core.tooling.sampling_profile import SamplingProfiler
 
@@ -2075,11 +2149,13 @@ def archway_call_edges(
     return _inline_synthetic_frame_edges(edges)
 
 
-def _load_case_sources(case: PyCGCase) -> dict[str, str]:
+def _load_case_sources(case: PyCGCase, *, require_containment: bool = False) -> dict[str, str]:
+    read_paths = (contained_source_paths(case.package_root, case.source_paths)
+                  if require_containment else {path: path for path in case.source_paths})
     sources: dict[str, str] = {}
-    for path in case.source_paths:
+    for path, read_path in read_paths.items():
         module_name = _module_name_for_path(path, case.package_root)
-        source = path.read_text(encoding="utf-8-sig")
+        source = read_path.read_text(encoding="utf-8-sig")
         if path.name == "__init__.py" and not source.strip():
             source = "pass\n"
         sources[module_name] = source

@@ -122,3 +122,135 @@ def test_journal_replays_after_completed_response_before_local_commit(tmp_path):
     with pytest.raises(ValueError, match='conflicts'):
         journal.complete(key, {'artifact_id': 'other'})
     journal.close()
+
+
+def test_pycg_hosted_projection_uses_existing_name_and_frame_rules(tmp_path):
+    from archway_benchmarks.pycg import PyCGCase, hosted_successor_call_edges
+    from types import SimpleNamespace
+
+    main = tmp_path / 'main.py'
+    main.write_text('x = [str(i) for i in range(2)]\n')
+    case = PyCGCase('macro', 'repo', tmp_path, tmp_path, main, (main,), {})
+    class Engine:
+        def open_program(self, sources, entry_module, *, path, options):
+            assert sources == {'main': main.read_text()}
+            assert entry_module == 'main'
+            assert options == {'catalog_observations': False, 'possible_entry_modules': ['main']}
+            return SimpleNamespace(head={})
+        def command(self, result, command):
+            assert command == {'kind': 'semantic_call_graph'}
+            result.head = {'semantic_call_graph': {'schema': 'archway.semantic-call-graph.v1',
+                'includes_capability_candidates': False, 'edges': [
+                    {'caller': 'main', 'target': 'main.<listcomp>', 'evidence_grade': 'semantic'},
+                    {'caller': 'main.<listcomp>', 'target': '<builtin>.str', 'evidence_grade': 'semantic'},
+                ]}}
+    assert hosted_successor_call_edges(case, session_engine=Engine()) == {('main', '<builtin>.str')}
+
+
+@pytest.mark.parametrize('adapter', ['pycg', 'typybench'])
+@pytest.mark.parametrize('link_kind', ['file', 'directory'])
+def test_hosted_sources_reject_escaping_symlinks_before_read_or_upload(tmp_path, monkeypatch, adapter, link_kind):
+    from pathlib import Path
+    from archway_benchmarks.pycg import PyCGCase, hosted_successor_call_edges
+    from archway_benchmarks.typybench_archway_emit import _run_hosted_repo_probe
+
+    root = tmp_path / 'repository'
+    root.mkdir()
+    outside = tmp_path / 'private'
+    outside.mkdir()
+    secret = outside / 'main.py'
+    secret.write_text('PRIVATE_MARKER = 42\n')
+    if link_kind == 'file':
+        source = root / 'main.py'
+        source.symlink_to(secret)
+    else:
+        (root / 'src').symlink_to(outside, target_is_directory=True)
+        source = root / 'src' / 'main.py'
+    original_read = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        assert path.resolve() != secret, 'out-of-root source was read'
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded_read)
+
+    class Engine:
+        def open_program(self, *args, **kwargs):
+            pytest.fail('source validation must precede any hosted request')
+
+    with pytest.raises(ValueError, match='source path escapes selected root'):
+        if adapter == 'pycg':
+            case = PyCGCase('micro', 'fixture', root, root, source, (source,), {})
+            hosted_successor_call_edges(case, session_engine=Engine())
+        else:
+            _run_hosted_repo_probe(source_root=root, session_engine=Engine())
+
+
+def test_containment_preserves_internal_links_and_explicit_root_alias(tmp_path):
+    from archway_benchmarks.engines.hosted_sessions import contained_source_paths
+
+    root = tmp_path / 'repository'
+    root.mkdir()
+    source = root / 'values.py'
+    source.write_text('x = 1\n')
+    (root / 'linked.py').symlink_to(source)
+    alias = tmp_path / 'selected-root'
+    alias.symlink_to(root, target_is_directory=True)
+    selected = alias / 'linked.py'
+    assert contained_source_paths(alias, [selected]) == {selected: source}
+
+
+@pytest.mark.parametrize('suite', ['micro', 'macro'])
+@pytest.mark.parametrize('escaping', [True, False])
+def test_pycg_runner_keeps_caller_selected_corpus_boundary(tmp_path, monkeypatch, suite, escaping):
+    from pathlib import Path
+    from types import SimpleNamespace
+    from archway_benchmarks.pycg import run_archway_pycg
+
+    corpus = tmp_path / 'corpus'
+    corpus.mkdir()
+    payload = (tmp_path / 'outside') if escaping else (corpus / 'shared')
+    payload.mkdir()
+    (payload / 'main.py').write_text('x = 42\n')
+    (payload / 'callgraph.json').write_text('{}')
+    if suite == 'micro':
+        parent = corpus / 'micro-benchmark' / 'snippets' / 'category'
+        parent.mkdir(parents=True)
+        (parent / 'case').symlink_to(payload, target_is_directory=True)
+    else:
+        parent = corpus / 'projects' / 'autojump'
+        parent.mkdir(parents=True)
+        (parent / 'bin').symlink_to(payload, target_is_directory=True)
+        truth = corpus / 'ground-truth-cgs'
+        truth.mkdir()
+        (truth / 'autojump.json').write_text('{}')
+    alias = tmp_path / 'selected-corpus'
+    alias.symlink_to(corpus, target_is_directory=True)
+    original_read = Path.read_text
+
+    def guarded_read(path, *args, **kwargs):
+        assert path.resolve().is_relative_to(corpus), 'out-of-corpus file was read'
+        return original_read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded_read)
+    uploads = []
+
+    class Engine:
+        def open_program(self, sources, entry_module, **kwargs):
+            assert not escaping, 'validation must precede hosted requests'
+            uploads.append(sources)
+            return SimpleNamespace(head={})
+
+        def command(self, result, command):
+            result.head = {'semantic_call_graph': {
+                'schema': 'archway.semantic-call-graph.v1',
+                'includes_capability_candidates': False, 'edges': []}}
+
+    if escaping:
+        with pytest.raises(ValueError, match='source path escapes selected root'):
+            run_archway_pycg(corpus_root=alias, suite=suite, limit=1, session_engine=Engine())
+        assert uploads == []
+    else:
+        result = run_archway_pycg(corpus_root=alias, suite=suite, limit=1, session_engine=Engine())
+        assert result.cases_error == 0
+        assert uploads == [{'main': 'x = 42\n'}]

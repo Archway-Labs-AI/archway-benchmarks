@@ -123,8 +123,53 @@ module in a new worker executes zero productions. `HostedSessionTypeEvalPyAdapte
 reuses benchmark-owned location/type mapping and can demand unresolved catalogued
 type observations. It does not import or run `sd_core`.
 
-This initial profile is a single-module diagnostic, not a replacement for all
-successor benchmark adapters: container-path/generic-shape queries are not yet
-supported. Missing predictions remain in the original scoring denominator.
-The internal runner owns corpus selection, credentials and retained operation
-records. Tests: `tests/test_hosted_sessions.py`.
+The TypeEvalPy adapter remains a single-module diagnostic with nominal type
+queries; missing predictions remain in the original scoring denominator.
+`run_archway_pycg(..., session_engine=...)` consumes contextual semantic edges
+through the same benchmark-owned name/frame projection and scorer as local PyCG.
+`emit_archway_predictions(..., session_engine=...)` consumes nominal, generic-shape
+and candidate observations through the existing TypyBench source emitter. It uses
+the shared repository source discovery, library entry policy and signature workload.
+Neither hosted adapter needs a local engine worktree or imports `sd_core`.
+
+These extensions require an engine release containing the generic observation
+commands. Bounded local HTTP fixtures validate the adapter contract; deployment
+and access to a compatible hosted service are separate requirements.
+TypyBench fixtures including nested containers, multiline definitions, class fields
+and open-world receiver capabilities agree with local emission under both forward
+seeding policies. These are bounded differential fixtures, not a corpus-wide result.
+Unsupported local diagnostic/timeout settings reject explicitly. Translation is
+atomic per program in this profile: a failed module aborts that repository instead
+of using the local TypyBench runner's partial translation behavior. The semantic
+graph response is limited to 10,000 edges, and each demand to 10,000 addresses.
+The internal runner owns corpus selection, credentials, infrastructure provenance
+and retained operation records. TypyBench scoring remains a separate existing step.
+
+
+### Access and run data
+
+Running the public benchmark harness does not require an Archway account. Local
+backends require the relevant tool to be installed and available separately.
+Using Archway's hosted engine requires both an authenticated identity and permission
+from the service; copying this repository or registering an account grants neither.
+Hosted access is currently team-only, with no public self-service access promised.
+
+The session adapter accepts a caller-supplied client implementing `SessionClient`.
+An application constructs the supported engine client with its endpoint, pinned
+engine revision and credential provider, then passes it to `HostedSessionEngine`.
+The application and adapter run in the same client process; only engine execution
+is remote. You do not need the private `bench-internal` repository to call these
+interfaces. That repository supplies our team's orchestration, not an access bypass.
+The adapter does not acquire credentials or contain service secrets.
+
+Hosted execution uploads selected source to the service and creates durable analysis
+artifacts. Hosted PyCG and TypyBench reject source paths that resolve outside the
+selected source root, including escaping symlinks; links within that root are allowed.
+Hosted PyCG also checks derived case/package directories and ground-truth files against
+the caller-selected corpus root. A symlink used to select the corpus itself is allowed;
+nested symlinks cannot expand that boundary. Local journals and detailed results may
+also contain sensitive information.
+No adapter automatically publishes these files. Keep source, checkpoints, journals
+and detailed results private unless deliberately approved for publication. A future
+public results page will publish selected scores and reproducibility metadata through
+an explicit publication process, independently of executing or saving a run.
