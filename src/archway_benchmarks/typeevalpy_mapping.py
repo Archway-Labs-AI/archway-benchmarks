@@ -2,17 +2,9 @@
 
 This module is the **single source of truth** for the mapping between our
 internal `Location` model and TypeEvalPy's JSON schema
-(`docs/TypeEvalPy_JSON_schema.py` in the vendored repo). Two callers share it:
-
-  1. `archway_benchmarks.benchmarks.typeevalpy` — the harness adapter that
-     emits TypeEvalPy-shape records from harness predictions.
-  2. `upstream/target_tools/archway/src/typeevalpy_mapping.py` — a byte-
-     identical copy that ships inside the upstream Docker image. The
-     test `tests/test_upstream_sync.py` enforces parity.
-
-If you change this file, run `scripts/sync_upstream_mapping.py` and commit
-both copies. A drift is a bug — the upstream tool would score against a
-slightly different schema than the harness scores itself on.
+(`docs/TypeEvalPy_JSON_schema.py` in the vendored repo). The harness adapter
+`archway_benchmarks.benchmarks.typeevalpy` uses it to emit TypeEvalPy-shape
+records from harness predictions.
 
 Self-contained: stdlib only, no archway_benchmarks-internal imports.
 
