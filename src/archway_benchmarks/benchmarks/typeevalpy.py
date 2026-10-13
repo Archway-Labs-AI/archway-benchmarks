@@ -8,8 +8,7 @@ scorer (Layer A).
 Scoring is wired in `archway_benchmarks.scoring.typeevalpy` (Phase 3).
 
 Record <-> Location mapping is delegated to
-`archway_benchmarks.typeevalpy_mapping`, which is also the source of truth
-for the upstream `target_tools/archway/` translator (byte-identical copy).
+`archway_benchmarks.typeevalpy_mapping`.
 """
 from __future__ import annotations
 
