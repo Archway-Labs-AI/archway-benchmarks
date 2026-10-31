@@ -937,7 +937,7 @@ def hosted_successor_call_edges(
                  "possible_entry_modules": sorted(sources) if case.suite == "macro" else None})
     session_engine.command(result, {"kind": "semantic_call_graph"})
     graph = result.head.get("semantic_call_graph")
-    if not isinstance(graph, dict) or graph.get("schema") != "archway.semantic-call-graph.v1":
+    if not isinstance(graph, dict) or graph.get("schema") != "archway.semantic-call-graph.v2":
         raise ValueError("service does not expose the semantic call graph contract")
     if graph.get("includes_capability_candidates") is not False:
         raise ValueError("candidate call edges are not benchmark predictions")
