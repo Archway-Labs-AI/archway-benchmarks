@@ -139,7 +139,7 @@ def test_pycg_hosted_projection_uses_existing_name_and_frame_rules(tmp_path):
             return SimpleNamespace(head={})
         def command(self, result, command):
             assert command == {'kind': 'semantic_call_graph'}
-            result.head = {'semantic_call_graph': {'schema': 'archway.semantic-call-graph.v1',
+            result.head = {'semantic_call_graph': {'schema': 'archway.semantic-call-graph.v2',
                 'includes_capability_candidates': False, 'edges': [
                     {'caller': 'main', 'target': 'main.<listcomp>', 'evidence_grade': 'semantic'},
                     {'caller': 'main.<listcomp>', 'target': '<builtin>.str', 'evidence_grade': 'semantic'},
@@ -243,7 +243,7 @@ def test_pycg_runner_keeps_caller_selected_corpus_boundary(tmp_path, monkeypatch
 
         def command(self, result, command):
             result.head = {'semantic_call_graph': {
-                'schema': 'archway.semantic-call-graph.v1',
+                'schema': 'archway.semantic-call-graph.v2',
                 'includes_capability_candidates': False, 'edges': []}}
 
     if escaping:
