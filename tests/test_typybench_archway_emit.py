@@ -1228,21 +1228,6 @@ def analyze_source(source, module_name):
     assert "TimeoutExpired" in profile["analyze_source"]["error"]
 
 
-def test_hosted_unsupported_options_reject_before_replacing_predictions(tmp_path):
-    predictions = tmp_path / 'predictions' / 'fixture'
-    predictions.mkdir(parents=True)
-    retained = predictions / 'existing.py'
-    retained.write_text('existing output\n')
-    try:
-        emit_archway_predictions(repo_name='fixture', untyped_root=tmp_path / 'missing',
-            predictions_root=predictions.parent, session_engine=object(), body_labels=('selected',))
-    except ValueError as exc:
-        assert 'body_labels' in str(exc)
-    else:
-        raise AssertionError('hosted diagnostics must reject')
-    assert retained.read_text() == 'existing output\n'
-
-
 def test_shared_repository_layout_retains_packages_and_excludes_unrelated_trees(tmp_path):
     package = tmp_path / 'library'
     package.mkdir()
@@ -1254,31 +1239,6 @@ def test_shared_repository_layout_retains_packages_and_excludes_unrelated_trees(
     assert {emit_module._module_name(tmp_path, path) for path in emit_module._analysis_paths(tmp_path)} == {
         'library', 'library.values',
     }
-
-
-@pytest.mark.parametrize("link_kind", ["file", "directory"])
-def test_hosted_escaping_source_preserves_existing_predictions(tmp_path, link_kind):
-
-    root = tmp_path / 'repository'
-    root.mkdir()
-    outside = tmp_path / 'private'
-    outside.mkdir()
-    secret = outside / 'outside.py'
-    secret.write_text('PRIVATE_MARKER = 42\n')
-    (root / 'setup.py').write_text('pass\n')
-    if link_kind == 'file':
-        (root / 'linked.py').symlink_to(secret)
-    else:
-        (root / 'src').symlink_to(outside, target_is_directory=True)
-    predictions = tmp_path / 'predictions' / 'fixture'
-    predictions.mkdir(parents=True)
-    retained = predictions / 'existing.py'
-    retained.write_text('existing output\n')
-    with pytest.raises(ValueError, match='source path escapes selected root'):
-        emit_archway_predictions(repo_name='fixture', untyped_root=root,
-            predictions_root=predictions.parent, session_engine=object())
-    assert retained.read_text() == 'existing output\n'
-    assert not (predictions / 'linked.py').exists()
 
 
 def test_large_module_manifest_reaches_worker_without_using_argv(tmp_path, monkeypatch):

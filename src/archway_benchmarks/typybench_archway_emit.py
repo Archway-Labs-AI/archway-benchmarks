@@ -19,7 +19,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
-from archway_benchmarks.engines.hosted_sessions import HostedSessionEngine, contained_source_paths
 from archway_benchmarks.typybench_harness import require_python_source_files
 from archway_benchmarks.typybench_scored_slots import scored_slots
 
@@ -195,7 +194,6 @@ def emit_archway_predictions(
     untyped_root: Path,
     predictions_root: Path,
     engine_worktree: Path | None = None,
-    session_engine: HostedSessionEngine | None = None,
     engine_sha: str | None = None,
     overwrite: bool = True,
     runner: tuple[str, ...] = ("hatch", "run", "python"),
@@ -235,32 +233,7 @@ def emit_archway_predictions(
     of being fabricated.
     """
 
-    if session_engine is not None:
-        unsupported = {
-            "body_summary_consumption": body_summary_consumption != "off",
-            "analysis_product": analysis_product != "standalone",
-            "analysis_observation_mode": analysis_observation_mode != "summary",
-            "type_requirements_assume_closed": type_requirements_assume_closed,
-            "checkpoint_roots": not checkpoint_roots,
-            "max_wave_size": max_wave_size != 8,
-            "checkpoint_batch_start": checkpoint_batch_start is not None,
-            "checkpoint_batch_count": checkpoint_batch_count is not None,
-            "checkpoint_replay_prefix": not checkpoint_replay_prefix,
-            "body_labels": bool(body_labels),
-            "body_timeout": body_timeout is not None,
-            "progress_timeout": progress_timeout is not None,
-            "projection_timeout": projection_timeout is not None,
-            "sample_rate_hz": sample_rate_hz is not None,
-            "sampling": sample_targeted or sample_forward or sample_session_open,
-            "session_open_timeout": session_open_timeout is not None,
-            "forward_timeout": forward_timeout is not None,
-            "collect_predictions": not collect_predictions,
-            "progress_log": progress_log is not None,
-            "timeout": timeout != 900 or per_file_timeout != 60,
-        }
-        if rejected := sorted(key for key, value in unsupported.items() if value):
-            raise ValueError("hosted TypyBench does not support: " + ", ".join(rejected))
-    elif engine_worktree is None:
+    if engine_worktree is None:
         raise ValueError("local TypyBench requires an engine worktree")
 
     untyped_root = Path(untyped_root)
@@ -269,9 +242,6 @@ def emit_archway_predictions(
         label=f"TypyBench repo {repo_name!r} repo_without_types",
         suffixes=(".py",),
     )
-    if session_engine is not None:
-        # Reject escaping sources before copying files or replacing prior predictions.
-        contained_source_paths(untyped_root, (*files, *_analysis_paths(untyped_root)))
     dest_root = Path(predictions_root) / repo_name
     if overwrite and dest_root.exists():
         shutil.rmtree(dest_root)
@@ -299,43 +269,36 @@ def emit_archway_predictions(
 
     try:
         probe_started = time.monotonic()
-        if session_engine is not None:
-            repo_record = _run_hosted_repo_probe(
-                source_root=untyped_root, session_engine=session_engine,
-                run_forward_seed=run_forward_seed,
-                contextual_summary_evaluation=contextual_summary_evaluation,
-            )
-        else:
-            repo_record = _run_successor_repo_probe(
-                engine_worktree=Path(engine_worktree),
-                source_root=untyped_root,
-                runner=runner,
-                timeout=timeout,
-                progress_log=progress_log,
-                checkpoint_roots=checkpoint_roots,
-                checkpoint_size=max_wave_size,
-                checkpoint_batch_start=checkpoint_batch_start,
-                checkpoint_batch_count=checkpoint_batch_count,
-                checkpoint_replay_prefix=checkpoint_replay_prefix,
-                body_labels=body_labels,
-                body_timeout=body_timeout,
-                progress_timeout=progress_timeout,
-                projection_timeout=projection_timeout,
-                sample_rate_hz=sample_rate_hz,
-                sample_targeted=sample_targeted,
-                sample_forward=sample_forward,
-                sample_session_open=sample_session_open,
-                session_open_timeout=session_open_timeout,
-                forward_timeout=forward_timeout,
-                run_forward_seed=run_forward_seed,
-                collect_predictions=collect_predictions,
-                diagnostic_details=(analysis_observation_mode == "diagnostic"),
-                contextual_summary_evaluation=contextual_summary_evaluation,
-                observation_kinds=frozenset((
-                    "parameter",
-                    "return",
-                )),
-            )
+        repo_record = _run_successor_repo_probe(
+            engine_worktree=Path(engine_worktree),
+            source_root=untyped_root,
+            runner=runner,
+            timeout=timeout,
+            progress_log=progress_log,
+            checkpoint_roots=checkpoint_roots,
+            checkpoint_size=max_wave_size,
+            checkpoint_batch_start=checkpoint_batch_start,
+            checkpoint_batch_count=checkpoint_batch_count,
+            checkpoint_replay_prefix=checkpoint_replay_prefix,
+            body_labels=body_labels,
+            body_timeout=body_timeout,
+            progress_timeout=progress_timeout,
+            projection_timeout=projection_timeout,
+            sample_rate_hz=sample_rate_hz,
+            sample_targeted=sample_targeted,
+            sample_forward=sample_forward,
+            sample_session_open=sample_session_open,
+            session_open_timeout=session_open_timeout,
+            forward_timeout=forward_timeout,
+            run_forward_seed=run_forward_seed,
+            collect_predictions=collect_predictions,
+            diagnostic_details=(analysis_observation_mode == "diagnostic"),
+            contextual_summary_evaluation=contextual_summary_evaluation,
+            observation_kinds=frozenset((
+                "parameter",
+                "return",
+            )),
+        )
         seconds_repo_probe = time.monotonic() - probe_started
         for src in files:
             file_started = time.monotonic()
@@ -875,86 +838,6 @@ def _module_name(root: Path, path: Path):
     if parts and parts[-1] == "__init__":
         parts.pop()
     return ".".join(parts) or "__init__"
-
-def _run_hosted_repo_probe(
-    *, source_root: Path, session_engine: HostedSessionEngine,
-    run_forward_seed: bool = True, contextual_summary_evaluation: bool = False,
-) -> dict[str, Any]:
-    """Project durable service observations into the existing emission contract.
-
-    Translation is atomic in this service profile: a translation failure aborts
-    the repository rather than silently analyzing a reduced source graph.
-    """
-    paths = _analysis_paths(source_root)
-    read_paths = contained_source_paths(source_root, paths)
-    module_files = {_module_name(source_root, path): str(path.relative_to(source_root)) for path in paths}
-    if len(module_files) != len(paths):
-        raise ValueError("repository has ambiguous Python module names")
-    sources = {name: read_paths[source_root / relative].read_text(encoding="utf-8")
-               for name, relative in module_files.items()}
-    if not sources:
-        raise ValueError("repository contains no analysis modules")
-    entry = next((name for name in ("main", "__main__") if name in sources),
-                 min(sources, key=lambda name: (name.count("."), len(name), name)))
-    result = session_engine.open_program(sources, entry, path=str(source_root.resolve()), options={
-        "possible_entry_modules": [], "class_field_observations": True,
-        "signature_observations_only": True,
-        "contextual_summary_evaluation": contextual_summary_evaluation,
-    })
-    if run_forward_seed:
-        session_engine.command(result, {"kind": "seed_module", "module": entry})
-    session_engine.command(result, {"kind": "catalog_shapes"})
-    ids = sorted({row["address_id"] for row in result.head["shape_observations"]
-                  if row["kind"] in {"parameter", "return"}})
-    if ids:
-        session_engine.command(result, {"kind": "observe_shapes", "address_ids": ids, "max_wave_size": 8})
-    else:
-        ids = sorted({row["address_id"] for row in result.head["observations"]
-                      if row["kind"] in {"parameter", "return"} and not row["types"]})
-        if ids:
-            session_engine.command(result, {"kind": "observe_types", "address_ids": ids, "max_wave_size": 8})
-        session_engine.command(result, {"kind": "catalog_shapes"})
-    # Match the local runner's catalog-before-candidates, resolve-after ordering.
-    # Candidate demands can refine facts without changing the emission catalog.
-    shape_ids = {row["address_id"] for row in result.head["shape_observations"]}
-    type_ids = {row["address_id"] for row in result.head["observations"]}
-    session_engine.command(result, {"kind": "observe_candidates"})
-    candidates = result.head["candidate_observations"]
-    session_engine.command(result, {"kind": "catalog_shapes"})
-    shapes = [row for row in result.head["shape_observations"] if row["address_id"] in shape_ids]
-    types = [row for row in result.head["observations"] if row["address_id"] in type_ids]
-    files = {str(path.relative_to(source_root)): [] for path in sorted(source_root.rglob("*.py"))}
-    for category, rows in (("types", types), ("shape", shapes),
-                           ("candidate", candidates)):
-        for item in rows:
-            if category == "shape" and (not item["shape"] or item["kind"] not in {"parameter", "return"}):
-                continue
-            module = item["module"]
-            relative = module_files.get(module)
-            if relative is None and module is not None:
-                matches = [path for name, path in module_files.items()
-                           if module == name or module.endswith("." + name)]
-                relative = matches[0] if len(matches) == 1 else None
-            if relative is None:
-                continue
-            row = {key: item[key] for key in ("name", "kind", "family", "function")}
-            row["line"] = (item["position"] or {}).get("row")
-            if category == "candidate":
-                row.update(types=item["types"], precision=item["precision"],
-                           requirement_path=[], candidate_evidence=item["candidate_evidence"])
-            else:
-                row.update(definition_line=(item["definition_position"] or {}).get("row"),
-                           body_morphism_id=item["body_morphism_id"])
-                row[category] = item[category] or []
-            files[relative].append(row)
-    return {"ok": True, "files": files, "analysis_summary": {
-        "execution": "hosted-session", "translation_policy": "atomic-program",
-        "observation_policy": "signature-observations-only",
-        "forward_policy": "explicit-entry-forward" if run_forward_seed else "disabled",
-        "translation_failures": {}, "session_id": result.head["session_id"],
-        "revision_id": result.head["revision_id"], "checkpoint_id": result.head["checkpoint_id"],
-    }}
-
 
 def _run_successor_repo_probe(
     *,
