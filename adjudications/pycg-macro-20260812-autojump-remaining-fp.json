@@ -1,17 +1,6 @@
 {
   "schema": "archway.pycg.residual-adjudications.v1",
-  "entries": [
-    {
-      "residual_id": "pycg-residual:v1:5529a0969ebb82b515a8a946909c90376b273df05f3c0d0e07b49858ff67fd4d",
-      "disposition": "archway_unsoundness",
-      "reviewer": "codex:analysis-workbench",
-      "rationale": "The isupper call occurs inside has_uppercase.<genexpr>, but Archway attributes it to the enclosing has_uppercase boundary. The target is real; the emitted caller boundary is not.",
-      "evidence_refs": [
-        "analysis_evidence:synthetic_frame_contextual_evidence",
-        "review:autojump-generator-caller-attribution:2026-08-12"
-      ]
-    }
-  ],
+  "entries": [],
   "groups": [
     {
       "group_id": "autojump:retained-contextual-valid-extras:v1",

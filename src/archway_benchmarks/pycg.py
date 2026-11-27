@@ -23,6 +23,7 @@ from contextlib import nullcontext
 import json
 import multiprocessing
 import queue
+import re
 import resource
 import sys
 import threading
@@ -206,75 +207,6 @@ def score_edges(expected: set[Edge], predicted: set[Edge]) -> EdgeScore:
         false_positive=len(predicted - expected),
         false_negative=len(expected - predicted),
     )
-
-
-def normalize_edges_for_pycg_scoring(
-    predicted: set[Edge], expected: set[Edge]
-) -> tuple[set[Edge], tuple[dict[str, object], ...]]:
-    """Project canonical semantic edges into equivalent PyCG spellings.
-
-    The analysis edge is never mutated.  A spelling is selected only when one
-    explicit alias matches the expected graph uniquely; otherwise the
-    canonical edge is retained.  Returned lineage makes every score-only
-    substitution inspectable.
-    """
-
-    normalized: set[Edge] = set()
-    lineage: list[dict[str, object]] = []
-    for edge in sorted(predicted):
-        caller, target = edge
-        aliases = _pycg_scoring_aliases(caller, target)
-        matches = sorted({(caller, alias) for alias in aliases} & expected)
-        projected = matches[0] if len(matches) == 1 else edge
-        normalized.add(projected)
-        if projected != edge:
-            lineage.append({
-                "semantic_edge": list(edge),
-                "scored_edge": list(projected),
-                "rule": "unique-explicit-pycg-alias",
-            })
-    return normalized, tuple(lineage)
-
-
-def _pycg_scoring_aliases(caller: str, target: str) -> frozenset[str]:
-    aliases = {target}
-    for precise, coarse in (
-        ("re.Pattern.", "re."),
-        ("socket.socket.", "socket.Socket."),
-        ("invoke.vendor.six.", "six."),
-        ("invoke.util.ExceptionHandlingThread.",
-         "invoke.exceptions.ExceptionHandlingThread."),
-    ):
-        if target.startswith(precise):
-            aliases.add(coarse + target.removeprefix(precise))
-    if target == "<builtin>.collections.namedtuple":
-        aliases.add("collections.namedtuple")
-    if target == "<builtin>.sorted":
-        parts = caller.split(".")
-        aliases.update(
-            f"{'.'.join(parts[:index])}.sorted"
-            for index in range(1, len(parts) + 1)
-        )
-    if target.startswith("configparser.ConfigParser."):
-        aliases.add(
-            "configparser.Config."
-            + target.removeprefix("configparser.ConfigParser.")
-        )
-    if target.startswith("<**PyFile**>."):
-        method = target.removeprefix("<**PyFile**>.")
-        aliases.update({
-            f"sys.stdin.{method}",
-            f"sys.stdout.{method}",
-            f"sys.stderr.{method}",
-        })
-    if target == "<**PyList**>.append":
-        aliases.add("sys.path.append")
-    if target == "<**PyDict**>.get":
-        aliases.update({
-            "os.environ.get",
-            "configparser.ConfigParser.get",
-        })
-    return frozenset(aliases)
 
 
 def score_adjacency_lists(
@@ -511,6 +443,7 @@ def run_archway_pycg(
     case_timeout_seconds: float | None = None,
     edge_provider: EdgeProvider = "successor",
     successor_record_events: bool = False,
+    successor_record_telemetry: bool = True,
     successor_summarize_callee_results: bool = False,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
@@ -568,6 +501,7 @@ def run_archway_pycg(
                 case_timeout_seconds=case_timeout_seconds,
                 edge_provider=edge_provider,
                 successor_record_events=successor_record_events,
+                successor_record_telemetry=successor_record_telemetry,
                 successor_summarize_callee_results=(
                     successor_summarize_callee_results
                 ),
@@ -582,21 +516,9 @@ def run_archway_pycg(
             else:
                 predicted = produced
                 analysis_evidence = {}
-            semantic_predicted = set(predicted)
-            predicted, normalization_lineage = (
-                normalize_edges_for_pycg_scoring(predicted, expected)
-            )
-            if normalization_lineage:
-                analysis_evidence = {
-                    **analysis_evidence,
-                    "pycg_scoring_normalization": normalization_lineage,
-                    "pycg_scoring_normalization_count": len(
-                        normalization_lineage
-                    ),
-                    "semantic_predicted_edges": [
-                        list(edge) for edge in sorted(semantic_predicted)
-                    ],
-                }
+            # Scored exactly as the engine reported them. Spelling differences from
+            # PyCG's vocabulary are reviewed answer-key matters (adjudications/),
+            # never resolved here by consulting the expected graph.
             status = "ok"
             error = None
         except TimeoutError as exc:
@@ -672,6 +594,7 @@ def _archway_call_edges_with_timeout(
     case_timeout_seconds: float | None,
     edge_provider: EdgeProvider,
     successor_record_events: bool,
+    successor_record_telemetry: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
@@ -685,6 +608,7 @@ def _archway_call_edges_with_timeout(
             callable_root_activation=callable_root_activation,
             edge_provider=edge_provider,
             successor_record_events=successor_record_events,
+            successor_record_telemetry=successor_record_telemetry,
             successor_summarize_callee_results=(
                 successor_summarize_callee_results
             ),
@@ -709,6 +633,7 @@ def _archway_call_edges_with_timeout(
             callable_root_activation,
             edge_provider,
             successor_record_events,
+            successor_record_telemetry,
             successor_summarize_callee_results,
             successor_sampling_rate_hz,
             successor_partial_graph_checkpoint_seconds,
@@ -811,6 +736,7 @@ def _archway_call_edges_worker(
     callable_root_activation: str,
     edge_provider: EdgeProvider,
     successor_record_events: bool,
+    successor_record_telemetry: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
@@ -824,6 +750,7 @@ def _archway_call_edges_worker(
             callable_root_activation=callable_root_activation,
             edge_provider=edge_provider,
             successor_record_events=successor_record_events,
+            successor_record_telemetry=successor_record_telemetry,
             successor_summarize_callee_results=(
                 successor_summarize_callee_results
             ),
@@ -853,6 +780,7 @@ def _produce_archway_call_edges(
     callable_root_activation: str,
     edge_provider: EdgeProvider,
     successor_record_events: bool,
+    successor_record_telemetry: bool,
     successor_summarize_callee_results: bool,
     successor_sampling_rate_hz: float | None = None,
     successor_partial_graph_checkpoint_seconds: float | None = None,
@@ -863,6 +791,7 @@ def _produce_archway_call_edges(
             case,
             engine_root=engine_root,
             record_events=successor_record_events,
+            record_telemetry=successor_record_telemetry,
             progress=successor_progress,
             summarize_callee_results=successor_summarize_callee_results,
             sampling_rate_hz=successor_sampling_rate_hz,
@@ -900,6 +829,7 @@ def successor_archway_call_edge_result(
     *,
     engine_root: Path,
     record_events: bool = False,
+    record_telemetry: bool = True,
     progress: Callable[[dict[str, object]], None] | None = None,
     summarize_callee_results: bool = False,
     sampling_rate_hz: float | None = None,
@@ -914,6 +844,7 @@ def successor_archway_call_edge_result(
         sys.path.insert(0, engine_text)
 
     from sd_core.analysis.diagram_analysis.hybrid_forward import open_hybrid_program_session
+    from sd_core.analysis.diagram_analysis.program import PythonModuleEnvironment
     from sd_core.tooling.harness import ProgramResult
     from sd_core.tooling.sampling_profile import SamplingProfiler
 
@@ -934,6 +865,14 @@ def successor_archway_call_edge_result(
         modules,
         entry_module,
         record_events=record_events,
+        # Telemetry and timings add analysis cost; timed runs turn them off
+        # and the evidence records which mode ran.
+        record_timings=record_telemetry,
+        record_telemetry=record_telemetry,
+        module_environments={
+            _module_name_for_path(path, case.package_root): PythonModuleEnvironment(str(path))
+            for path in case.source_paths
+        },
         catalog_observations=False,
         possible_entry_modules=(
             frozenset(modules) if case.suite == "macro" else None
@@ -944,7 +883,9 @@ def successor_archway_call_edge_result(
     )
     topology_before = session.scheduler.graph.topology_generation
     analysis_started = time.perf_counter()
-    include_callable_bodies = case.suite == "macro"
+    # Every case, micro included, roots every callable body: the engine's
+    # semantic call-graph policy. The evidence label below must say so.
+    include_callable_bodies = True
     stop_sampling = threading.Event()
     module_root_addresses = dict(session.module_roots)
     root_labels = {
@@ -1165,6 +1106,12 @@ def successor_archway_call_edge_result(
         evidence = {
             "phase": phase,
             "source_module_count": len(sources),
+            "namespace_package_modules": sorted(
+                set(sources) - {
+                    _module_name_for_path(path, case.package_root)
+                    for path in case.source_paths
+                }
+            ),
             "translated_module_count": len(modules),
             "module_roots": module_names,
             "module_closure": {
@@ -1364,6 +1311,7 @@ def successor_archway_call_edge_result(
             "analysis_seconds": time.perf_counter() - analysis_started,
             "total_provider_seconds": time.perf_counter() - started,
             "trace_events_enabled": record_events,
+            "telemetry_enabled": record_telemetry,
             "progress_sample_seconds": progress_sample_seconds,
             "peak_rss_bytes": (
                 resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
@@ -1379,17 +1327,24 @@ def successor_archway_call_edge_result(
     # makes bounded profiled and unprofiled checkpoints directly comparable.
     progress_sample_seconds = 5.0
 
+    def callable_names():
+        return _pycg_callable_name_map(
+            boundary.display_name
+            for boundary in session.callable_boundaries_by_body.values()
+        )
+
     def current_partial_graph_evidence() -> dict[str, object]:
         """Project a diagnostic graph without claiming scheduler convergence."""
 
         projection_started = time.perf_counter()
         semantic_edges = session.semantic_call_edges()
+        name_map = callable_names()
         direct_edges = {
             (
-                edge.caller.display_name
+                name_map.get(edge.caller.display_name, edge.caller.display_name)
                 if edge.caller is not None
                 else edge.caller_module,
-                _successor_pycg_target_name(edge.target.display_name),
+                _successor_pycg_target_name(name_map.get(edge.target.display_name, edge.target.display_name)),
             )
             for edge in semantic_edges
             if edge.caller is not None or edge.caller_module is not None
@@ -1665,7 +1620,7 @@ def successor_archway_call_edge_result(
                 })
 
     sampler = None
-    if progress is not None:
+    if progress is not None and record_telemetry:
         progress(current_evidence(phase="session_opened"))
         sampler = threading.Thread(target=sample_progress, daemon=True)
         sampler.start()
@@ -1675,7 +1630,10 @@ def successor_archway_call_edge_result(
     )
     try:
         with profile_context as sampling_profile:
-            forward = session.run_semantic_call_graph()
+            forward = session.run_semantic_call_graph(
+                include_callable_bodies=include_callable_bodies,
+                summarize_callee_results=summarize_callee_results,
+            )
     except Exception as exc:
         evidence = current_evidence(phase="error")
         evidence["failure_traceback"] = traceback.format_exc()
@@ -1691,12 +1649,13 @@ def successor_archway_call_edge_result(
     analysis_seconds = time.perf_counter() - analysis_started
     semantic_projection_started = time.perf_counter()
     semantic_edges = session.semantic_call_edges()
+    name_map = callable_names()
     edges = {
         (
-            edge.caller.display_name
+            name_map.get(edge.caller.display_name, edge.caller.display_name)
             if edge.caller is not None
             else edge.caller_module,
-            _successor_pycg_target_name(edge.target.display_name),
+            _successor_pycg_target_name(name_map.get(edge.target.display_name, edge.target.display_name)),
         )
         for edge in semantic_edges
         if edge.caller is not None or edge.caller_module is not None
@@ -1760,7 +1719,7 @@ def successor_archway_call_edge_result(
             context_samples,
         ) = semantic_edge_groups[key]
         row = _attach_source_line(
-            _successor_semantic_edge_evidence(representative), sources
+            _successor_semantic_edge_evidence(representative, name_map=name_map), sources
         )
         row["contextual_occurrence_count"] = occurrence_count
         row["caller_context_samples"] = list(context_samples)
@@ -1812,7 +1771,41 @@ def successor_archway_call_edge_result(
     )
 
 
-def _successor_semantic_edge_evidence(edge) -> dict[str, object]:
+def _pycg_callable_name_map(names: Iterable[str]) -> dict[str, str]:
+    """Project engine lambda ordinals into PyCG lexical-scope ordinals.
+
+    Inventory all callable boundaries, including those without emitted edges,
+    so filtering the semantic graph cannot renumber a lambda.
+    """
+    names = tuple(names)
+    scopes: dict[tuple[str, ...], set[int]] = {}
+    for name in names:
+        parts = name.split(".")
+        for index, part in enumerate(parts):
+            match = re.fullmatch(r"<lambda(\d+)>", part)
+            if match:
+                scopes.setdefault(tuple(parts[:index]), set()).add(int(match[1]))
+    numbers = {
+        scope: {ordinal: index for index, ordinal in enumerate(sorted(values), 1)}
+        for scope, values in scopes.items()
+    }
+    result = {}
+    for name in names:
+        parts = name.split(".")
+        projected = []
+        for index, part in enumerate(parts):
+            match = re.fullmatch(r"<lambda(\d+)>", part)
+            if match:
+                projected.append(
+                    f"<lambda{numbers[tuple(parts[:index])][int(match[1])]}>"
+                )
+            else:
+                projected.append(part)
+        result[name] = ".".join(projected)
+    return result
+
+
+def _successor_semantic_edge_evidence(edge, *, name_map=None) -> dict[str, object]:
     """Serialize one contextual edge without consulting source or AST data."""
 
     caller = (
@@ -1820,7 +1813,9 @@ def _successor_semantic_edge_evidence(edge) -> dict[str, object]:
         if edge.caller is not None else edge.caller_module
     )
     semantic_target = edge.target.display_name
-    projected_target = _successor_pycg_target_name(semantic_target)
+    name_map = name_map or {}
+    projected_caller = name_map.get(caller, caller)
+    projected_target = _successor_pycg_target_name(name_map.get(semantic_target, semantic_target))
     anchor = edge.callsite_anchor
     module = (
         ".".join(anchor.module.parts)
@@ -1840,7 +1835,7 @@ def _successor_semantic_edge_evidence(edge) -> dict[str, object]:
     )
     return {
         "semantic_edge": [caller, semantic_target],
-        "projected_edge": [caller, projected_target],
+        "projected_edge": [projected_caller, projected_target],
         "caller_context": edge.caller_context,
         "caller_kind": (
             type(edge.caller).__name__
@@ -2090,6 +2085,17 @@ def _load_case_sources(case: PyCGCase) -> dict[str, str]:
         if path.name == "__init__.py" and not source.strip():
             source = "pass\n"
         sources[module_name] = source
+    # Filesystem discovery owns namespace-package evidence. A directory without
+    # __init__.py is still an importable parent; passing only its child files
+    # would give the engine an incomplete program registry. Never replace an
+    # existing regular package, or invent an empty body for an omitted initializer.
+    for path in case.source_paths:
+        parent_parts = path.relative_to(case.package_root).parent.parts
+        for depth in range(1, len(parent_parts) + 1):
+            parts = parent_parts[:depth]
+            directory = case.package_root.joinpath(*parts)
+            if directory.is_dir() and not (directory / '__init__.py').exists():
+                sources.setdefault('.'.join(parts), 'pass\n')
     return sources
 
 
@@ -2262,20 +2268,25 @@ def _function_display_names(
     functions: Iterable[object],
     target: object,
 ) -> dict[str, str]:
+    functions = tuple(functions)
     by_id = {
         getattr(function, "body_id"): function
         for function in functions
         if isinstance(getattr(function, "body_id", None), str)
     }
     lambda_names: dict[str, str] = {}
-    lambda_index = 0
+    lambda_indices: dict[tuple[str | None, str | None], int] = {}
     for function in functions:
         body_id = getattr(function, "body_id", None)
         if not isinstance(body_id, str):
             continue
         if getattr(function, "name", None) == "<lambda>":
-            lambda_index += 1
-            lambda_names[body_id] = f"<lambda{lambda_index}>"
+            # PyCG numbers lambdas within their lexical scope, not globally
+            # across a module. The engine supplies the parent identity.
+            parent = getattr(function, "lexical_parent_body_id", None)
+            scope = (parent, _method_owner_name(target, body_id))
+            lambda_indices[scope] = lambda_indices.get(scope, 0) + 1
+            lambda_names[body_id] = f"<lambda{lambda_indices[scope]}>"
 
     resolved: dict[str, str] = {}
     resolving: set[str] = set()
@@ -2393,6 +2404,14 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--no-successor-telemetry",
+        action="store_true",
+        help=(
+            "Turn off engine telemetry, timings and the progress sampler. "
+            "Use for timed runs, since they add analysis cost."
+        ),
+    )
+    parser.add_argument(
         "--successor-record-events",
         action="store_true",
         help=(
@@ -2441,6 +2460,7 @@ def main(argv: list[str] | None = None) -> int:
         case_timeout_seconds=args.case_timeout_seconds,
         edge_provider=args.edge_provider,
         successor_record_events=args.successor_record_events,
+        successor_record_telemetry=not args.no_successor_telemetry,
         successor_summarize_callee_results=(
             args.successor_summarize_callee_results
         ),

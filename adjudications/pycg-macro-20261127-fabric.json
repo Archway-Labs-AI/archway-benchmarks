@@ -1,0 +1,197 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:773e54aee2fc18bec2243ca3a2672d1c529e453699182a6f68a3520898807717",
+      "edge": [
+        "fabric.executor.FabExecutor.expand_calls",
+        "builtins.Exception.__init__"
+      ],
+      "kind": "false_positive",
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:base-class-init-into-builtins. The raised class is a project subclass of Exception with no __init__ of its own, so constructing it runs the inherited builtin BaseException/Exception initializer. PyCG does not record base-class initializers that live in builtins. Class: fabric.exceptions.NothingToDo(Exception): pass.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/fabric/exceptions.py:3",
+        "corpus:projects/fabric/fabric/executor.py:42"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:861c94cfb29827ac4f44a8e89e48f249d974012745ed2edcd2f27c914e8b07aa",
+      "edge": [
+        "fabric.group.Group",
+        "<builtin>.classmethod"
+      ],
+      "kind": "false_positive",
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:builtin-decorator-application. The @classmethod line applies the builtin classmethod to the function in the class body; PyCG does not record builtin decorator application.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/fabric/group.py:72"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:b4b5453deb7306b26fa1f00efe9466aeed456790c3af2e2d1b5e4845f4bd0467",
+      "edge": [
+        "fabric.connection.Connection.open_gateway",
+        "fabric.connection.Connection.open"
+      ],
+      "kind": "false_positive",
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "When gateway is not a string it is a Connection (documented ProxyJump gateway), so self.gateway.open() is Connection.open. PyCG reports no edge from open_gateway.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/fabric/connection.py:549"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:4ae67948eba72ebaa43f95db60984962b0edbd60771be3870b24918fe67b3aa0",
+      "edge": [
+        "fabric.connection.Connection.open_gateway",
+        "paramiko.client.SSHClient.get_transport.open_channel"
+      ],
+      "kind": "false_positive",
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.gateway.transport is the paramiko Transport set by Connection.open, so open_channel(...) is a real Transport.open_channel call. identity:factory-return. Archway names it after the factory (SSHClient.get_transport) rather than paramiko.transport.Transport.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/fabric/connection.py:558"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:3ba6206b2a0db659b22ec106d26405f3901cc1d39d88c18c2d40d50f4ffae937",
+      "edge": [
+        "fabric.group.Group.__init__",
+        "builtins.list.extend"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Group subclasses list, so self.extend(...) is list.extend. The benchmark expects the same callee as <**PyList**>.extend from Group.__init__.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/fabric/group.py:70",
+        "paired_expected:<**PyList**>.extend"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:7efaa5e319f824c6b9c231a872c85affa63c733f26f7939a0c4ab4fc4b296192",
+      "edge": [
+        "fabric.group.ThreadingGroup.run",
+        "invoke.util.ExceptionHandlingThread.exception"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "thread.exception() on an ExceptionHandlingThread is invoke.util.ExceptionHandlingThread.exception. The benchmark expects the same call under the misspelling invoke.util.ExceptionHandlingThreat.exception from the same caller.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/fabric/group.py:202",
+        "paired_expected:invoke.util.ExceptionHandlingThreat.exception"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:18bd9cfa9c9212d49f68dd74d50427ff832991dcc4ea9eeacf7fd84f2a4cfd56",
+      "edge": [
+        "fabric.group.ThreadingGroup.run",
+        "six.moves.queue.Queue.empty"
+      ],
+      "kind": "false_positive",
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "queue.empty() on the Queue imported from invoke.vendor.six.moves.queue (or the six.moves.queue fallback) is a real queue.Queue.empty call. Neither spelling is expected; Archway reports both import aliases.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/fabric/group.py:188",
+        "corpus:projects/fabric/fabric/group.py:1"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:d6bd8e31670afe1c3b6bd65b05c0589055085f64e06c96ed7f2e90f4fde8f9dc",
+      "edge": [
+        "fabric.group.ThreadingGroup.run",
+        "six.moves.queue.Queue.get"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "queue.get(block=False) is queue.Queue.get. The expected invoke.vendor.six.moves.queue.Queue.get is already a true positive; six.moves.queue.Queue.get is the ImportError-fallback alias for the same callee.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/fabric/group.py:190",
+        "paired_predicted_and_expected:invoke.vendor.six.moves.queue.Queue.get"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:d9f42ae32e30c93e23d324f5db78e27acc70a5d9b10747a24d2b0df8102af20a",
+      "edge": [
+        "integration.group.Group_.simple_command",
+        "builtins.dict.values"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "result is a GroupResult (a dict subclass), so result.values() is dict.values. The benchmark expects the same call as <**PyDict**>.values from simple_command.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/integration/group.py:11",
+        "paired_expected:<**PyDict**>.values"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:e947305908fa37c44145c501bfa63c079546e916ca71516bf28a20d6027aa0f5",
+      "edge": [
+        "integration.group.Group_.simple_command",
+        "<**PyDict**>.values"
+      ],
+      "kind": "false_negative",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Archway reports this call from simple_command as builtins.dict.values (result is a GroupResult dict subclass): same caller, callsite and runtime callee.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/integration/group.py:11",
+        "paired_predicted:builtins.dict.values"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "fabric:assert:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:2ec42a26a21ea16fa8066c51d0ed8403077df48db24f07e6afa1f0785ad63040",
+        "pycg-residual:v1:769498c0a868dcb5677db5077a1dfc63cccf9bae3a59c77ec66cff343fe6d0c8",
+        "pycg-residual:v1:24234717f2456b39ddb9fbc1f96927e439d2840a183f875231d2b2dd109208f2",
+        "pycg-residual:v1:65bde01dbab4b2cfd797027ec30cb80e3c81493f0118c63902fbeb704b064ae2",
+        "pycg-residual:v1:5f827e1176173c8eaf6f4cb318451cd2d2c212e673a24df82a1f6eb0bc5e8a8d",
+        "pycg-residual:v1:bed590f56b3db1b7879a612609c71b1243e2404a18b8e57b82d997bd0635f901",
+        "pycg-residual:v1:dc38ab13cfd67eb73dea2693f3c2e60e7377a7402ab247b0a30000e27e93385d",
+        "pycg-residual:v1:69911f39c8db95b9e877e43bff634744c8913db780079c6262d92e421d96e2eb",
+        "pycg-residual:v1:559bd020935a269d06f115f24a48eeb722ce1a2bd829e579b454557bfe77dd48",
+        "pycg-residual:v1:ce13ccbf8677a774d2c2c3c79e505ffe539403c435efcdafde37b5373b97eb12",
+        "pycg-residual:v1:a3304ffdbca24a03dfc046476b08ff13a73c276ed3b7da4ffe862b332efa0185",
+        "pycg-residual:v1:cc4caac1f5d1f650fb62f63b5172a590979322d3e2c664bbf875e901764a89c7",
+        "pycg-residual:v1:4df5cc8dedc8feb522b439a239b1fd942ffb7a23568bb815a76316c4287481c4",
+        "pycg-residual:v1:0a9eed62a29fafffc13dcf32ce785be13538d34083d34afcb0198cc903759cd0",
+        "pycg-residual:v1:b92e0072b95ae7afde7abe7e5845180ebc0f62d1e829a656d644ed329331b7e1",
+        "pycg-residual:v1:5c381496315ddef77ef34f2f4c394d98e05a20498a80599b6b89e43bfab947da",
+        "pycg-residual:v1:3b49e6168ab195197ae8265ecfcb8324f316d0b7af486da303186b7286eb22a8",
+        "pycg-residual:v1:334d4bb31b3ded259b6e9cc14f2515606cf3095981cbbf8b27d5a3caf786f37f",
+        "pycg-residual:v1:54700e3e3b62415315a8b27d586408128f4e4e85f17b3af0fdcc3b16cfae6ba6",
+        "pycg-residual:v1:ce06e4c0c91910fb6c0232aa603299f3c71178f222eae52a3c3a261f4501daec"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:assert-AssertionError. Each callsite is an assert statement; a failing assert constructs and raises AssertionError, a real runtime event PyCG does not record as a call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/fabric/integration/connection.py:38",
+        "corpus:projects/fabric/integration/transfer.py:27"
+      ]
+    }
+  ]
+}

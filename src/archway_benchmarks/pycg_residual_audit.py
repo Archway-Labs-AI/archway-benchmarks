@@ -144,6 +144,62 @@ def _adjudications(manifest: Mapping[str, Any] | None) -> dict[str, Mapping[str,
         indexed[identity] = entry
     return indexed
 
+# Reviewed dispositions under which the corrected answer key, not the engine,
+# changes: the edge is real and the benchmark omits it, the expected edge is a
+# benchmark defect, or the two sides spell one call differently.
+_KEY_CORRECTIONS = frozenset({
+    "semantically_valid_extra",
+    "benchmark_defect_or_omission",
+    "adapter_representation_mismatch",
+})
+
+
+def adjudicated_score(case: Mapping[str, Any], residuals: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
+    """Score one case against the answer key as corrected by reviewed dispositions.
+
+    Unique edges, not PyCG's duplicate-preserving occurrences. A reviewed extra
+    under a key correction becomes a true positive; a reviewed missing edge
+    under a key correction leaves the key. Everything else, pending included,
+    stays as scored.
+    """
+
+    predicted = {_edge(value) for value in case.get("predicted_edges", [])}
+    false_positive = false_negative = corrected_positive = dropped_negative = 0
+    pending = 0
+    for item in residuals:
+        disposition = item["review"]["disposition"]
+        pending += disposition == "pending"
+        corrected = disposition in _KEY_CORRECTIONS
+        if item["kind"] == "false_positive":
+            if corrected:
+                corrected_positive += 1
+            else:
+                false_positive += 1
+        elif corrected:
+            dropped_negative += 1
+        else:
+            false_negative += 1
+    true_positive = len(predicted) - false_positive
+    return {
+        "true_positive": true_positive,
+        "false_positive": false_positive,
+        "false_negative": false_negative,
+        "key_corrections": {
+            "extras_accepted": corrected_positive,
+            "expected_removed": dropped_negative,
+        },
+        "pending_residuals": pending,
+    }
+
+
+def _ratios(score: Mapping[str, Any]) -> dict[str, Any]:
+    tp, fp, fn = score["true_positive"], score["false_positive"], score["false_negative"]
+    return {
+        **score,
+        "precision": tp / (tp + fp) if tp + fp else None,
+        "recall": tp / (tp + fn) if tp + fn else None,
+    }
+
 
 def audit_case(
     case: Mapping[str, Any],
@@ -249,6 +305,7 @@ def audit_case(
         "kind_counts": dict(sorted(kind_counts.items())),
         "automated_cluster_counts": dict(sorted(cluster_counts.items())),
         "review_disposition_counts": dict(sorted(review_counts.items())),
+        "adjudicated_score": _ratios(adjudicated_score(case, residuals)),
         "residuals": residuals,
     }
 
@@ -257,7 +314,11 @@ def audit_run(
     run: Mapping[str, Any],
     *,
     adjudication_manifest: Mapping[str, Any] | None = None,
+    allow_stale: bool = False,
 ) -> dict[str, Any]:
+    """Audit a run; reviews for residuals absent from it are an error unless
+    ``allow_stale`` (carrying reviews forward to a new run), when they are
+    listed instead."""
     reviews = _adjudications(adjudication_manifest)
     cases = [
         audit_case(case, adjudications=reviews)
@@ -270,8 +331,15 @@ def audit_run(
         for item in case["residuals"]
     }
     stale = sorted(set(reviews) - present)
-    if stale:
+    if stale and not allow_stale:
         raise ValueError(f"adjudications reference absent residuals: {stale!r}")
+    adjudicated: Counter[str] = Counter()
+    for case in cases:
+        score = case["adjudicated_score"]
+        for key in ("true_positive", "false_positive", "false_negative", "pending_residuals"):
+            adjudicated[key] += score[key]
+        for key, value in score["key_corrections"].items():
+            adjudicated["key_corrections." + key] += value
     kind_counts: Counter[str] = Counter()
     cluster_counts: Counter[str] = Counter()
     review_counts: Counter[str] = Counter()
@@ -301,6 +369,17 @@ def audit_run(
         "kind_counts": dict(sorted(kind_counts.items())),
         "automated_cluster_counts": dict(sorted(cluster_counts.items())),
         "review_disposition_counts": dict(sorted(review_counts.items())),
+        "adjudicated_score": _ratios({
+            "true_positive": adjudicated["true_positive"],
+            "false_positive": adjudicated["false_positive"],
+            "false_negative": adjudicated["false_negative"],
+            "key_corrections": {
+                "extras_accepted": adjudicated["key_corrections.extras_accepted"],
+                "expected_removed": adjudicated["key_corrections.expected_removed"],
+            },
+            "pending_residuals": adjudicated["pending_residuals"],
+        }),
+        "stale_adjudications": stale,
         "cases": cases,
     }
 
@@ -310,6 +389,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("result", type=Path)
     parser.add_argument("--adjudications", type=Path, nargs="+")
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--allow-stale", action="store_true",
+        help="list, rather than reject, reviews of residuals absent from this run",
+    )
     args = parser.parse_args(argv)
     run = json.loads(args.result.read_text(encoding="utf-8"))
     manifest = None
@@ -327,7 +410,7 @@ def main(argv: list[str] | None = None) -> int:
             "entries": entries,
             "groups": groups,
         }
-    audit = audit_run(run, adjudication_manifest=manifest)
+    audit = audit_run(run, adjudication_manifest=manifest, allow_stale=args.allow_stale)
     payload = json.dumps(audit, indent=2, sort_keys=True) + "\n"
     if args.output is None:
         print(payload, end="")

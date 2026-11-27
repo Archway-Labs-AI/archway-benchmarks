@@ -1,0 +1,1222 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:afb9756f96d5d716940687c669fe2477e6fc532ec07b125be6abfaa7f891c0b1",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.dict.update (self._defaults.update(defaults)) at projects/autojump/bin/autojump_argparse.py L1708; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/autojump/bin/autojump_argparse.py:L1708",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:d83ca7242a0bd10127d3a22bf74689d1132c698c0c45a342a8beeca2e9d2caae",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "super(ArgumentParser, self).__init__ (L1650-1656) skips _AttributeHolder, which defines no __init__, and reaches _ActionsContainer.__init__; the profile shows ArgumentParser.__init__ -> _ActionsContainer.__init__ and no _AttributeHolder.__init__. Correct name autojump_argparse._ActionsContainer.__init__; paired predicted edge ArgumentParser.__init__ -> autojump_argparse._ActionsContainer.__init__.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L1606,L1650",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:81b7797cfc84f4001dfcc1ed08ea1b91045a5bb0cf0b9d88d4b3bbdf3a210805",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "result.extend(...) at L2126 is on a list (result = []); the runtime callee is list.extend. Paired predicted edge _match_arguments_partial -> <**PyList**>.extend at the same callsite.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L2126",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:2fb117763aa9067034e7e8f9b626b73356f9bac52cbee4d0d3fd658fea4bde1c",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.iter (iter(arg_strings)) at projects/autojump/bin/autojump_argparse.py L1845; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/autojump/bin/autojump_argparse.py:L1845",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:f08b5160804e3b3ef9bf503da5a520794c88c755decc98d6217481c824af60be",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "take_action calls action(self, namespace, argument_values, option_string) at L1890, which invokes the action instance's __call__, not _StoreAction.__init__. The profile shows take_action -> _StoreAction.__call__ and no __init__. (Archway also misses that __call__ edge; it is not this expected edge.)",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L1872-1890",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:608ca3ee1444821843b949031efb2d2fdaad8ad7afcf9ddbda4cc1ac4d1bfd94",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "args at L1818 is the list returned by _parse_known_args, so args.extend is list.extend (profile: list.extend in the parse path). Paired predicted edge parse_known_args -> <**PyList**>.extend at the same callsite.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L1817-1818",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:8d4d2bc00ebe74a653fa0f3e3fb081f51bd21c510042d15f0a16458ba1de9f57",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "An assert statement (L218) is not a call to a callable named <builtin>.assert; nothing of that name exists.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L218",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:fa8b17c4d7cc8e2b82955ad98a4e89fdae9105ed182a1411f460d69b439ecafc",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "params = dict(vars(action), prog=...) at L623, so params.get at L630 is dict.get. Paired predicted edge _expand_help -> <**PyDict**>.get.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L623,L630",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:763c9f483c1ba4d1d338f20f6088d69dc0c321ffbfc6d32eab5fda58563defc3",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self._whitespace_matcher = _re.compile(r'\\s+') (L206), so .sub at L651 runs re.Pattern.sub, not the module function re.sub. Correct name re.Pattern.sub; paired predicted edge _fill_text -> re.Pattern.sub.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L206,L651",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:91c9a39ff4249a9fb60273740dbe3d8933a04b244b7582f6a97cbe51dde25888",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "actions is the parser's list of actions; actions.index at L418 is list.index (profile shows list.index). Paired predicted edge _format_actions_usage -> <**PyList**>.index.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L412-418",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:3f2adf293c23913c745db19cbd12e341f1764d5d4f4f4c41ccd5fb15883542d4",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "inserts = {} at L415, so inserts.get at L449/L451 is dict.get. Paired predicted edge _format_actions_usage -> <**PyDict**>.get.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L415,L449-451",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:371fc143d64d45214fe90033273d541fe7236028727b51dc9856a9a5e8eba7eb",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "inserts = {} at L415, so inserts.pop at L450/L452 is dict.pop. Paired predicted edge _format_actions_usage -> <**PyDict**>.pop.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L415,L450-452",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:2bf770adf2749e089cdd8ae0fcd5b6f9d4ac176fe0ffb99f47d5130ac0519e88",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The module-local sorted is defined only in the except NameError branch (L105-113), which never runs in Python 3; sorted at L490 is the builtin (profile: builtin sorted). Paired predicted edge _format_actions_usage -> <builtin>.sorted.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L105-113,L490",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:a3a4521199104c58da5559578330aa6d0389ad231a61e7de56f42da3896abdd1",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self._whitespace_matcher is a compiled pattern (L206); .sub at L647 is re.Pattern.sub (profile: Pattern.sub from _split_lines). Paired predicted edge _split_lines -> re.Pattern.sub.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L206,L647",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:bc47f4fa3bd7b48ab7e4009153385e89ffab2066c917a84483ebb6026c96bd9b",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self._long_break_matcher = _re.compile(...) (L207); .sub at L309 is re.Pattern.sub (profile confirms). Paired predicted edge HelpFormatter.format_help -> re.Pattern.sub.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L207,L309",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:827579393c22136c1b94d0b87935ce9582a52b0fb09601c5f94a6d45f53448c8",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self._negative_number_matcher = _re.compile(...) (L1296); .match at L1397 is re.Pattern.match. Paired predicted edge _add_action -> re.Pattern.match.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L1296,L1397",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:d86c81562f577b87b4039f025b924bfa2f40d9961391caa98dbcc3dbe7951472",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.dict.update (self._defaults.update(kwargs)) at projects/autojump/bin/autojump_argparse.py L1316; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/autojump/bin/autojump_argparse.py:L1316",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:e124c80cfb81d4e0e0642b7ef530bb20108294a3c675752fc83fff5ac194efe9",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sorted at L154 is the builtin in Python 3 (the module-local definition exists only under except NameError, L105-113; profile: builtin sorted). Paired predicted edge _get_kwargs -> <builtin>.sorted.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L105-113,L154",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:a837f9a4e4c8211a4e29d44a17e4037ae21262938f164aad09b4c8d0aacdadb7",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "_StoreAction.__call__ (L883-884) calls only setattr, which Archway reports; there is no __call__ invocation in its body (profile: only setattr).",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_argparse.py:L883-884",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:f89248baae5badd1ae3ca51c975e4df6d95ac4ef5a61bd93aab7fb4647979cd9",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "namedtuple at L29 is collections.namedtuple. Paired predicted edge autojump_data -> <builtin>.collections.namedtuple, the same function under the adapter's builtin-prefixed spelling.",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_data.py:L29",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:1ff987cfd7d84719f5b9d4bac2904e7d4a461dd9eef7377d646eff85e0818133",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.iter (it = iter(xs)) at projects/autojump/bin/autojump_utils.py L38; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/autojump/bin/autojump_utils.py:L38",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:16027bcfc59240767cbf489e9884dea849cb9d68e34aa5044de49b26e827d510",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.iter (it = iter(xs)) at projects/autojump/bin/autojump_utils.py L117; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/autojump/bin/autojump_utils.py:L117",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:cef90d633eec27688b6a7c708c67a1c7b24557d9e2d2b369d948193dd8dd1895",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "print_local (L147-148) is print(encode_local(string)); there is no any() call (profile: print, encode_local only).",
+      "evidence_refs": [
+        "source:projects/autojump/bin/autojump_utils.py:L147-148",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:e398b2aa71c8a1b5059a7df39f305990cccdc8e5a3c963792d903ade3120eab4",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.iter (it = iter(xs)) at projects/autojump/bin/autojump_utils.py L179; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/autojump/bin/autojump_utils.py:L179",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:4162fc79c76062aa01e8c7f2fbc2a707042f834c5e05e269b0bad27d3692dd70",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "super(Config, self).__init__(...) at L93 runs invoke.config.Config.__init__; the benchmark names the class instead of its __init__. Paired predicted edge Config.__init__ -> invoke.config.Config.__init__.",
+      "evidence_refs": [
+        "projects/fabric/fabric/config.py:L93",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:440376dbf00276809dd649b08a3e12de7d1128aec08ed4ac155104968a4d4c84",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Connection.__init__ contains no extend call. The only extend in the module is connect_kwargs['key_filename'].extend(...) at L364, inside resolve_connect_kwargs, which is a separate caller. The benchmark attributes it to the wrong caller.",
+      "evidence_refs": [
+        "projects/fabric/fabric/connection.py:L341-366",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:c88983f652f5547248257e64465cd19b9d4b4d4cb7c30046b1bb7e07bef3d2c5",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "config = Config() at L256 (Config is fabric.config.Config, imported L22) runs fabric.config.Config.__init__; config.Config is the benchmark's module-less class spelling. Paired predicted edge Connection.__init__ -> fabric.config.Config.__init__.",
+      "evidence_refs": [
+        "projects/fabric/fabric/connection.py:L22,L256",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:167571ee5fb889355f66ea30340546652cd1a556c045d1f65ace8f0f058a1138",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Connection(host=..., config=...) at executor.py L84 runs fabric.connection.Connection.__init__. Paired predicted edge make_context -> fabric.connection.Connection.__init__.",
+      "evidence_refs": [
+        "projects/fabric/fabric/executor.py:L84",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:fe2949e0c4445b798c13dc45b615eefb8e0c691b409b0b898aa7abff40ab608a",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "thread.exception() at group.py L202. The benchmark misspells ExceptionHandlingThread as ExceptionHandlingThreat. Paired predicted edge ThreadingGroup.run -> invoke.util.ExceptionHandlingThread.exception.",
+      "evidence_refs": [
+        "projects/fabric/fabric/group.py:L202",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:954bddb3d25f0d630a6a9041aec48ef702711b6e7b106d84e8084d1c6234c985",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "kwargs.pop('connection') at runners.py L107 is dict.pop; the benchmark omits the dot (<**PyDict**>pop). Paired predicted edge Result.__init__ -> <**PyDict**>.pop.",
+      "evidence_refs": [
+        "projects/fabric/fabric/runners.py:L107",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:595c706586d0042483ec9b50fc255830a4e8541db21d3d9120e4875b40afdd1b",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "socket.Socket.recv is a capitalization error for the socket class. The call at tunnels.py L154 is on a socket.socket object. Paired predicted edge from the same caller: socket.socket.recv.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L154",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:70dc1aee33db27f431fe82de6465fc695654afea5ed9d9725b8165658f460ca4",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "socket.Socket.sendall is a capitalization error for the socket class. The call at tunnels.py L157 is on a socket.socket object. Paired predicted edge from the same caller: socket.socket.sendall.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L157",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:887a3b5b7f1a4a7b074af17d9e064cfc9d647ed5b0d4a7561071bb364b50dea8",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "socket.Socket.accept is a capitalization error for the socket class. The call at tunnels.py L68 is on a socket.socket object. Paired predicted edge from the same caller: socket.socket.accept.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L68",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:e59e01135b7a6e84110377af5cf86c77db203758d226005da4d506f6e9f00814",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "socket.Socket.bind is a capitalization error for the socket class. The call at tunnels.py L60 is on a socket.socket object. Paired predicted edge from the same caller: socket.socket.bind.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L60",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:9076c2b10c14510ea536ec573131589d9f64d4ab9a74776fd93d8beaf2e34657",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "socket.Socket.close is a capitalization error for the socket class. The call at tunnels.py L109 is on a socket.socket object. Paired predicted edge from the same caller: socket.socket.close.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L109",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:9fa568bd66b1f5ad59e42840e7fdebfc3df0762ccead99f40bfe1d3541cffac4",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "socket.Socket.listen is a capitalization error for the socket class. The call at tunnels.py L61 is on a socket.socket object. Paired predicted edge from the same caller: socket.socket.listen.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L61",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:e8eab7ff02ce3d37fc2ba9e2ddd696c2737d0a53b1311070d45db6a1eeb7988e",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "socket.Socket.setblocking is a capitalization error for the socket class. The call at tunnels.py L59 is on a socket.socket object. Paired predicted edge from the same caller: socket.socket.setblocking.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L59",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:be5c0154d43840e1cbea1d7c40d4f81fce5821e11ee0fa552741cb353902e1c7",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "socket.Socket.setsockopt is a capitalization error for the socket class. The call at tunnels.py L55 is on a socket.socket object. Paired predicted edge from the same caller: socket.socket.setsockopt.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L55",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:14957b4f000f48ff54145a2f432cf7a5f07d5756d85c95e50ba074ec1dfa6ed1",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "tunnel.join() at L99 runs on a Tunnel (an invoke.util.ExceptionHandlingThread subclass), so the runtime callee is threading.Thread.join; profile of the pattern confirms. The Event at L98 only gets .set(). Correct name invoke.util.ExceptionHandlingThread.join; paired predicted edge TunnelManager._run -> invoke.util.ExceptionHandlingThread.join.",
+      "evidence_refs": [
+        "projects/fabric/fabric/tunnels.py:L97-100",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:fa872251ec838b53eba2903982a030b4fe3059c9a6ddcb741450f5d1b912ef4f",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "queue.empty() at L85 runs on a six.moves queue.Queue. Paired predicted edge manual_threading_works_okay -> invoke.vendor.six.moves.queue.Queue.empty.",
+      "evidence_refs": [
+        "projects/fabric/integration/concurrency.py:L85",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:66907d57046fa0537a9a4858bd2cc7542be8843786bfdaeaadd9ad650b9171e8",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Config(...) at integration/connection.py L84 runs fabric.config.Config.__init__. Paired predicted edge sudo.setup -> fabric.config.Config.__init__.",
+      "evidence_refs": [
+        "projects/fabric/integration/connection.py:L84",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:b894f9db5bf1afe3f3d9ebc94a52c97b25ae733db12dcaac6e5eadd5dd986d29",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.path is a list, so sys.path.append at L5-6 runs list.append. Paired predicted edge sites.docs.conf -> <**PyList**>.append at the same callsites.",
+      "evidence_refs": [
+        "projects/fabric/sites/docs/conf.py:L5-6",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6a59c14a1080d709f011eddeb9ed6bf787f379baa27ae43626b5cb1960f399b8",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.path is a list, so sys.path.append at L6 runs list.append. Paired predicted edge sites.www.conf -> <**PyList**>.append.",
+      "evidence_refs": [
+        "projects/fabric/sites/www/conf.py:L6",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:79478e2c639ae86964966a98162f921c73cf8a51534252bfaadeb751adfcd17f",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.write at __main__.py L36 runs TextIOWrapper.write (profile of the pattern), the file method. Paired predicted edge asciinema.__main__.main -> <**PyFile**>.write at the same callsite.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/__main__.py:L36",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:fc5c56c513a508b70b43ba1df77d07425d70e6d0cfdb3d87314e96ea31fe9f01",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.dict.update (header.update(metadata)) at projects/asciinema/asciinema/asciicast/v2.py L70; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/asciinema/asciinema/asciicast/v2.py:L70",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:da1d5850128cd0cb0a284f485b8a375ff74b8a2af6eb2f768fe36dc86567f4e6",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Process is multiprocessing.Process (async_worker.py L6; the threading fallback is only for ImportError). self.process.start() at L19 is Process.start, which the benchmark misnames multiprocessing.start. Paired predicted edge __enter__ -> multiprocessing.Process.start.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/async_worker.py:L6,L18-19",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:962439c1fd8b9dd347d815ff736e0782028f318ae2f7e6ff4013823cb3e7efb0",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Queue is multiprocessing.Queue (L6); self.queue.put(None) at L23 is Queue.put, which the benchmark misnames multithreading.Queue.put. Paired predicted edge __exit__ -> multiprocessing.Queue.put.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/async_worker.py:L6,L23",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:7492687da39e2b379b79fc642f71e074b1b431e6a19f591510eca63e265dc10b",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.iter (iter(self.queue.get, None)) at projects/asciinema/asciinema/async_worker.py L30; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/asciinema/asciinema/async_worker.py:L30",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:bfab267bd83445d482f9d2d1384334be6f6c076e968a5350457d58f938026b67",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "asciinema.asciicast defines no Asciicast class. a comes from asciicast.open_from_url and is a v1 or v2 Asciicast, so a.stdout_events() at cat.py L16 runs one of those. Paired predicted edges CatCommand.execute -> asciinema.asciicast.v1.Asciicast.stdout_events / v2.Asciicast.stdout_events.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/commands/cat.py:L16",
+        "projects/asciinema/asciinema/asciicast/__init__.py",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:a11099643ad41c4f53f3fa98bdedf60307b2f55d5c4ce78755625bf22d567d0c",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.flush at commands/cat.py L18 runs TextIOWrapper.flush (profile of the pattern), the file method. Paired predicted edge CatCommand.execute -> <**PyFile**>.flush at the same callsite.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/commands/cat.py:L18",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:3e0250895ad717c4b6bc061e8823e879b4d1b4f437cbc7c2e0d6d70e77c26b5d",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.write at commands/cat.py L17 runs TextIOWrapper.write (profile of the pattern), the file method. Paired predicted edge CatCommand.execute -> <**PyFile**>.write at the same callsite.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/commands/cat.py:L17",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:f5167f5ac15fa9119c4df10753a706ad3ce3420b09ee00dfeb7b068b8fc33045",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Player is imported from asciinema.player (play.py L2); self.player.play(...) at L18 is asciinema.player.Player.play. Paired predicted edge PlayCommand.execute -> asciinema.player.Player.play.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/commands/play.py:L2,L13,L18",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:cf1fdd82e0be4607bd594642683372a0754d9f4a33ab83838921c5d06fe3d413",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "recorder is the module asciinema.recorder (record.py L5), and recorder.record(...) at L71 is the module function; there is no Recorder class. Paired predicted edge RecordCommand.execute -> asciinema.recorder.record.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/commands/record.py:L5,L71",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:e6575192e884a13eecf7ffad4e89b6965c225801a2c8c52641beb5b6cefa85b4",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.readline at commands/record.py L94 runs TextIOWrapper.readline (profile of the pattern), the file method. Paired predicted edge RecordCommand.execute -> <**PyFile**>.readline at the same callsite.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/commands/record.py:L94",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6cf29ef3f53db7d4808345c8c4875747cd8dbbd21d8fe3e86f913912f400a797",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config = configparser.ConfigParser() (config.py L22), so self.config.get at L61 is ConfigParser.get (RawConfigParser.get; profile of the pattern), not dict.get. Paired predicted edge Config.__api_token -> configparser.ConfigParser.get.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L61",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:4cb5981d34f4c0c2e835fc0825f06b492631e01de6b725451363cf439edd3d5f",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config = configparser.ConfigParser() (config.py L22), so self.config.get at L67 is ConfigParser.get (RawConfigParser.get; profile of the pattern), not dict.get. Paired predicted edge Config.__user_token -> configparser.ConfigParser.get.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L67",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:90669df6273b1a7a0b1c804703677ec968e3d37c0324d898a7378e6a61a3fa25",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.get at L127 is ConfigParser.get (profile of the pattern). Paired predicted edge Config.notifications_command -> configparser.ConfigParser.get.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L127",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:b02d2d0ac85e198924ed8faec3636437f897237f7c52d37f65d3e02565013a33",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.getboolean at L123 is ConfigParser.getboolean (profile of the pattern). Paired predicted edge Config.notifications_enabled -> configparser.ConfigParser.getboolean.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L123",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:3f7dfc23637681947ea4c8a92f67c5c99456f8a5d90fcae158ed179a5c164926",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.getfloat at L114 is ConfigParser.getfloat (profile of the pattern). Paired predicted edge Config.play_idle_time_limit -> configparser.ConfigParser.getfloat.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L114",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:cab64ca219755b8a72355452995d4afb1444a6e7d3c7fef382138f297ff64324",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.getfloat at L119 is ConfigParser.getfloat (profile of the pattern). Paired predicted edge Config.play_speed -> configparser.ConfigParser.getfloat.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L119",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:1c13f90a2902f41fb1d345a17b7f701257f67a865c9dd957399ba28b5db3c8ec",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.get at L93 is ConfigParser.get (profile of the pattern). Paired predicted edge Config.record_command -> configparser.ConfigParser.get.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L93",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:9e61dc83c54c96cee30232836496efa129a08e7f30191ce2589c7f39556e59b9",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.get at L97 is ConfigParser.get (profile of the pattern). Paired predicted edge Config.record_env -> configparser.ConfigParser.get.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L97",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:179a760e39c53e779b1cfaa5a2f8dff5ba803a96133ab3cbe1d8c56b1dc99c08",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.getfloat at L101 is ConfigParser.getfloat (profile of the pattern). Paired predicted edge Config.record_idle_time_limit -> configparser.ConfigParser.getfloat.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L101",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6740feea18070460d751bfeadb03fd4c503545927c151702223ed6fa53c5609a",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.getboolean at L110 is ConfigParser.getboolean (profile of the pattern). Paired predicted edge Config.record_quiet -> configparser.ConfigParser.getboolean.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L110",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:0732189a1889308e7b2a5aea2ec748c8098a797c2c8d366463c56c62cadcca01",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.getboolean at L89 is ConfigParser.getboolean (profile of the pattern). Paired predicted edge Config.record_stdin -> configparser.ConfigParser.getboolean.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L89",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:5804f574439a16cb4dd2c8f20e0eb9afe57d804d1a3acae07a1e684a3d9bfaca",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.config is configparser.ConfigParser (config.py L22). The benchmark's configparser.Config does not exist; self.config.getboolean at L106 is ConfigParser.getboolean (profile of the pattern). Paired predicted edge Config.record_yes -> configparser.ConfigParser.getboolean.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/config.py:L22,L106",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:59c212c0b0768269301ec82ba2f99f61190291e24c2a2fcbe8ff3b327ac885bc",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.flush at player.py L75 runs TextIOWrapper.flush (profile of the pattern), the file method. Paired predicted edge Player._play -> <**PyFile**>.flush at the same callsite.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/player.py:L75",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6b5c796ec2183eb88a3e088d865097e7dc22280dbc2d80c0d4f65b25188c0b37",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.write at player.py L74 runs TextIOWrapper.write (profile of the pattern), the file method. Paired predicted edge Player._play -> <**PyFile**>.write at the same callsite.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/player.py:L74",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:320302b50909668cceda78f3a0d3d22ebe108b0b1c7bc53aa5f30f3c1b25a82f",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Paired semantic edge: Archway's semantic_call_edge_evidence has the same caller -> <builtin>.iter (iter(self.queue.get, None)) at projects/asciinema/asciinema/recorder.py L75; the adapter drops it via projection omit_synthetic_target, so the call is established by analysis and lost only in projection.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "projection:omit_synthetic_target",
+        "source:projects/asciinema/asciinema/recorder.py:L75",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:da25b5f786257798067b189b1a0cf44520d1774de99582e239af5b88a13e1c75",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "record(...) at recorder.py L49 calls the parameter record, whose default is pty.record (L12), not the enclosing recorder.record; no recursion happens. Correct name asciinema.pty.record; paired predicted edge recorder.record -> asciinema.pty.record.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/recorder.py:L10-12,L49",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:eefff367dc2b6785e406a958cf4efe24321aa55f46108b6d294a9880a675766f",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "s.decode('utf-8') at L21 runs only under isinstance(s, bytes), so it is bytes.decode (profile of the pattern). Correct name <builtin>.bytes.decode; paired predicted edge MultipartFormdataEncoder.u -> <builtin>.bytes.decode.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/urllib_http_adapter.py:L20-21",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:38d138303294954cc024e0d325fb8b0bd565e7a9b0b9d60ce61a162f37f726cb",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "response.read() returns bytes, so .decode('utf-8') at L79 is bytes.decode. Correct name <builtin>.bytes.decode; paired predicted edge URLLibHttpAdapter.post -> <builtin>.bytes.decode.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/urllib_http_adapter.py:L79",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:99e3915ce4a19c476bdb724e004e71545a04144cbd064303ae267d853726bc6a",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "image_emotion_gender_demo uses a bare except: (L57); it never calls or references Exception.",
+      "evidence_refs": [
+        "projects/face_classification/src/image_emotion_gender_demo.py:L57",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:56791329a38347d039683df35143ab5bfa55a30f29b8c618977f5b48dc96c413",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "np.expand_dims(...) at L65-66; the benchmark misspells it numpy.expanddims. Paired predicted edge image_gradcam_demo -> numpy.expand_dims.",
+      "evidence_refs": [
+        "projects/face_classification/src/image_gradcam_demo.py:L65-66",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:148e95056bb91b5bd32a7d07c83dfc27fc8453f18a5ab0d89d820c60f80ca66e",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "load_image is imported from utils.inference (L18), not utils.grad_cam. Paired predicted edge image_gradcam_demo -> utils.inference.load_image at L44-45.",
+      "evidence_refs": [
+        "projects/face_classification/src/image_gradcam_demo.py:L18,L44-45",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:edca980a07b7dcf3cacc58f5fd19ade225301ff4838390be338e628413d4dcfc",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "model = simple_CNN(...) returns a Sequential, and model.summary() at L358 is the summary method that Sequential inherits from Model (judged from source; keras is not installed). Paired predicted edge models.cnn -> keras.models.Sequential.summary, the same method spelled through the subclass.",
+      "evidence_refs": [
+        "projects/face_classification/src/models/cnn.py:L16,L357-358",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:77d0b91e7c4b61e7ff0d879932a25a3ad1c86ba2271d2b6689070a2dc9f35fbb",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "l2 is called only in tiny_XCEPTION (L112) and mini_XCEPTION (L208). big_XCEPTION (L303 onward) contains no l2 call.",
+      "evidence_refs": [
+        "projects/face_classification/src/models/cnn.py:L111-112,L207-208,L303",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6564b5ab680fa1bcd645d6e1c3666eaf1c6a147036c8f41d168279f33722a04b",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "It makes no int call; the expected edges describe a different implementation of the function.",
+      "evidence_refs": [
+        "projects/face_classification/src/utils/preprocessor.py:L18-19",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:f82db6023ee11fe43e255c9fad4ee91a457ace339696625686f1cce1f6151f26",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "It makes no range call; the expected edges describe a different implementation of the function.",
+      "evidence_refs": [
+        "projects/face_classification/src/utils/preprocessor.py:L18-19",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:99faa1d7b286dcf0474b2b4d08939508aa76374028e35add56c1db8fbdee5e40",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "It makes no ceil call; the expected edges describe a different implementation of the function.",
+      "evidence_refs": [
+        "projects/face_classification/src/utils/preprocessor.py:L18-19",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:7d6f11d9d6d0dd7dc0d5a300ba595d0d67726e825c3c339b277acb4b12b77b76",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "It makes no empty call; the expected edges describe a different implementation of the function.",
+      "evidence_refs": [
+        "projects/face_classification/src/utils/preprocessor.py:L18-19",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:f84e737afbcfe54b593ed4929a65ec449a5d94887f34d4e507c758ee054263fe",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "It makes no sqrt call; the expected edges describe a different implementation of the function.",
+      "evidence_refs": [
+        "projects/face_classification/src/utils/preprocessor.py:L18-19",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:adef6bb0697b259e8e267aeaf9085cf879a7c165e1bf0ee992be717059d855f9",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "It makes no squeeze call; the expected edges describe a different implementation of the function.",
+      "evidence_refs": [
+        "projects/face_classification/src/utils/preprocessor.py:L18-19",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:619ef3a063b9a8fd6abdc29dbc5db486ca07003c9b04c82e7c33b3daa9279c22",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "np.ones_like(image_array) at L124; numpy.random.ones_like does not exist. Paired predicted edge ImageGenerator.contrast -> numpy.ones_like.",
+      "evidence_refs": [
+        "projects/face_classification/src/utils/data_augmentation.py:L124",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:3a15cb3c3457c6fb2440b892a3e73ce43d1ff5d0b172436dd30ac398102112ef",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "model.get_layer(...) at L52; keras.model is a misspelling of keras.models. Paired predicted edge compile_saliency_function -> keras.models.Model.get_layer.",
+      "evidence_refs": [
+        "projects/face_classification/src/utils/grad_cam.py:L52",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:4bde58b899ea2a9f6523da523e0bcfaa1c5162f6ec4669b65fab9924a598a832",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.write at subbrute/subbrute.py L525-527 runs TextIOWrapper.write (profile of the pattern). Paired predicted edge subbrute.subbrute.error -> <**PyFile**>.write at the same callsite.",
+      "evidence_refs": [
+        "projects/Sublist3r/subbrute/subbrute.py:L525-527",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6ccd204554ae1077f6f5164c677a8acdf6f7a724894fd8daf2e5e05a2088f200",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.flush at subbrute/subbrute.py L335 runs TextIOWrapper.flush (profile of the pattern). Paired predicted edge subbrute.subbrute.lookup.run -> <**PyFile**>.flush at the same callsite.",
+      "evidence_refs": [
+        "projects/Sublist3r/subbrute/subbrute.py:L335",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:817ba58fb8bc0ebbed9854988c563c08991039807847a332ff8e8fb3ade7f9ea",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "`raise(e)` at L484 is a raise statement with a parenthesized operand, not a call; there is no <builtin>.raise callable.",
+      "evidence_refs": [
+        "projects/Sublist3r/subbrute/subbrute.py:L484",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:62b4b851bed376c560d10d7b8284972e95f801c80eadf82a7f8296be3022206b",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.write at subbrute/subbrute.py L428 runs TextIOWrapper.write (profile of the pattern). Paired predicted edge subbrute.subbrute.run -> <**PyFile**>.write at the same callsite.",
+      "evidence_refs": [
+        "projects/Sublist3r/subbrute/subbrute.py:L428",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:2f65b3330c729eab88c3d8fc9c3a7863fd35ad50163f626d89c735b3c8ef1f79",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.write at subbrute/subbrute.py L519-521 runs TextIOWrapper.write (profile of the pattern). Paired predicted edge subbrute.subbrute.trace -> <**PyFile**>.write at the same callsite.",
+      "evidence_refs": [
+        "projects/Sublist3r/subbrute/subbrute.py:L519-521",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:92569f4c41dd112cc813dd2ccfc356e064c1ef93847a5ac3f02f58e1cc67ffff",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.std*.write at subbrute/subbrute.py L122 runs TextIOWrapper.write (profile of the pattern). Paired predicted edge subbrute.subbrute.verify_nameservers.run -> <**PyFile**>.write at the same callsite.",
+      "evidence_refs": [
+        "projects/Sublist3r/subbrute/subbrute.py:L122",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:66b44c36714557ac30c999cdfdb84cc8cf0ad26ec1b26e0255bf92a5449c7e56",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The receiver is a re.compile(...) result in the same function, so .findall at L390 is re.Pattern.findall, not the module function re.findall (profile of the pattern). Paired predicted edge sublist3r.AskEnum.extract_domains -> re.Pattern.findall.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L390",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:a306de61e4bf1de793c9bdfb4b84c9df05f617108182cfb4f6848cfeb46f08f2",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The receiver is a re.compile(...) result in the same function, so .findall at L793 is re.Pattern.findall, not the module function re.findall (profile of the pattern). Paired predicted edge sublist3r.CrtSearch.extract_domains -> re.Pattern.findall.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L793",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:d8e9a17939f771058e0114f0545d52cff1473887271ab50749251eef6c625015",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The receiver is a re.compile(...) result in the same function, so .findall at L660,663 is re.Pattern.findall, not the module function re.findall (profile of the pattern). Paired predicted edge sublist3r.DNSdumpster.extract_domains -> re.Pattern.findall.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L660,663",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:ae035cb1504d659480834f1c9909eeab755852f70f9284c1f6ea1b28752f8496",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The receiver is a re.compile(...) result in the same function, so .findall at L640 is re.Pattern.findall, not the module function re.findall (profile of the pattern). Paired predicted edge sublist3r.DNSdumpster.get_csrftoken -> re.Pattern.findall.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L640",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:c2a169f9d30081392d6907a3730959f5183c4cc5cd9c040994118274045173b3",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The receiver is a re.compile(...) result in the same function, so .findall at L289 is re.Pattern.findall, not the module function re.findall (profile of the pattern). Paired predicted edge sublist3r.GoogleEnum.extract_domains -> re.Pattern.findall.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L289",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:0647d57003c93e4d38cc154e482eeacc4b2f9110e95535cc7003f513449f6258",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "hashlib.sha1(...).hexdigest() at L554 runs HASH.hexdigest on the sha1 object (profile of the pattern), not a str method. Paired predicted edge NetcraftEnum.create_cookies -> hashlib.sha1.hexdigest, Archway's spelling of the hexdigest method on sha1's result.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L554",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:bc9a03c595affd38e0a4ffc63b19636130f7a9ef3a21d9d487f37f4659debefc",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The receiver is a re.compile(...) result in the same function, so .findall at L581 is re.Pattern.findall, not the module function re.findall (profile of the pattern). Paired predicted edge sublist3r.NetcraftEnum.extract_domains -> re.Pattern.findall.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L581",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:21d696610dc4832fcd2637eda16be78e4b94db684257829a44cca2d17740a169",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The receiver is a re.compile(...) result in the same function, so .findall at L544 is re.Pattern.findall, not the module function re.findall (profile of the pattern). Paired predicted edge sublist3r.NetcraftEnum.get_next -> re.Pattern.findall.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L544",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:008c0298e838e12d95e95a5adae24835a61bbe070df78e530ca8259f1c28aaa5",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The receiver is a re.compile(...) result in the same function, so .findall at L340-341 is re.Pattern.findall, not the module function re.findall (profile of the pattern). Paired predicted edge sublist3r.YahooEnum.extract_domains -> re.Pattern.findall.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L340-341",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:0ea4c522037e6ff404e7f9cdd8f8e1b99a69aaf40f28e3b77a8deb2bfadc1992",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "search_list = set() at L881, so search_list.add at L946 is set.add. Paired predicted edge sublist3r.main -> <**PySet**>.add.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L881,L946",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:7b4d166c58493cd53fc143d86b4f5f0ee2c1d323125cb331efb6f2763b9b3e3c",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "domain_check is a re.compile result; .match at L894 is re.Pattern.match. Paired predicted edge sublist3r.main -> re.Pattern.match.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L894",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:53e0d6f2dd5c02e6eb125b8feff7457d2c8ef7e2eead43be93e33b6e71fc24f3",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "parser is an argparse.ArgumentParser; parser.add_argument at L98-104 is ArgumentParser.add_argument. Paired predicted edge parse_args -> argparse.ArgumentParser.add_argument.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L98-104",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:8cddf50f0cafa38fad9f75303d5a52bfb57ead64032dbf66acbf1ee0f3d9fb23",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "parser.parse_args() at L106 is ArgumentParser.parse_args. Paired predicted edge parse_args -> argparse.ArgumentParser.parse_args.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L106",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:121b0d7d90af443f0fbfe97392459268def5c8e2b7400eea55384a275c7f0db2",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "t is a threading.Thread; t.start() at L876 is Thread.start. Paired predicted edge portscan.run -> threading.Thread.start.",
+      "evidence_refs": [
+        "projects/Sublist3r/sublist3r.py:L876",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:68c2285bb68c08d9f020e87a2b5bfc6bce17fd89468c63635a62f27f0e9b77a1",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "stdout = asciicast.stdout_events() at player.py L22; asciicast is a v1 or v2 Asciicast object, and asciinema.asciicast.v1.stdout_events is the benchmark's spelling of its method. Paired predicted edge Player._play -> asciinema.asciicast.v1.Asciicast.stdout_events.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/player.py:L19-22",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:8172b738ff2524581a2b118c943ecc1845a0d38556080db0b1d2826dc1a74faf",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "stdout = asciicast.stdout_events() at player.py L22. Paired predicted edge Player._play -> asciinema.asciicast.v2.Asciicast.stdout_events.",
+      "evidence_refs": [
+        "projects/asciinema/asciinema/player.py:L19-22",
+        "result.json:predicted_edges",
+        "review:pycg-macro-redo-fn:2026-11-27"
+      ]
+    }
+  ],
+  "groups": []
+}

@@ -1,0 +1,129 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:74bbbdf17ef8e45cc0026c9aac34b7da050e38447b00d385ce832431b4448a16",
+      "edge": [
+        "autojump_argparse.ArgumentParser._print_message",
+        "<**PyFile**>.write"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "file.write(message) writes to a text stream: the file argument, or sys.stderr by default, which print_help passes as sys.stdout. The benchmark's sys.stdout.write from _print_message names the same call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/autojump/bin/autojump_argparse.py:2437",
+        "paired_expected:sys.stdout.write"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:5725a9e5383b13a4c66d4e504f789d569fa42a3cbfc16df71c903d4c6eab5ce9",
+      "edge": [
+        "autojump_argparse._AttributeHolder.__repr__",
+        "<builtin>.repr"
+      ],
+      "kind": "false_negative",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "repr(arg) runs only for items of self._get_args(). _AttributeHolder._get_args always returns [] and no class in the file overrides it (the only definition is line 156), so the call never executes. The %r formatting nearby is not a call to builtin repr.",
+      "evidence_refs": [
+        "corpus:projects/autojump/bin/autojump_argparse.py:147",
+        "corpus:projects/autojump/bin/autojump_argparse.py:156"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:79944ff3fe620681d07888c6be797b4b36dc9b284b90c5c5e65206f32a96dbb9",
+      "edge": [
+        "autojump_utils.unico",
+        "<builtin>.isinstance"
+      ],
+      "kind": "false_negative",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Unreachable under Python 3. is_python2() returns sys.version_info[0] == 2, so 'is_python2() and not isinstance(...)' short-circuits and isinstance is never called.",
+      "evidence_refs": [
+        "corpus:projects/autojump/bin/autojump_utils.py:96",
+        "corpus:projects/autojump/bin/autojump_utils.py:209"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "autojump:assert:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:2ea8a4a3817d62473a003012a35efba43cf4be067d1a96d556c5994a624096d1",
+        "pycg-residual:v1:b78e632cdc33a0f5f5d2aa7edd2a674891b4c43002f4ee0f3492bd4dd105692a",
+        "pycg-residual:v1:e445fea3ab028fde01bae4cae4926a2d5b274a55630effe4e2001614258df6ab",
+        "pycg-residual:v1:d3d50c3c8265e43347e7d5d593a1e600b571274c0589e57e4ca6b02d4722ab44"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:assert-AssertionError. Each callsite is an assert statement; a failing assert constructs and raises AssertionError, a real runtime event PyCG does not record as a call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/autojump/bin/autojump_argparse.py:1960",
+        "corpus:projects/autojump/bin/autojump_data.py:103"
+      ]
+    },
+    {
+      "group_id": "autojump:object-init:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:433d11b30bac23ed9c692386692ec415a3d1fa7ac05c6db3752b5962789159dc"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:base-class-init-into-builtins. super(_ActionsContainer, self).__init__() resolves to object.__init__ for ArgumentParser (MRO ArgumentParser, _AttributeHolder, _ActionsContainer, object) and for argument groups.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/autojump/bin/autojump_argparse.py:1258"
+      ]
+    },
+    {
+      "group_id": "autojump:registry-real-targets:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:d07b431e59c96d18b0a51fdc178f53d5e73daf2773c9444c9f45d55094372036",
+        "pycg-residual:v1:bbacff4b305ca153c3c60acb9f0f009eab62df77c05f7a66b39aac86c4548854"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Observed in the profile: _get_value calls the identity type function registered for type=None, and add_subparsers instantiates _SubParsersAction (the 'parsers' action). PyCG omits both.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/autojump/bin/autojump_argparse.py:2337",
+        "corpus:projects/autojump/bin/autojump_argparse.py:1753",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "group_id": "autojump:map-callbacks:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:b423505ff5692840a68a76be28f79286de6fed619a01034db6b7cd91b0db2a3a",
+        "pycg-residual:v1:1863ad885ecec21ca333de8f4cf78c33ca19f1e01c6f7ffb8186d3c4d08b1a65"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:callback-invoked-by-builtin. On Python 3, imap is map; consuming dict(imap(tupleize, ifilter(correct_length, imap(parse, f)))) runs the parse and tupleize lambdas with load's frame as their caller frame. The call is real but made through builtin map, which PyCG does not record.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/autojump/bin/autojump_data.py:20",
+        "corpus:projects/autojump/bin/autojump_data.py:82"
+      ]
+    },
+    {
+      "group_id": "autojump:sequence-matcher-ratio:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:451e5908d47818b9e83d7452efcb36f5ab5adfeb50bf798f5f14aae951613bdb",
+        "pycg-residual:v1:4065429dbaaa45468b7dbaa108dfe280c64a4e54eba1acd790636fb5832fa8dd"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Each match_percent lambda calls SequenceMatcher(...).ratio(). The call is real; PyCG records only the constructor.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/autojump/bin/autojump_match.py:118",
+        "corpus:projects/autojump/bin/autojump_match.py:124"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,81 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "micro:builtins-map-reversed-arguments",
+      "residual_ids": [
+        "pycg-residual:v1:a2999d6c77c4bd652f7cedf24877a60476b5dbb91831b70e980c57672b8e0a1d",
+        "pycg-residual:v1:5c3c453ed16c4d7207b814dfe04526e836bb4624d173e2e462d927458ffda12e",
+        "pycg-residual:v1:d0530a4153cdf74ad4cb55325319062e29441fc24f4a0adf1515c48a53824fed",
+        "pycg-residual:v1:fdc993d1ecd488a7938a60f4fc46ffb9b1fdbb338024626c15a3d2ba858ac16f"
+      ],
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "main.py line 4 calls map([1, 2, 3], func) with the arguments reversed; Python 3 raises TypeError ('function' object is not iterable) there, so none of the expected calls happens. With the order corrected the engine produces them.",
+      "evidence_refs": [
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "group_id": "micro:nested-decorators-rebound",
+      "residual_ids": [
+        "pycg-residual:v1:819c0622104406b2b7c567ada37fe143888cffd0aee48a3f31ff69c26fb34d10"
+      ],
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "func is rebound to dec1's inner function; main never calls the original. The engine's edges equal the dynamic call graph.",
+      "evidence_refs": [
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "group_id": "micro:eval-caller",
+      "residual_ids": [
+        "pycg-residual:v1:296555435c436cf020cd7306428bbff475b1f178038e5fa66c4ff8dc34903a54"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "main calls eval; the ground truth attributes the call to func instead.",
+      "evidence_refs": [
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "group_id": "micro:eval-wrong-caller",
+      "residual_ids": [
+        "pycg-residual:v1:35d6a1c60d5950d0b8e8aa8c85c28d8142a8291dc08af2efa4854309ab4929b1"
+      ],
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "func does not call eval; main does.",
+      "evidence_refs": [
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "group_id": "micro:chained-call",
+      "residual_ids": [
+        "pycg-residual:v1:b302eb705d32652cdc4081c77d25d935c8c4c4c35ea051680c8473b2d7f39785"
+      ],
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Dynamically func2 calls func3 only, and the engine agrees.",
+      "evidence_refs": [
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    },
+    {
+      "group_id": "micro:self-assignment",
+      "residual_ids": [
+        "pycg-residual:v1:dae385bf5187eb36a6b66504bf1adf541e2175b76899002b28e3841a9633f0ee"
+      ],
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.func on an A instance is A.func; B.func is never called.",
+      "evidence_refs": [
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    }
+  ]
+}
