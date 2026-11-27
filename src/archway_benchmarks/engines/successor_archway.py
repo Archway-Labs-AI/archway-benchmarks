@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from collections import Counter
 from pathlib import Path
 import re
@@ -32,6 +32,12 @@ class SuccessorArchwayResult:
     targeted_runs: list[Any] = field(default_factory=list)
     gaps: list[SuccessorGap] = field(default_factory=list)
     error: str | None = None
+    entry_module: str = "main"
+    root_policy: str = ""
+    callable_bodies: Any | None = None
+    projection: dict[Location, Any] = field(default_factory=dict)
+    demand_waves: int = 0
+    demand_exhausted: bool = False
 
 
 @dataclass(frozen=True)
@@ -76,8 +82,20 @@ class SuccessorGapAudit:
         }
 
 
+ROOT_POLICY_ENTRY = "entry_module"
+ROOT_POLICY_CALLABLE_BODIES = "entry_module+callable_bodies"
+ROOT_POLICIES = (ROOT_POLICY_CALLABLE_BODIES, ROOT_POLICY_ENTRY)
+
+
 class SuccessorArchwayAnalysisEngine:
-    """Translate once and run one coordinated type-priority session."""
+    """Translate once and run one coordinated type-priority session.
+
+    ``root_policy`` says which roots the session evaluates before the
+    adapter's observation demand: the entry module only, or (the default,
+    as the PyCG path does) the entry module and every callable body, so a
+    function the entry never calls is still analysed, in its uninvoked-body
+    context, without anyone asking for its location.
+    """
 
     name = "archway-successor-analysis"
 
@@ -85,8 +103,12 @@ class SuccessorArchwayAnalysisEngine:
         self,
         *,
         record_events: bool = True,
+        root_policy: str = ROOT_POLICY_CALLABLE_BODIES,
     ) -> None:
+        if root_policy not in ROOT_POLICIES:
+            raise ValueError(f"unknown root policy: {root_policy!r}")
         self.record_events = record_events
+        self.root_policy = root_policy
 
     def analyze(self, translation: Any) -> SuccessorArchwayResult:
         if not isinstance(translation, ArchwayTranslation):
@@ -138,11 +160,18 @@ class SuccessorArchwayAnalysisEngine:
                     (), entry_modules=("main",)
                 )
             )
+            callable_bodies = (
+                session.run_analysis_roots(include_callable_bodies=True)
+                if self.root_policy == ROOT_POLICY_CALLABLE_BODIES
+                else None
+            )
             return SuccessorArchwayResult(
                 translation.source,
                 translation.path,
                 session=session,
                 forward=forward_workload.seed_run,
+                root_policy=self.root_policy,
+                callable_bodies=callable_bodies,
             )
         except Exception as exc:
             return SuccessorArchwayResult(
@@ -153,7 +182,16 @@ class SuccessorArchwayAnalysisEngine:
 
 
 class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
-    """Read forward facts; classify unsupported observations explicitly."""
+    """Project the engine's own type observations onto TypeEvalPy locations.
+
+    A prediction comes only from what the engine reports. The adapter first
+    demands every open observation the session catalogues (independent of
+    the benchmark), then projects each observation that denotes a
+    TypeEvalPy-annotatable entity onto a ``Location`` with the convention in
+    :func:`project_typeevalpy_locations`. The snippet's annotations are read
+    only afterwards, to classify gaps for reporting; they never choose a
+    location, a spelling or a demand.
+    """
 
     def to_annotations(
         self, result: Any, snippet: Snippet
@@ -164,269 +202,513 @@ class SuccessorTypeEvalPyAdapter(AnalysisResultAdapter):
             )
         if result.error or result.session is None:
             return []
-        predictions: list[Annotation] = []
-        observations = result.session.type_observations()
-        mapped: list[tuple[Annotation, tuple[Any, ...]]] = []
-        pending_unmapped: list[Annotation] = []
-        for requested in snippet.annotations:
-            candidates = _map_observations(observations, requested.location)
-            if not candidates:
-                candidates = _map_container_path(
-                    result.session, requested.location
-                )
-            if not candidates:
-                pending_unmapped.append(requested)
-                continue
-            mapped.append((requested, candidates))
-
-        demanded_addresses = set()
-        missing_addresses = _unresolved_query_addresses(
-            result.session, mapped
+        demand_open_observations(result)
+        result.projection = project_typeevalpy_locations(
+            result.session, snippet.file_path, result.entry_module
         )
-        while new_addresses := tuple(
-            address for address in missing_addresses
-            if address not in demanded_addresses
-        ):
-            demanded_addresses.update(new_addresses)
-            workload = result.session.run_workload(
-                result.session.plan_signature_workload(tuple(sorted(
-                    new_addresses, key=lambda address: address.id
-                )))
-            )
-            result.targeted_runs.extend(workload.targeted_runs)
-            # Targeted refinement may discover a context-specific instance
-            # of an observation template (most notably a callable-summary
-            # application) while the fallback address that triggered the
-            # demand correctly remains open.  Re-read the session catalog so
-            # the query consumes the knowledge produced by that demand wave
-            # instead of freezing its pre-refinement address set.
-            refined_observations = result.session.type_observations()
-            mapped = [
-                (
-                    requested,
-                    _map_observations(
-                        refined_observations, requested.location
-                    )
-                    or _map_container_path(
-                        result.session, requested.location
-                    )
-                    or candidates,
-                )
-                for requested, candidates in mapped
-            ]
-            still_unmapped = []
-            for requested in pending_unmapped:
-                candidates = _map_observations(
-                    refined_observations, requested.location
-                ) or _map_container_path(
-                    result.session, requested.location
-                )
-                if candidates:
-                    mapped.append((requested, candidates))
-                else:
-                    still_unmapped.append(requested)
-            pending_unmapped = still_unmapped
-            missing_addresses = _unresolved_query_addresses(
-                result.session, mapped
-            )
-
-        for requested in pending_unmapped:
-            result.gaps.append(SuccessorGap(
-                requested.location,
-                "provenance_unmapped",
-                snippet.suite_path,
-                requested.types,
-                detail="no diagram type observation after demand convergence",
-            ))
-
-        for requested, candidates in mapped:
-            resolved = [
-                result.session.store.resolved(item.address)
-                for item in candidates
-            ]
-            values = frozenset(
-                _typeeval_name(value)
-                for fact in resolved if fact is not None
-                for value in fact.value
-            )
-            if values:
-                predictions.append(Annotation(requested.location, values))
-                if values != requested.types:
-                    classification = (
-                        "mapped_imprecise"
-                        if requested.types < values
-                        else "benchmark_disagreement"
-                    )
-                    result.gaps.append(SuccessorGap(
-                        requested.location,
-                        classification,
-                        snippet.suite_path,
-                        requested.types,
-                        tuple(item.address.id for item in candidates),
-                        f"resolved successor types: {sorted(values)!r}",
-                    ))
-                continue
-            result.gaps.append(SuccessorGap(
-                requested.location,
-                "mapped_open",
-                snippet.suite_path,
-                requested.types,
-                tuple(item.address.id for item in candidates),
-                "forward session emitted no usable type contribution",
-            ))
+        predictions = [
+            Annotation(location, item.types)
+            for location, item in result.projection.items()
+            if item.types
+        ]
+        # Reporting only: predictions are fixed above.
+        result.gaps.extend(classify_gaps(snippet, result.projection))
         return predictions
 
 
-def _unresolved_query_addresses(session, mapped):
-    """Return new fact roots only for queries with no usable candidate."""
+@dataclass(frozen=True)
+class ProjectedLocation:
+    """The engine's answer at one TypeEvalPy location.
 
-    unresolved = set()
-    for _requested, candidates in mapped:
-        facts = tuple(
-            session.store.resolved(item.address) for item in candidates
+    ``types`` joins the resolved type sets of every observation that projects
+    here (``address_ids``); ``open_address_ids`` are contributing
+    observations whose value is not used: resolved to nothing, or an
+    uninvoked-body context superseded by a reached one. A location with no
+    used value is kept for diagnostics but is not a prediction.
+    """
+
+    location: Location
+    types: frozenset[str]
+    address_ids: tuple[str, ...]
+    open_address_ids: tuple[str, ...]
+
+
+_MAX_DEMAND_WAVES = 16
+
+
+def demand_open_observations(result: SuccessorArchwayResult) -> None:
+    """Demand every unresolved catalogued observation until none is new.
+
+    The address set comes from ``session.type_observations()`` alone. Each
+    wave can refine callable contexts and so catalogue new observations; the
+    loop re-reads the catalogue and stops when a wave adds no new open
+    address, or after ``_MAX_DEMAND_WAVES`` waves (recorded on the result).
+    """
+
+    session = result.session
+    demanded: set[Any] = set()
+    for _wave in range(_MAX_DEMAND_WAVES):
+        open_addresses = tuple(sorted(
+            {
+                item.address
+                for item in session.type_observations()
+                if item.address not in demanded
+                and not _resolved_types(session, item.address)
+            },
+            key=lambda address: address.id,
+        ))
+        if not open_addresses:
+            return
+        demanded.update(open_addresses)
+        workload = session.run_workload(
+            session.plan_signature_workload(open_addresses)
         )
-        if any(fact is not None and fact.value for fact in facts):
-            continue
-        unresolved.update(
-            item.address
-            for item, fact in zip(candidates, facts, strict=True)
-            if fact is None or not fact.value
-        )
-    return tuple(sorted(unresolved, key=lambda address: address.id))
+        result.targeted_runs.extend(workload.targeted_runs)
+        result.demand_waves += 1
+    result.demand_exhausted = True
 
 
-def _map_observations(observations, location: Location):
-    exact = tuple(
-        item for item in observations
-        if _observation_name_matches(item, location.name)
-        and _observation_kind_matches(item, location)
-        and _observation_scope_matches(item, location)
-        and item.position is not None
-        and item.position.row == location.line
-        and (
-            location.col is None
-            or item.position.col + 1 == location.col
-        )
+def project_typeevalpy_locations(
+    session: Any, file_path: str, entry_module: str
+) -> dict[Location, ProjectedLocation]:
+    """Project engine observations onto TypeEvalPy locations.
+
+    Convention (engine observation -> TypeEvalPy record), reading only the
+    observation fields ``kind``, ``name``, ``function``, ``position``,
+    ``definition_position``, ``boundary_role``, ``address`` and ``module``:
+
+    * Only observations of the snippet's own module (``entry_module``) with a
+      source position are projected; ``line`` is ``position.row`` and
+      ``col_offset`` is ``position.col + 1`` (TypeEvalPy columns are
+      1-indexed, the engine's are AST 0-indexed).
+    * **Variable** (``variable`` record, ``function`` = enclosing scope or
+      absent at module level): a binding result (``BindingSubject``: an
+      assignment, augmented-assignment, walrus, loop or comprehension
+      target), an instance attribute (``InstanceAttributeSubject``, spelled
+      by the engine as ``<receiver>.<attr>``, e.g. ``self.x``, scoped to the
+      method), a class attribute (``ClassAttributeSubject``, spelled
+      ``<Class>.<attr>``, no function), and a concrete container slot of
+      any of those (``ContainerSlotSubject``, spelled ``name[key]`` with the
+      engine's ``slot_display``; nested slots are followed through the
+      engine's slot-referent facts, see :func:`_nested_slot_observations`).
+      Not projected: the binding a ``def``, ``class`` or ``import``
+      statement creates (TypeEvalPy annotates assignments and the
+      callable's return, not definition or import names), summary slots
+      ``[*]`` (no concrete key), anonymous receivers (``<receiver>``), and
+      every ``WireSubject`` observation (use-site reads and internal
+      subexpressions: loads, calls, literals, ``()``).
+      Statement bindings are recognised from the engine's observations:
+      a ``def`` binding's scope-qualified name is a callable the engine
+      reports (by return or parameter observations) and its row is that
+      callable's definition row; a ``class`` binding's qualified name owns
+      class attributes and its row is not after the first of them, or the
+      same row carries the class statement's ``builtins.type`` output wire
+      of the same name left of the target; an ``import`` binding's row
+      carries a ``builtins.module`` output wire left of the target (or, for
+      ``import m`` / ``import m.sub``, at the target, named ``m`` or
+      ``m.<...>``).
+    * **Parameter** (``parameter`` + ``function`` = the engine's qualified
+      callable name, ``lambda`` for lambdas): every ``parameter``
+      observation except a method receiver. A method is a callable whose
+      qualified name is also a class attribute; its receiver is its first
+      parameter by position, unless the engine types the class attribute
+      ``builtins.staticmethod``.
+    * **Return** (``function`` = the engine's qualified callable name): a
+      ``return`` observation. ``line`` is the definition row; the column is
+      the callable's name column, read from the ``def`` binding observation
+      on that row (fallback: ``definition_position.col`` + 4, the width of
+      ``def``). Not projected: lambda returns (TypeEvalPy keys returns by
+      function name and a lambda has none) and ``__init__`` returns
+      (TypeEvalPy does not annotate constructors' returns).
+
+    Several observations can project to one location (one entity analysed
+    in several contexts, or seen as both a class-context and a module
+    attribute); their resolved type sets are joined, which is the engine's
+    context-insensitive answer at that location. A context the engine minted
+    for a body the entry never invoked contributes only when no reached
+    context has a value there: the uninvoked analysis is the engine's
+    answer for code it did not reach, not a widening of code it did.
+    """
+
+    from sd_core.analysis.diagram_analysis.knowledge import (
+        BindingSubject,
+        BoundaryRole,
+        ClassAttributeSubject,
+        ContainerSlotSubject,
+        InstanceAttributeSubject,
+        WireSubject,
     )
-    if exact:
-        return exact
-    return tuple(
-        item for item in observations
-        if _observation_name_matches(item, location.name)
-        and _observation_kind_matches(item, location)
-        and _observation_scope_matches(item, location)
-        and item.position is not None
-        and item.position.row == location.line
-    )
 
-
-def _observation_kind_matches(item, location: Location) -> bool:
-    if item.kind == location.kind:
-        return True
-    # TypeEvalPy autogen encodes lambda parameters in its ``variable`` field,
-    # while the ordinary corpus uses ``parameter`` for the same entity. Keep
-    # the engine's semantic parameter kind and reconcile only this harness
-    # schema difference at the scoring boundary.
-    return (
-        location.function == "lambda"
-        and location.kind == "variable"
-        and item.kind == "parameter"
-    ) or (
-        location.function is not None
-        and location.kind == "parameter"
-        and item.kind == "variable"
-    )
-
-
-def _observation_scope_matches(
-    item, location: Location, *, requested_name: str | None = None
-) -> bool:
-    observed = item.function
-    requested = location.function
-    name = location.name if requested_name is None else requested_name
-    if observed == requested:
-        return True
-    if (
-        observed
-        and requested
-        and observed.endswith(f".{requested}")
-    ):
-        return True
-    if not observed or requested is not None:
-        return False
-    owner = observed.rsplit(".", 1)[0] if "." in observed else ""
-    return bool(
-        owner
-        and item.name.startswith("self.")
-        and name
-        == f"{owner}.{item.name.removeprefix('self.')}"
-    )
-
-
-def _observation_name_matches(item, requested: str) -> bool:
-    if item.name == requested:
-        return True
-    if not isinstance(item.name, str):
-        return False
-    if item.kind == "return" and item.name.endswith(f".{requested}"):
-        return True
-    if not item.function or "." not in item.function:
-        return False
-    owner = item.function.rsplit(".", 1)[0]
-    if not item.name.startswith("self."):
-        return False
-    return requested == f"{owner}.{item.name.removeprefix('self.')}"
-
-
-def _map_container_path(session, location: Location):
-    """Resolve a concrete nested path through existing slot knowledge."""
-
-    name = location.name
-    if not name.endswith("]") or "[" not in name:
-        return ()
-    base = name.split("[", 1)[0]
-    slots = tuple(
-        item[1:-1]
-        if len(item) >= 2 and item[0] == item[-1] and item[0] in "\"'"
-        else item
-        for item in re.findall(r"\[([^]]+)\]", name)
-    )
-    if not slots:
-        return ()
-    roots = _map_observations(
-        session.type_observations(), replace(location, name=base)
-    )
-    occurrence_paths = (
-        session.occurrence_path_observations(roots, slots)
-        if roots and hasattr(session, "occurrence_path_observations")
-        else ()
-    )
-    candidates = occurrence_paths or session.container_path_observations(
-        base, slots
-    )
-    return tuple(
-        item for item in candidates
-        if _observation_kind_matches(item, location)
-        and _observation_scope_matches(item, location)
-        and item.position is not None
-        and item.position.row == location.line
-    )
-    roots = tuple(
+    observations = tuple(
         item for item in session.type_observations()
-        if _observation_name_matches(item, base)
-        and item.kind == location.kind
-        and _observation_scope_matches(
-            item, location, requested_name=base
-        )
+        if item.module is not None
+        and item.module.dotted == entry_module
         and item.position is not None
-        and item.position.row == location.line
     )
-    native = tuple(
-        item for item in session.occurrence_path_observations(roots, slots)
-        if item.position is not None
-        and item.position.row == location.line
+
+    callable_rows: dict[str, set[int]] = {}
+    for item in observations:
+        if item.definition_position is None:
+            continue
+        if item.kind == "return":
+            callable_rows.setdefault(item.name, set()).add(
+                item.definition_position.row
+            )
+        elif item.kind == "parameter" and item.function:
+            callable_rows.setdefault(item.function, set()).add(
+                item.definition_position.row
+            )
+
+    class_attribute_types: dict[str, set[str]] = {}
+    class_attribute_rows: dict[str, int] = {}
+    for item in observations:
+        if isinstance(item.address.subject, ClassAttributeSubject):
+            class_attribute_types.setdefault(item.name, set()).update(
+                _resolved_types(session, item.address)
+            )
+            owner = item.name.rsplit(".", 1)[0]
+            class_attribute_rows[owner] = min(
+                class_attribute_rows.get(owner, item.position.row),
+                item.position.row,
+            )
+
+    def qualified_binding(item) -> str:
+        if isinstance(item.address.subject, ClassAttributeSubject):
+            return item.name
+        return f"{item.function}.{item.name}" if item.function else item.name
+
+    statement_outputs: dict[int, list[tuple[int, str, frozenset[str]]]] = {}
+    for item in observations:
+        if (
+            isinstance(item.address.subject, WireSubject)
+            and item.boundary_role is BoundaryRole.OUTPUT
+            and item.kind == "variable"
+        ):
+            statement_outputs.setdefault(item.position.row, []).append((
+                item.position.col,
+                item.name,
+                _resolved_types(session, item.address),
+            ))
+
+    def is_statement_binding(item) -> bool:
+        """A binding made by a def, class or import statement."""
+
+        qualified = qualified_binding(item)
+        row, col = item.position.row, item.position.col
+        if row in callable_rows.get(qualified, ()):
+            return True
+        for owner, first_row in class_attribute_rows.items():
+            if (
+                (qualified == owner or qualified.endswith(f".{owner}"))
+                and row <= first_row
+            ):
+                return True
+        if not isinstance(item.address.subject, BindingSubject):
+            return False
+        for wire_col, wire_name, wire_types in statement_outputs.get(row, ()):
+            if (
+                wire_types == {"builtins.type"}
+                and wire_name == item.name
+                and wire_col < col
+            ):
+                return True
+            if wire_types == {"builtins.module"} and (
+                wire_col < col
+                or (
+                    wire_col == col
+                    and (
+                        wire_name == item.name
+                        or wire_name.startswith(f"{item.name}.")
+                    )
+                )
+            ):
+                return True
+        return False
+
+    definition_columns: dict[tuple[str, int], int] = {}
+    for item in observations:
+        if (
+            item.kind in {"variable", "class_field"}
+            and isinstance(
+                item.address.subject, (BindingSubject, ClassAttributeSubject)
+            )
+            and item.position.row
+            in callable_rows.get(qualified_binding(item), ())
+        ):
+            definition_columns[
+                (qualified_binding(item), item.position.row)
+            ] = item.position.col
+
+    receivers: set[tuple[str, int, int]] = set()
+    first_parameter: dict[str, tuple[int, int]] = {}
+    for item in observations:
+        if item.kind == "parameter" and item.function:
+            key = (item.position.row, item.position.col)
+            first_parameter[item.function] = min(
+                first_parameter.get(item.function, key), key
+            )
+    for function, (row, col) in first_parameter.items():
+        # Class attributes are spelled from the class downwards; a class
+        # defined inside a function has a longer callable name.
+        owners = [
+            types for name, types in class_attribute_types.items()
+            if function == name or function.endswith(f".{name}")
+        ]
+        if owners and not any(
+            "builtins.staticmethod" in types for types in owners
+        ):
+            receivers.add((function, row, col))
+
+    projected: list[tuple[Location, Any]] = []
+    for item in observations:
+        subject = item.address.subject
+        row, col = item.position.row, item.position.col
+        if item.kind == "return":
+            if (
+                item.name == "lambda"
+                or item.name.rsplit(".", 1)[-1] == "__init__"
+                or item.definition_position is None
+            ):
+                continue
+            row = item.definition_position.row
+            col = definition_columns.get(
+                (item.name, row), item.definition_position.col + 4
+            )
+            location = Location(
+                file_path, row, col + 1, "return", item.name, None
+            )
+        elif item.kind == "parameter":
+            if not item.function or (item.function, row, col) in receivers:
+                continue
+            location = Location(
+                file_path, row, col + 1, "parameter", item.name,
+                item.function,
+            )
+        elif item.kind in {"variable", "class_field"}:
+            if isinstance(subject, WireSubject) or not isinstance(
+                subject,
+                (
+                    BindingSubject,
+                    ClassAttributeSubject,
+                    ContainerSlotSubject,
+                    InstanceAttributeSubject,
+                ),
+            ):
+                continue
+            if (
+                not item.name
+                or "<" in item.name
+                or "[*]" in item.name
+                or is_statement_binding(item)
+            ):
+                continue
+            location = Location(
+                file_path, row, col + 1, "variable", item.name,
+                item.function,
+            )
+        else:
+            continue
+        projected.append((location, item.address))
+
+    for name, position, function, address in _nested_slot_observations(
+        session, entry_module
+    ):
+        projected.append((
+            Location(
+                file_path, position.row, position.col + 1, "variable",
+                name, function,
+            ),
+            address,
+        ))
+
+    grouped: dict[Location, list[Any]] = {}
+    for location, address in projected:
+        addresses = grouped.setdefault(location, [])
+        if address not in addresses:
+            addresses.append(address)
+    out: dict[Location, ProjectedLocation] = {}
+    for location in sorted(grouped, key=_location_order):
+        addresses = sorted(grouped[location], key=lambda item: item.id)
+        resolved = {
+            address: _resolved_types(session, address)
+            for address in addresses
+        }
+        if any(
+            values and not _uninvoked_context(address.context)
+            for address, values in resolved.items()
+        ):
+            resolved = {
+                address: (
+                    frozenset() if _uninvoked_context(address.context)
+                    else values
+                )
+                for address, values in resolved.items()
+            }
+        out[location] = ProjectedLocation(
+            location,
+            frozenset(
+                _typeeval_name(value)
+                for values in resolved.values() for value in values
+            ),
+            tuple(address.id for address in addresses if resolved[address]),
+            tuple(
+                address.id for address in addresses if not resolved[address]
+            ),
+        )
+    return out
+
+
+_MAX_SLOT_DEPTH = 4
+
+
+def _nested_slot_observations(session, entry_module: str):
+    """Follow concrete container slots below the first level.
+
+    The engine catalogues first-level slots of a named container
+    (``d['a']``). Deeper concrete slots (``d['a']['b']``) are present as
+    slot facts reached through slot-referent facts; this walk reads those
+    resolved facts for every named-container template of the entry module
+    and yields one ``(name, position, function, address)`` per concrete
+    slot at depth two or more. Summary/element slots are not followed.
+    """
+
+    from sd_core.analysis.diagram_analysis.container_knowledge import (
+        CONTAINER_REFERENTS,
+        CONTAINER_SLOT_REFERENTS,
+        CONTAINER_SLOT_TYPE_OF,
     )
-    return tuple(dict.fromkeys((*indexed, *native)))
+    from sd_core.analysis.diagram_analysis.hybrid_observations import (
+        slot_display,
+    )
+    from sd_core.analysis.diagram_analysis.knowledge import (
+        ContainerSlotSubject,
+        FactAddress,
+    )
+
+    plan = session.module_plans.get(entry_module) if session.module_plans else session.plan
+    if plan is None:
+        return
+    resolved_facts = session.store.snapshot().resolved_facts
+    slots_by_allocation: dict[tuple[str, str], list[Any]] = {}
+    for address in resolved_facts:
+        if address.family == CONTAINER_SLOT_TYPE_OF and isinstance(
+            address.subject, ContainerSlotSubject
+        ):
+            slots_by_allocation.setdefault(
+                (
+                    address.subject.observation_morphism_id,
+                    address.subject.allocation_morphism_id,
+                ),
+                [],
+            ).append(address)
+
+    def walk(template, allocations, prefix, depth, seen):
+        for allocation in sorted(allocations):
+            if allocation in seen:
+                continue
+            for address in sorted(
+                slots_by_allocation.get(
+                    (template.subject.morphism_id, allocation), ()
+                ),
+                key=lambda item: item.id,
+            ):
+                slot = address.subject.slot
+                if ":" not in slot or slot.startswith("summary:"):
+                    continue
+                name = f"{prefix}{slot_display(slot)}"
+                yield name, template.position, template.function, address
+                if depth >= _MAX_SLOT_DEPTH:
+                    continue
+                referent = resolved_facts.get(FactAddress(
+                    family=CONTAINER_SLOT_REFERENTS,
+                    subject=address.subject,
+                    context=address.context,
+                    assumptions=address.assumptions,
+                    projection=address.projection,
+                ))
+                if referent is not None and referent.value:
+                    yield from walk(
+                        template, referent.value, name, depth + 1,
+                        seen | {allocation},
+                    )
+
+    for template in plan.container_templates:
+        if template.position is None:
+            continue
+        for address, fact in resolved_facts.items():
+            if (
+                address.family == CONTAINER_REFERENTS
+                and address.subject == template.subject
+                and fact.value
+            ):
+                yield from walk(
+                    template, fact.value, template.name, 1, frozenset()
+                )
+
+
+def classify_gaps(
+    snippet: Snippet, projection: dict[Location, ProjectedLocation]
+) -> list[SuccessorGap]:
+    """Compare finished predictions with the answer key, for reporting."""
+
+    gaps: list[SuccessorGap] = []
+    expected = {item.location: item.types for item in snippet.annotations}
+    for location, types in expected.items():
+        item = projection.get(location)
+        if item is None:
+            gaps.append(SuccessorGap(
+                location, "provenance_unmapped", snippet.suite_path, types,
+                detail="no engine observation projects to this location",
+            ))
+        elif not item.types:
+            gaps.append(SuccessorGap(
+                location, "mapped_open", snippet.suite_path, types,
+                item.open_address_ids,
+                "engine observations at this location resolved to nothing",
+            ))
+        elif item.types != types:
+            gaps.append(SuccessorGap(
+                location,
+                "mapped_imprecise" if types < item.types
+                else "benchmark_disagreement",
+                snippet.suite_path,
+                types,
+                item.address_ids,
+                f"resolved successor types: {sorted(item.types)!r}",
+            ))
+    for location, item in projection.items():
+        if item.types and location not in expected:
+            gaps.append(SuccessorGap(
+                location, "unexpected_prediction", snippet.suite_path,
+                frozenset(), item.address_ids,
+                f"resolved successor types: {sorted(item.types)!r}",
+            ))
+    return gaps
+
+
+def _resolved_types(session, address) -> frozenset[str]:
+    fact = session.store.resolved(address)
+    return frozenset(fact.value) if fact is not None and fact.value else frozenset()
+
+
+def _uninvoked_context(context: str) -> bool:
+    """Whether the engine minted this context for a body never invoked.
+
+    The engine names those contexts ``context:module:<m>:uninvoked:<body>``
+    (callable bodies the entry did not reach) and
+    ``context:uninvoked-body:<body>`` (catalogue fallback).
+    """
+
+    return ":uninvoked:" in context or context.startswith(
+        "context:uninvoked-body:"
+    )
+
+
+def _location_order(location: Location):
+    return (
+        location.line, location.col or 0, location.kind, location.name,
+        location.function or "",
+    )
 
 
 def _typeeval_name(value: str) -> str:
@@ -442,6 +724,7 @@ def audit_successor_typeevalpy(
     *,
     limit: int | None = None,
     record_events: bool = True,
+    root_policy: str = ROOT_POLICY_CALLABLE_BODIES,
     suite_prefixes: tuple[str, ...] = (),
     progress: Callable[[int, int], None] | None = None,
 ) -> SuccessorGapAudit:
@@ -455,7 +738,9 @@ def audit_successor_typeevalpy(
             getattr(benchmark, "dependency_roots", ())
         ),
     )
-    analyzer = SuccessorArchwayAnalysisEngine(record_events=record_events)
+    analyzer = SuccessorArchwayAnalysisEngine(
+        record_events=record_events, root_policy=root_policy
+    )
     adapter = SuccessorTypeEvalPyAdapter()
     snippets = benchmark.load()
     if suite_prefixes:

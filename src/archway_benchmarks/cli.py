@@ -37,11 +37,13 @@ def _build_successor_engines(
     benchmark: Benchmark,
     accuracy: float,
     seed: int | None,
+    root_policy: str | None = None,
 ):
     """Construct the in-process diagram-only successor engine triple."""
 
     from archway_benchmarks.engines.archway import ArchwayTranslationEngine
     from archway_benchmarks.engines.successor_archway import (
+        ROOT_POLICY_CALLABLE_BODIES,
         SuccessorArchwayAnalysisEngine,
         SuccessorTypeEvalPyAdapter,
     )
@@ -53,7 +55,10 @@ def _build_successor_engines(
                 getattr(benchmark, "dependency_roots", ())
             ),
         ),
-        SuccessorArchwayAnalysisEngine(record_events=False),
+        SuccessorArchwayAnalysisEngine(
+            record_events=False,
+            root_policy=root_policy or ROOT_POLICY_CALLABLE_BODIES,
+        ),
         SuccessorTypeEvalPyAdapter(),
     )
 
@@ -79,6 +84,12 @@ def main(argv: list[str] | None = None) -> int:
         help="Explicit benchmark corpus root; recorded workflows should not rely on checkout-relative discovery.",
     )
     p_run.add_argument("--engine", default="stub", choices=list(ENGINES))
+    p_run.add_argument(
+        "--successor-root-policy",
+        default="entry_module+callable_bodies",
+        choices=("entry_module+callable_bodies", "entry_module"),
+        help="Roots the successor session evaluates before observation demand.",
+    )
     p_run.add_argument("--stub-accuracy", type=float, default=0.67)
     p_run.add_argument("--seed", type=int, default=None)
     p_run.add_argument("--db", default="runs.db", help="Path to SQLite store")
@@ -179,15 +190,23 @@ def _cmd_run(args) -> int:
         )
     )
     metadata = None
-    translator, analyzer, adapter = ENGINES[args.engine](
-        bench, args.stub_accuracy, args.seed
-    )
     if args.engine == "successor":
+        translator, analyzer, adapter = _build_successor_engines(
+            bench, args.stub_accuracy, args.seed,
+            root_policy=args.successor_root_policy,
+        )
         metadata = {
             "analysis_surface": "diagram-only",
             "record_events": False,
             "session_policy": "persistent-forward-then-targeted",
+            "root_policy": analyzer.root_policy,
+            "observation_demand": "every open catalogued observation, until no new address",
+            "prediction_source": "engine observations projected to TypeEvalPy locations; answer key read only for gap reporting",
         }
+    else:
+        translator, analyzer, adapter = ENGINES[args.engine](
+            bench, args.stub_accuracy, args.seed
+        )
     result = run_pipeline(
         benchmark=bench,
         translator=translator,

@@ -298,6 +298,12 @@ def main() -> None:
         default=[],
         help="Run suite paths under this prefix; repeat to union cohorts.",
     )
+    parser.add_argument(
+        "--root-policy",
+        default="entry_module+callable_bodies",
+        choices=("entry_module+callable_bodies", "entry_module"),
+        help="Roots the successor session evaluates before observation demand.",
+    )
     parser.add_argument("--no-resume", action="store_true")
     parser.add_argument("--db", type=Path)
     parser.add_argument("--notes")
@@ -348,6 +354,7 @@ def main() -> None:
         "suite_path_prefixes": list(requested_prefixes),
         "slow_snippet_seconds": args.slow_snippet_seconds,
         "hard_snippet_timeout_seconds": args.per_snippet_timeout,
+        "root_policy": args.root_policy,
     }
     header, records = (
         (None, {}) if args.no_resume
@@ -373,7 +380,9 @@ def main() -> None:
         corpus_root=benchmark.corpus_root,
         dependency_roots=tuple(benchmark.dependency_roots),
     )
-    analyzer = SuccessorArchwayAnalysisEngine(record_events=False)
+    analyzer = SuccessorArchwayAnalysisEngine(
+        record_events=False, root_policy=args.root_policy
+    )
     adapter = SuccessorTypeEvalPyAdapter()
 
     with args.checkpoint_jsonl.open(mode, encoding="utf-8") as stream:
