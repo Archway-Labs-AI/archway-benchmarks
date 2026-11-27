@@ -132,3 +132,19 @@ def test_review_manifest_expands_exact_residual_groups() -> None:
         "pending": 2,
         "semantically_valid_extra": 1,
     }
+
+
+def test_adjudicated_score_applies_key_corrections_only() -> None:
+    from archway_benchmarks.pycg_residual_audit import adjudicated_score
+
+    case = {"predicted_edges": [["a", "x"], ["a", "y"], ["a", "z"]]}
+    residuals = [
+        {"kind": "false_positive", "review": {"disposition": "semantically_valid_extra"}},
+        {"kind": "false_positive", "review": {"disposition": "archway_unsoundness"}},
+        {"kind": "false_negative", "review": {"disposition": "benchmark_defect_or_omission"}},
+        {"kind": "false_negative", "review": {"disposition": "pending"}},
+    ]
+    score = adjudicated_score(case, residuals)
+    assert (score["true_positive"], score["false_positive"], score["false_negative"]) == (2, 1, 1)
+    assert score["key_corrections"] == {"extras_accepted": 1, "expected_removed": 1}
+    assert score["pending_residuals"] == 1
