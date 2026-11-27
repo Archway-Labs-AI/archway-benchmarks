@@ -50,3 +50,26 @@ def test_complete_analysis_remains_complete() -> None:
     )
 
     assert record["status"] == "complete"
+
+
+def test_explicit_interpreter_is_passed_and_pinned(tmp_path, monkeypatch):
+    import json
+    import sys
+    output = tmp_path / "run"
+    calls = []
+    monkeypatch.setattr(_RUNNER, "available_repos", lambda _root: ["example"])
+    monkeypatch.setattr(_RUNNER, "untyped_source_root", lambda *_args: tmp_path)
+    monkeypatch.setattr(_RUNNER, "_python_file_count", lambda _root: 1)
+    monkeypatch.setattr(_RUNNER, "_git_revision", lambda _root: "pinned")
+    def emit(**kwargs):
+        calls.append(kwargs)
+        return _stats({})
+    monkeypatch.setattr(_RUNNER, "emit_archway_predictions", emit)
+    monkeypatch.setattr(sys, "argv", [
+        "runner", str(tmp_path), str(output), str(tmp_path),
+        "--python-executable", sys.executable,
+    ])
+    _RUNNER.main()
+    manifest = json.loads((output / "manifest.json").read_text())
+    assert calls[0]["runner"] == (sys.executable,)
+    assert manifest["execution_configuration"]["runner"] == [sys.executable]

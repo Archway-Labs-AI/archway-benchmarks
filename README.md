@@ -30,8 +30,9 @@ against established benchmarks, scores it with each benchmark's own scorer, and 
 competitor baselines on the current ground truth so the comparison is like-for-like rather than
 against a stale published table.
 
-The Archway translation and analysis engines are not in this repository. The harness calls them
-through a hosted API, and ships stub backends so the full pipeline runs locally without them.
+The Archway translation and analysis engines are not in this repository. The harness runs them in
+process from an explicit engine checkout, and ships stub backends so the full pipeline runs
+without them. Comparisons pin both the engine and the harness revision.
 
 ## Why baselines get regenerated
 
@@ -56,7 +57,8 @@ point.
 | Benchmark | Status |
 |-----------|--------|
 | [TypeEvalPy](https://github.com/secure-software-engineering/TypeEvalPy) (micro + autogen) | Supported |
-| TypyBench, PyCG, and others | On the roadmap |
+| [PyCG](https://github.com/vitsalis/PyCG) (micro + macro) | Supported; needs the corpus and an engine checkout |
+| TypyBench | Prediction and scoring implemented; needs the corpus and scorer setup |
 
 ## Quickstart
 
@@ -89,10 +91,9 @@ archway-bench regenerate-baselines --tools headergen jedi scalpel --benchmarks m
 archway-bench baselines-report
 ```
 
-Plugging in the real Archway analysis engine is a one-file change: implement an
-`AnalysisResultAdapter` for the engine's output shape (see `src/archway_benchmarks/benchmarks/`)
-and the harness takes it from there. The stub backend already exercises the full
-adapter → scorer → store → dashboard path so the integration seam is testable today.
+The in-process engine backend is `src/archway_benchmarks/engines/successor_archway.py`; the PyCG
+runner is `src/archway_benchmarks/pycg.py`. Initialize the TypeEvalPy submodule before using the
+CLI, because its scorer is imported at start-up.
 
 ## Attribution
 

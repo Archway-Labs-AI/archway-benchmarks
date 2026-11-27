@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
 import signal
 import time
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -108,6 +110,82 @@ def test_expected_edges_from_callgraph():
     }
 
 
+def test_source_loading_preserves_namespace_package_parents(tmp_path: Path):
+    root = _write_case(tmp_path, 'imports', 'namespace', {})
+    package = root / 'pkg' / 'nested'
+    package.mkdir(parents=True)
+    (package / 'child.py').write_text('def target():\n    return 1\n')
+    (root / 'main.py').write_text('from pkg.nested import child\nchild.target()\n')
+    (case,) = load_cases(tmp_path)
+    sources = _load_case_sources(case)
+    assert sources['pkg'] == sources['pkg.nested'] == 'pass\n'
+    assert sources['pkg.nested.child'].startswith('def target')
+    (package / '__init__.py').write_text('marker = 7\n')
+    (case,) = load_cases(tmp_path)
+    assert _load_case_sources(case)['pkg.nested'] == 'marker = 7\n'
+    omitted_initializer = replace(
+        case, source_paths=tuple(p for p in case.source_paths if p.name != '__init__.py')
+    )
+    assert 'pkg.nested' not in _load_case_sources(omitted_initializer)
+
+
+def test_namespace_package_import_reaches_child_callable(tmp_path: Path):
+    engine_root = Path(os.environ.get('ARCHWAY_ENGINE_ROOT', str(Path(__file__).parents[2] / 'engine')))
+    if not engine_root.exists():
+        pytest.skip('Set ARCHWAY_ENGINE_ROOT to run engine integration checks')
+    root = _write_case(tmp_path, 'imports', 'namespace_call', {})
+    (root / 'pkg').mkdir()
+    (root / 'pkg' / 'child.py').write_text('def target():\n    return 1\n')
+    (root / 'main.py').write_text('from pkg import child\nchild.target()\n')
+    (case,) = load_cases(tmp_path)
+    result = successor_archway_call_edge_result(case, engine_root=engine_root)
+    assert result.edges == frozenset({('main', 'pkg.child.target')})
+    assert result.evidence['namespace_package_modules'] == ['pkg']
+
+
+def test_loader_filename_does_not_leak_to_synthetic_namespace_parent(tmp_path: Path):
+    engine_root = Path(os.environ.get('ARCHWAY_ENGINE_ROOT', str(Path(__file__).parents[2] / 'engine')))
+    if not engine_root.exists():
+        pytest.skip('Set ARCHWAY_ENGINE_ROOT to run engine integration checks')
+    root = _write_case(tmp_path, 'imports', 'loader_environment', {})
+    (root / 'pkg').mkdir()
+    (root / 'pkg' / 'child.py').write_text('filename = __file__\ndef target():\n    return 1\n')
+    (root / 'main.py').write_text('filename = __file__\nfrom pkg import child\nimport pkg\ntry:\n    pkg.__file__\nexcept AttributeError:\n    child.target()\n')
+    (case,) = load_cases(tmp_path)
+    result = successor_archway_call_edge_result(case, engine_root=engine_root)
+    assert result.edges == frozenset({('main', 'pkg.child.target')})
+    assert result.evidence['namespace_package_modules'] == ['pkg']
+
+
+def test_successor_lambda_ordinals_are_local_to_each_function(tmp_path: Path):
+    engine_root = Path(os.environ.get(
+        "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")
+    ))
+    if not engine_root.exists():
+        pytest.skip("Set ARCHWAY_ENGINE_ROOT to run engine integration checks")
+    case_root = _write_case(tmp_path, "lambdas", "scopes", {})
+    (case_root / "main.py").write_text(
+        "def target():\n    return 1\n"
+        "def first():\n    return (lambda: target())()\n"
+        "def second():\n    return (lambda: target())()\n"
+        "first()\nsecond()\n", encoding="utf-8"
+    )
+    (case,) = load_cases(tmp_path)
+    result = successor_archway_call_edge_result(case, engine_root=engine_root)
+    assert result.edges == frozenset({
+        ("main", "main.first"),
+        ("main", "main.second"),
+        ("main.first", "main.first.<lambda1>"),
+        ("main.second", "main.second.<lambda1>"),
+        ("main.first.<lambda1>", "main.target"),
+        ("main.second.<lambda1>", "main.target"),
+    })
+    evidence = result.evidence["semantic_call_edge_evidence"]
+    assert any(row["projected_edge"] == [
+        "main.second.<lambda1>", "main.target"
+    ] for row in evidence)
+
+
 def test_score_edges():
     score = score_edges(
         {("main", "main.f"), ("main.f", "main.g")},
@@ -132,7 +210,11 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
         "x = lambda x: x + 1\nx(1)\n", encoding="utf-8"
     )
     (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
+    engine_root = Path(os.environ.get(
+        "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")
+    ))
+    if not engine_root.exists():
+        pytest.skip("Set ARCHWAY_ENGINE_ROOT to run engine integration checks")
 
     result = successor_archway_call_edge_result(
         case, engine_root=engine_root.resolve()
@@ -176,7 +258,7 @@ def test_successor_adapter_scores_lambda_from_diagram_provenance(
         "end_column": 4,
     }
     assert lambda_edges[0]["source_line"] == "x(1)"
-    assert lambda_edges[0]["callsite_morphism_id"].startswith("sid:v1:box:")
+    assert lambda_edges[0]["callsite_morphism_id"].startswith("sid:v2:box:")
     assert lambda_edges[0]["evidence_grade"] == "semantic"
     assert result.evidence["pycg_projection_lineage_count"] >= 1
     assert "summary_reuse" in result.evidence
@@ -210,17 +292,23 @@ def test_successor_completed_evidence_collapses_repeated_contexts_per_callsite(
         encoding="utf-8",
     )
     (case,) = load_cases(tmp_path)
-    engine_root = Path(__file__).parents[2] / "engine"
+    engine_root = Path(os.environ.get(
+        "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")
+    ))
+    if not engine_root.exists():
+        pytest.skip("Set ARCHWAY_ENGINE_ROOT to run engine integration checks")
 
     result = successor_archway_call_edge_result(
         case, engine_root=engine_root.resolve()
     )
 
-    invoke_target = next(
+    # The adapter collapses semantic occurrences, regardless of how many
+    # lifecycle/input contexts the engine needs for this callable.
+    (invoke_target,) = [
         item
         for item in result.evidence["semantic_call_edge_evidence"]
         if item["projected_edge"] == ["main.invoke", "main.target"]
-    )
+    ]
     # The shared effect body and the two callsite summary applications each
     # retain semantic evidence, collapsed into one callsite/target record.
     assert invoke_target["contextual_occurrence_count"] == 3
@@ -699,3 +787,34 @@ def test_root_package_init_receives_nonempty_module_name(tmp_path: Path):
     init.write_text("", encoding="utf-8")
 
     assert _module_name_for_path(init, package_root) == "relative_case"
+
+
+def test_lambda_display_numbering_is_per_lexical_scope():
+    from types import SimpleNamespace
+    from archway_benchmarks.pycg import _function_display_names
+    def function(body, name, parent=None):
+        return SimpleNamespace(body_id=body, name=name, lexical_parent_body_id=parent)
+    functions = iter([
+        function("f", "f"), function("f1", "<lambda>", "f"),
+        function("g", "g"), function("g1", "<lambda>", "g"),
+        function("g2", "<lambda>", "g"), function("nested", "<lambda>", "g1"),
+        function("m1", "<lambda>"), function("m2", "<lambda>"),
+    ])
+    names = _function_display_names("module", functions, SimpleNamespace(method_owners={}))
+    assert names == {
+        "f": "module.f", "f1": "module.f.<lambda1>",
+        "g": "module.g", "g1": "module.g.<lambda1>",
+        "g2": "module.g.<lambda2>", "nested": "module.g.<lambda1>.<lambda1>",
+        "m1": "module.<lambda1>", "m2": "module.<lambda2>",
+    }
+
+
+def test_successor_lambda_projection_uses_full_callable_inventory():
+    from archway_benchmarks.pycg import _pycg_callable_name_map
+    names = ["m.f.<lambda1>", "m.g.<lambda2>", "m.g.<lambda4>",
+             "m.g.<lambda2>.<lambda3>", "m.g"]
+    projected = _pycg_callable_name_map(reversed(names))
+    assert projected["m.g.<lambda2>"] == "m.g.<lambda1>"
+    assert projected["m.g.<lambda4>"] == "m.g.<lambda2>"
+    assert projected["m.g.<lambda2>.<lambda3>"] == "m.g.<lambda1>.<lambda1>"
+    assert projected["m.g"] == "m.g"
