@@ -22,55 +22,11 @@ from archway_benchmarks.pycg import (
     expected_edges_from_callgraph,
     load_cases,
     load_macro_cases,
-    normalize_edges_for_pycg_scoring,
     run_archway_pycg,
     score_adjacency_lists,
     score_edges,
     successor_archway_call_edge_result,
 )
-
-
-def test_pycg_scoring_normalization_is_unique_and_auditable() -> None:
-    semantic = {
-        ("pkg.render", "re.Pattern.sub"),
-        ("pkg.data", "<builtin>.collections.namedtuple"),
-        ("pkg.keep", "custom.target"),
-    }
-    expected = {
-        ("pkg.render", "re.sub"),
-        ("pkg.data", "collections.namedtuple"),
-        ("pkg.keep", "custom.target"),
-    }
-
-    scored, lineage = normalize_edges_for_pycg_scoring(semantic, expected)
-
-    assert scored == expected
-    assert {tuple(row["semantic_edge"]) for row in lineage} == {
-        ("pkg.render", "re.Pattern.sub"),
-        ("pkg.data", "<builtin>.collections.namedtuple"),
-    }
-
-
-def test_pycg_scoring_normalization_does_not_guess_without_expected_alias() -> None:
-    semantic = {("pkg.render", "re.Pattern.sub")}
-
-    scored, lineage = normalize_edges_for_pycg_scoring(semantic, set())
-
-    assert scored == semantic
-    assert lineage == ()
-
-
-def test_pycg_scoring_normalization_requires_unique_stream_alias() -> None:
-    semantic = {("pkg.render", "<**PyFile**>.write")}
-    ambiguous = {
-        ("pkg.render", "sys.stdout.write"),
-        ("pkg.render", "sys.stderr.write"),
-    }
-
-    scored, lineage = normalize_edges_for_pycg_scoring(semantic, ambiguous)
-
-    assert scored == semantic
-    assert lineage == ()
 
 
 def test_write_json_artifact_creates_missing_storage_namespace(tmp_path: Path) -> None:
@@ -818,3 +774,32 @@ def test_successor_lambda_projection_uses_full_callable_inventory():
     assert projected["m.g.<lambda4>"] == "m.g.<lambda2>"
     assert projected["m.g.<lambda2>.<lambda3>"] == "m.g.<lambda1>.<lambda1>"
     assert projected["m.g"] == "m.g"
+
+
+def test_predictions_do_not_depend_on_the_expected_graph(tmp_path: Path):
+    """A score comes only from what the engine reports: changing the answer key
+    changes the score, never the predicted edges."""
+    engine_root = Path(os.environ.get(
+        "ARCHWAY_ENGINE_ROOT", str(Path(__file__).parents[2] / "engine")
+    ))
+    if not engine_root.exists():
+        pytest.skip("Set ARCHWAY_ENGINE_ROOT to run engine integration checks")
+    source = (
+        "import re\nimport sys\n"
+        "def render(text):\n    sys.stdout.write(text)\n"
+        "    return re.compile('a').sub('b', text)\n"
+        "render('a')\n"
+    )
+    predictions = []
+    for index, expected in enumerate(({}, {
+        "main": ["main.render"],
+        "main.render": ["re.sub", "sys.stdout.write", "re.compile"],
+    })):
+        corpus = tmp_path / str(index)
+        case_root = _write_case(corpus, "independence", "case", expected)
+        (case_root / "main.py").write_text(source, encoding="utf-8")
+        result = run_archway_pycg(corpus_root=corpus, engine_root=engine_root)
+        (case_result,) = result.cases
+        predictions.append(case_result.predicted_edges)
+    assert predictions[0] == predictions[1]
+    assert predictions[0]
