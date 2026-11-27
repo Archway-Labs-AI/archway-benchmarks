@@ -1,0 +1,104 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:0d5b47500f5d812025ad49454eeda0a4bac68f4341a28949c9ad9a2787172e35",
+      "edge": [
+        "sublist3r.NetcraftEnum.create_cookies",
+        "urllib.unquote.encode"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "With Python 3, urllib is urllib.parse, so urllib.unquote(...) returns str and .encode('utf-8') is str.encode. Archway already reports that call as <**PyStr**>.encode (expected and predicted). urllib.unquote.encode is a second, factory-return spelling of the same callee.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/Sublist3r/sublist3r.py:554",
+        "paired_predicted_and_expected:<**PyStr**>.encode"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6d94add924105f1145cc6fc505ecfbbf33e7ebe69d1a4fb7927174bb7fab24a5",
+      "edge": [
+        "subbrute.subbrute.trace",
+        "<**PyFile**>.write"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "sys.stderr.write(...) in trace: Archway spells the text-stream method <**PyFile**>.write, and the benchmark expects sys.stderr.write from the same caller for the same callee.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/Sublist3r/subbrute/subbrute.py:519",
+        "paired_expected:sys.stderr.write"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:188f6da1393f7807711432e7f2e86f01045d19955626d6a1915e079519a3c613",
+      "edge": [
+        "sublist3r.parse_args",
+        "<builtin>.argparse.ArgumentParser.add_argument"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Duplicate spelling: Archway reports both argparse.ArgumentParser.add_argument and <builtin>.argparse.ArgumentParser.add_argument for the same callsites. The benchmark expects the call as argparse.add_argument.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "paired_expected:argparse.add_argument",
+        "paired_predicted:argparse.ArgumentParser.add_argument"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:eab4be9efaeac3510f547584165ce2e061af6f13ed05913d7f74a83a39951fb3",
+      "edge": [
+        "sublist3r.parse_args",
+        "<builtin>.argparse.ArgumentParser.parse_args"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Duplicate spelling: Archway reports both argparse.ArgumentParser.parse_args and <builtin>.argparse.ArgumentParser.parse_args for the same callsites. The benchmark expects the call as argparse.parse_args.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "paired_expected:argparse.parse_args",
+        "paired_predicted:argparse.ArgumentParser.parse_args"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "sublist3r:windows-thread-substitution:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:8bf5ae6a1586fd956966bcee8648c7ae519273b9a6ef21e536adfe6de3a50dd5",
+        "pycg-residual:v1:1a8cbecb3e2a003c6e4fdde0c942f317c634c6756f5721c1867729a7535a910c",
+        "pycg-residual:v1:41f4beaf1518780c4d0d3993e201be6b9120b21e5444829d4eb3147d6a0f7770"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Platform-conditional real calls. On Windows, subbrute runs 'multiprocessing.Process = threading.Thread' at import (line 33). sublist3r imports subbrute before defining enumratorBaseThreaded, so the lookup/verify_nameservers workers and every sublist3r enumerator subclass threading.Thread there, and start()/join() are Thread.start/Thread.join. Elsewhere they are Process methods, which Archway also reports.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/Sublist3r/subbrute/subbrute.py:33",
+        "corpus:projects/Sublist3r/sublist3r.py:21",
+        "corpus:projects/Sublist3r/sublist3r.py:259"
+      ]
+    },
+    {
+      "group_id": "sublist3r:dnsdumpster-lock-overwritten:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:f5f99c11019e0182e9ad22969669b36f6ca14c7544eebd4d88f3f1c0ad597cf5",
+        "pycg-residual:v1:a2aba69c4ba5b04a93d087c219ef4f331c79f65aa3f4c84a069bfb79dad04e31"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "DNSdumpster.__init__ assigns a BoundedSemaphore to self.lock before calling super().__init__, and enumratorBaseThreaded.__init__ then overwrites it with the default threading.Lock(). check_host therefore acquires and releases a plain lock; the profile of a verbatim extract shows lock.acquire/lock.release, and the attribute type is _thread.lock. These are the real calls. The benchmark's BoundedSemaphore edges, scored as true positives, are what cannot happen.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/Sublist3r/sublist3r.py:602",
+        "corpus:projects/Sublist3r/sublist3r.py:264",
+        "dynamic-check:sys.setprofile on a minimal extract"
+      ]
+    }
+  ]
+}

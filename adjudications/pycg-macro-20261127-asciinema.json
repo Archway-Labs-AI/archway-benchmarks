@@ -1,0 +1,337 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [
+    {
+      "residual_id": "pycg-residual:v1:d20d4fa0944aed077016578c396b2e285697672dc7096c2fbd008efe98b9ed5e",
+      "edge": [
+        "asciinema.pty.record._notify",
+        "asciinema.recorder.async_notifier.notify"
+      ],
+      "kind": "false_positive",
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "pty.record's notifier is the async_notifier yielded by 'with async_notifier(notifier) as n' in recorder.record, so notifier.notify(text) dispatches to async_notifier.notify. PyCG expects Notifier.notify, which is called later from async_notifier.perform, not from _notify.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/pty.py:25",
+        "corpus:projects/asciinema/asciinema/recorder.py:48"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:690e3a1ba7c66c0ef876d50148e9cc715de26952129905bc9df0a8c8baa9375e",
+      "edge": [
+        "asciinema.__main__.main",
+        "<**PyFile**>.write"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Same runtime callee, two spellings: the call is sys.stderr.write(...) on a text stream; Archway spells the stream method <**PyFile**>, the benchmark expects sys.stderr.write from the same caller.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/__main__.py:36",
+        "paired_expected:sys.stderr.write"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6c03c17477c9693808b9102748db415fe4c1d2ffa7a1a3da88e9a618bc07b13f",
+      "edge": [
+        "asciinema.commands.cat.CatCommand.execute",
+        "<**PyFile**>.flush"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Same runtime callee, two spellings: the call is sys.stdout.flush(...) on a text stream; Archway spells the stream method <**PyFile**>, the benchmark expects sys.stdout.flush from the same caller.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/commands/cat.py:44",
+        "paired_expected:sys.stdout.flush"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:68185c0b4072e8d9aec5094e3678c843311b351f0d5db6bee9d323927d2a2b90",
+      "edge": [
+        "asciinema.commands.cat.CatCommand.execute",
+        "<**PyFile**>.write"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Same runtime callee, two spellings: the call is sys.stdout.write(...) on a text stream; Archway spells the stream method <**PyFile**>, the benchmark expects sys.stdout.write from the same caller.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/commands/cat.py:43",
+        "paired_expected:sys.stdout.write"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6cbdab5fba74965b35dfac9c84e61dc49358050f95749667256eb036789dd75a",
+      "edge": [
+        "asciinema.commands.record.RecordCommand.execute",
+        "<**PyFile**>.readline"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Same runtime callee, two spellings: the call is sys.stdin.readline(...) on a text stream; Archway spells the stream method <**PyFile**>, the benchmark expects sys.stdin.readline from the same caller.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/commands/record.py:94",
+        "paired_expected:sys.stdin.readline"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:5b6623517ad76225a3b0a0ad73d718d8022258d024e3fab5a23928d28c4cdf78",
+      "edge": [
+        "asciinema.__main__.main",
+        "<builtin>.argparse.ArgumentParser.add_argument"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Duplicate spelling: Archway already reports the expected argparse.ArgumentParser.add_argument edge from main (a true positive) and additionally emits <builtin>.argparse.ArgumentParser.add_argument for the same callsite. One call, two adapter spellings; the duplicate is an adapter defect, not an extra call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "paired_predicted_and_expected:argparse.ArgumentParser.add_argument"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:a3acbaf967aae198b11721238b1f115a0149c47e6ec8cccabc3cd272e13ac6ad",
+      "edge": [
+        "asciinema.__main__.main",
+        "<builtin>.argparse.ArgumentParser.add_subparsers"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Duplicate spelling: Archway already reports the expected argparse.ArgumentParser.add_subparsers edge from main (a true positive) and additionally emits <builtin>.argparse.ArgumentParser.add_subparsers for the same callsite. One call, two adapter spellings; the duplicate is an adapter defect, not an extra call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "paired_predicted_and_expected:argparse.ArgumentParser.add_subparsers"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:17e96858bcc35f3fe830369941845f4bed91674da4ce3e3b485bbd1088090ef1",
+      "edge": [
+        "asciinema.__main__.main",
+        "<builtin>.argparse.ArgumentParser.parse_args"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Duplicate spelling: Archway already reports the expected argparse.ArgumentParser.parse_args edge from main (a true positive) and additionally emits <builtin>.argparse.ArgumentParser.parse_args for the same callsite. One call, two adapter spellings; the duplicate is an adapter defect, not an extra call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "paired_predicted_and_expected:argparse.ArgumentParser.parse_args"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:8dd69b51c8af1056ba30b29af7cfcce7753024d7ef8e83933b96c688478c72e2",
+      "edge": [
+        "asciinema.__main__.main",
+        "<builtin>.argparse.ArgumentParser.print_help"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Duplicate spelling: Archway already reports the expected argparse.ArgumentParser.print_help edge from main (a true positive) and additionally emits <builtin>.argparse.ArgumentParser.print_help for the same callsite. One call, two adapter spellings; the duplicate is an adapter defect, not an extra call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "paired_predicted_and_expected:argparse.ArgumentParser.print_help"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:6cae8a2c809a9e71eff17261bdf8075f22e4553449fbb2d89046cb253585bcdc",
+      "edge": [
+        "asciinema.urllib_http_adapter.MultipartFormdataEncoder.u",
+        "<builtin>.bytes.decode"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "MultipartFormdataEncoder.u calls s.decode only under isinstance(s, bytes), so the runtime callee is bytes.decode. The benchmark's <**PyStr**>.decode from u names the same call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/urllib_http_adapter.py:21",
+        "paired_expected:<**PyStr**>.decode"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:684cc17266fe2402389987b7434e2038e5fc06a5f525780cf96764d45c2e7826",
+      "edge": [
+        "asciinema.urllib_http_adapter.URLLibHttpAdapter.post",
+        "<builtin>.bytes.decode"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "response.read() returns bytes, so .decode('utf-8') is bytes.decode.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/urllib_http_adapter.py:79",
+        "paired_expected:<**PyStr**>.decode"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:2b5e223e2c5bd681100940f3c89b1f45205c53e8106d635ad0b8d96bf5b481d5",
+      "edge": [
+        "asciinema.commands.play.PlayCommand.execute",
+        "asciinema.player.Player.play"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "self.player is a player.Player, so self.player.play(...) is asciinema.player.Player.play. The benchmark spells the same call asciinema.asciicast.Player.play (a nonexistent path) from the same caller.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/commands/play.py:18",
+        "paired_expected:asciinema.asciicast.Player.play"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:2cff82f6376454c024e3c8109ba579a2d000f1e247c036f90634441ad1007290",
+      "edge": [
+        "asciinema.commands.cat.CatCommand.execute",
+        "asciinema.asciicast.v1.Asciicast.stdout_events"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The asciicast from open_from_url.__enter__ is a v1 or v2 Asciicast, so stdout_events() is v1.Asciicast.stdout_events or v2.Asciicast.stdout_events, both possible. The benchmark expects the same call as asciinema.asciicast.Asciicast.stdout_events, a path that does not exist.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/commands/cat.py:42",
+        "paired_expected:asciinema.asciicast.Asciicast.stdout_events"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:497ad38faa2da188081a8caf7059c15f995262a98b6599e70b6f2fe3bc13be01",
+      "edge": [
+        "asciinema.commands.cat.CatCommand.execute",
+        "asciinema.asciicast.v2.Asciicast.stdout_events"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The asciicast from open_from_url.__enter__ is a v1 or v2 Asciicast, so stdout_events() is v1.Asciicast.stdout_events or v2.Asciicast.stdout_events, both possible. The benchmark expects the same call as asciinema.asciicast.Asciicast.stdout_events, a path that does not exist.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/commands/cat.py:42",
+        "paired_expected:asciinema.asciicast.Asciicast.stdout_events"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:8223611ce8d5bffe15382166e861f7d960e873af5b3c47c255a95fa914881bcf",
+      "edge": [
+        "asciinema.player.Player._play",
+        "asciinema.asciicast.v1.Asciicast.stdout_events"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The asciicast from open_from_url.__enter__ is a v1 or v2 Asciicast, so stdout_events() is v1.Asciicast.stdout_events or v2.Asciicast.stdout_events, both possible. The benchmark expects the same call as asciinema.asciicast.v1.stdout_events, a path that does not exist.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/player.py:22",
+        "paired_expected:asciinema.asciicast.v1.stdout_events"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:13c9448a16685a4849cf4332a4ea9f27184637648034193bba0107cb32440dce",
+      "edge": [
+        "asciinema.player.Player._play",
+        "asciinema.asciicast.v2.Asciicast.stdout_events"
+      ],
+      "kind": "false_positive",
+      "disposition": "adapter_representation_mismatch",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "The asciicast from open_from_url.__enter__ is a v1 or v2 Asciicast, so stdout_events() is v1.Asciicast.stdout_events or v2.Asciicast.stdout_events, both possible. The benchmark expects the same call as asciinema.asciicast.v2.stdout_events, a path that does not exist.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/player.py:22",
+        "paired_expected:asciinema.asciicast.v2.stdout_events"
+      ]
+    },
+    {
+      "residual_id": "pycg-residual:v1:7aea7e540ca2526b6d41934a3311a8c5e2a2693e01c0fb420480d011f5bf3974",
+      "edge": [
+        "asciinema.commands.command.Command.print",
+        "asciinema.commands.command.Command.print"
+      ],
+      "kind": "false_negative",
+      "disposition": "benchmark_defect_or_omission",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Inside Command.print, the name print resolves to the builtin; a method name does not shadow it in function scope. Command.print does not recurse, so the expected self-edge does not happen. Archway reports <builtin>.print.",
+      "evidence_refs": [
+        "corpus:projects/asciinema/asciinema/commands/command.py:14"
+      ]
+    }
+  ],
+  "groups": [
+    {
+      "group_id": "asciinema:assert:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:36ed364e6c2e1ccfffe64de7b393eba7ccb3dbc3300def15ab739092a03646ca"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:assert-AssertionError. Each callsite is an assert statement; a failing assert constructs and raises AssertionError, a real runtime event PyCG does not record as a call.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/asciicast/v2.py:74"
+      ]
+    },
+    {
+      "group_id": "asciinema:exception-init:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:19ffb5cc6788a20bad36214eda166afb246c35a2d987448ea09aec68e248ea17",
+        "pycg-residual:v1:9fa9effdb4436ad6a81d3b42c578d9079ffc96c07a2641e1450fe4b20b7c7855",
+        "pycg-residual:v1:6ebdfe2b00748ca61ffd4cb8d137a172306ea9899d3bfa6a12845533381c7864",
+        "pycg-residual:v1:0c5356eb4c8f13b90aabae10de2358c8501089a288ffbdc9e87b7177660e67af",
+        "pycg-residual:v1:5a3f2115c7310d6aaf485ec73e115dba799994cafbefd40b41c826c0f928baa5",
+        "pycg-residual:v1:ea863f974f22b3becf8136928306b0bf15c273737b44ce789dfc96ea5abae877",
+        "pycg-residual:v1:a0adacf86690480e7ca5ad086c455c755ca6dfa55e808c36890795fd20c104cf",
+        "pycg-residual:v1:ff7c5dafeebbf3bbec862f580b50c69746774f60941391a052e65fd65bdcfae6",
+        "pycg-residual:v1:1bdeb55d83d9dac6518f5a316df27223e13013d63835c027c850940765575b2c"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:base-class-init-into-builtins. The raised class is a project subclass of Exception with no __init__ of its own, so constructing it runs the inherited builtin BaseException/Exception initializer. PyCG does not record base-class initializers that live in builtins. Classes: api.APIError, config.ConfigError, asciicast.LoadError, v1/v2.LoadError, http_adapter.HTTPConnectionError (all 'class X(Exception): pass').",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/api.py:11",
+        "corpus:projects/asciinema/asciinema/config.py:8",
+        "corpus:projects/asciinema/asciinema/asciicast/__init__.py:14"
+      ]
+    },
+    {
+      "group_id": "asciinema:classmethod:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:6d6bbd549383f31adf3437614d67745295d7a5ecb257a885104b98a8be9e128e"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "convention:builtin-decorator-application. The @classmethod line applies the builtin classmethod to the function in the class body; PyCG does not record builtin decorator application.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/urllib_http_adapter.py:18"
+      ]
+    },
+    {
+      "group_id": "asciinema:real-file-and-project-calls:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:9f8e474e8b9f360c094b1ed19df67531a3f33f68869399d344a97bb850d49edb",
+        "pycg-residual:v1:5df8ce57d2a7021092cec49d9396f1658af35714b894ab58ca0a5a86e6b9f566"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Real file-method calls that PyCG omits: writer.__write_line writes to self.file (opened in writer.__enter__), and MultipartFormdataEncoder.iter reads the uploaded file object f from the files dict. Neither has an expected counterpart.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/asciinema/asciinema/asciicast/v2.py:126",
+        "corpus:projects/asciinema/asciinema/urllib_http_adapter.py:48"
+      ]
+    }
+  ]
+}

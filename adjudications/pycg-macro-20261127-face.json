@@ -1,0 +1,22 @@
+{
+  "schema": "archway.pycg.residual-adjudications.v1",
+  "entries": [],
+  "groups": [
+    {
+      "group_id": "face:factory-return-receivers:20261127",
+      "residual_ids": [
+        "pycg-residual:v1:8eb280a4e1545959a71058871ae45442364ea72eeedda7d72396916e9d64207d",
+        "pycg-residual:v1:bfd38fdcf0bd76e97d17ca61889bae985545037acae0ee9dd3cd6e62fc90e68c",
+        "pycg-residual:v1:099bda6eee75e549dddbe4a8d2ef46ff7115eb6c63dc673ef3a9a1883527a3f1"
+      ],
+      "disposition": "semantically_valid_extra",
+      "reviewer": "claude:pycg-review-20261127",
+      "rationale": "Real external method calls in pretty_imshow: axis is plt.gca() (an Axes), so axis.imshow is Axes.imshow, and data includes the make_mosaic result (numpy.ma.masked_all), whose .min()/.max() are MaskedArray methods. identity:factory-return. Archway names each callee after the factory that produced the receiver (matplotlib.pyplot.gca.imshow, numpy.ma.masked_all.min/max), not after its class, so exclude these if factory-return identities are being withdrawn.",
+      "evidence_refs": [
+        "analysis_evidence:semantic_call_edge_evidence",
+        "corpus:projects/face_classification/src/utils/visualizer.py:57",
+        "corpus:projects/face_classification/src/utils/visualizer.py:143"
+      ]
+    }
+  ]
+}
